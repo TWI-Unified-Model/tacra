@@ -1,0 +1,97 @@
+syntax = "proto3";
+
+package proto;
+
+enum CredentialAcquisitionMechanism {
+    OPERATION_UNSPECIFIED = 0;
+    // Proof-of-possession mechanisms
+    OPERATION_MINT_NEW_POP = 1;
+    OPERATION_RETRIEVE_POP = 2;
+    // Bearer token mechanisms
+    OPERATION_RETRIEVE_BT = 1000;
+}
+
+enum ProofOfPossessionCredentialType {
+    CREDENTIAL_TYPE_UNSPECIFIED = 0;
+    CREDENTIAL_TYPE_X509 = 1;
+    CREDENTIAL_TYPE_WIC = 2;
+    CREDENTIAL_TYPE_WIT = 3;
+}
+
+enum BearerTokenCredentialType {
+    CREDENTIAL_TYPE_UNSPECIFIED = 0;
+    CREDENTIAL_TYPE_JWT = 1;
+    CREDENTIAL_TYPE_PSK = 2;
+}
+
+message InitiateCredentialAcquistionRequest {
+    // Which endpoint does the workload wish to authenticate to?
+    string target = 1;
+}
+
+message InitiateCredentialAcquisitionResponse {
+    // Which credential acquisition mechanisms (mint new, or retrieve existing, or both)
+    // does the CAS support for this endpoint?
+    repeated CredentialAcquisitionMechanism mechanism = 1;
+
+    // Optional freshness
+    optional bytes nonce = 2;
+
+    oneof credential_type {
+        ProofOfPossessionCredentialType pop_credential = 3;
+        BearerTokenCredentialType bearer_token_credential = 4;
+    }
+}
+
+message NewPoPCredentialRequest {
+    string target = 1;
+
+    ProofOfPossessionCredentialType credential_type = 2;
+
+    // Workload Evidence including CSR
+    bytes evidence = 3;
+}
+
+message NewPoPCredentialResponse {
+    // TODO: explore importing existing types
+    bytes plaintext_credential = 1;
+}
+
+message ExistingPoPCredentialRequest {
+    string target = 1;
+
+    ProofOfPossessionCredentialType credential_type = 2;
+
+    // Workload Evidence including Credential Wrapping Key
+    bytes evidence = 3;
+}
+
+message ExistingPoPCredentialResponse {
+    // TODO: explore importing existing types
+    bytes plaintext_credential = 1;
+
+    bytes wrapped_signing_key = 2;
+}
+
+message BearerTokenRequest {
+    string target = 1;
+
+    BearerTokenCredentialType credential_type = 2;
+
+    // Workload Evidence including Credential Wrapping Key
+    bytes evidence = 3;
+}
+
+message BearerTokenResponse {
+    bytes wrapped_credential = 1;
+}
+
+service RemoteAttestationService {
+    rpc InitiateRemoteAttestation(InitiateCredentialAcquistionRequest) returns (InitiateCredentialAcquisitionResponse);
+
+    rpc RequestNewProofOfPossessionCredential(NewPoPCredentialRequest) returns (NewPoPCredentialResponse);
+
+    rpc RequestExistingProofOfPossessionCredential(ExistingPoPCredentialRequest) returns (ExistingPoPCredentialResponse);
+
+    rpc RequestBearerTokenCredential(BearerTokenRequest) returns (BearerTokenResponse);
+}

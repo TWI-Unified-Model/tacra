@@ -1,0 +1,35 @@
+%% Retrieving existing proof-of-possession or bearer token credentials
+sequenceDiagram
+    participant W as Workload
+    participant CAA_C as CAAPI<br/>Client
+    participant CAA_S as CAAPI<br/>Server
+    participant CAS_C as CAS<br/>Client
+    participant CAS_S as CAS<br/>Server
+    participant V as Verifier
+    participant SS as Vault
+
+    autonumber
+
+    W->>W: Generate CWK
+    W->>W: Generate Evidence<br/>(Nonce, CWK-pub)
+    note over W, CAA_C: CAAPI Client Stub Call
+    W->>CAA_C: Existing PoP/B-T<br/>CredentialRequest<br/>(Target,<br/>Credential Type,<br/>Evidence)
+    note over CAA_C, CAA_S: CAAPI RPC Call
+    CAA_C->>CAA_S: Credential Request
+    note over CAA_S, CAS_C: CAAPI Server Stub Call
+    CAA_S->>CAS_C: Credential Request
+    CAS_C->>CAS_C: Select CAS Server<br/>based on Target
+    note over CAS_C, CAS_S: CAS Protocol
+    CAS_C->>CAS_S: Credential Request<br/>(Credential Type,<br/>Evidence)
+    note over CAS_S, V: Verifier Protocol
+    CAS_S->>V: Request Attestation<br/>(Evidence)
+    V->>V: Check Evidence
+    V->>V: Include CWK-pub in<br/>Attestation Results
+    V-->>CAS_S: Attestation Results
+    note over CAS_S, SS: Vault Protocol
+    CAS_S->>SS: Retrieve Credential<br/>(Evidence,<br/>Attestation Results,<br/>Credential Type)
+    SS->>SS: Validate Attestation<br/>Results
+    SS->>SS: Wrap Secret in CWK-pub
+    SS-->>CAS_S: Retrieved Credential<br/> plus Wrapped Secret
+    CAS_S-->>CAS_C: Retrieved Credential<br/> plus Wrapped Secret
+    CAS_C-->>W: Retrieved Credential<br/> plus Wrapped Secret

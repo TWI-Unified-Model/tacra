@@ -1,0 +1,28 @@
+%% Initiating remote attestation
+sequenceDiagram
+    participant W as Workload
+    participant CAA_C as CAAPI<br/>Client
+    participant CAA_S as CAAPI<br/>Server
+    participant CAS_C as CAS<br/>Client
+    participant CAS_S as CAS<br/>Server
+    participant V as Verifier
+
+    autonumber
+
+    note over W, CAA_C: CAAPI Client Stub Call
+    W->>CAA_C: Initiate<br/>Credential Acquisition<br/>(Target)
+    note over CAA_C, CAA_S: CAAPI RPC Call
+    CAA_C->>CAA_S: Initiate<br/>Credential Acquisition<br/>(Target)
+    note over CAA_S, CAS_C: CAAPI Server Stub Call
+    CAA_S->>CAS_C: Initiate<br/>Credential Acquisition<br/>(Target)
+    CAS_C->>CAS_C: Determine CAS Server<br>and Credential Type<br/>based on Target
+    note over CAS_C, CAS_S: CAS Protocol
+    CAS_C->>CAS_S: Request Nonce<br/>(Target)
+    CAS_S->>CAS_S: Determine Credential<br/>Acquisition Mode(s)<br/>based on Target
+    note over CAS_S, V: Verifier Protocol
+    CAS_S->>V: Request Nonce
+    V->>V: Compute Nonce
+    V-->>CAS_S: Return Nonce
+    CAS_S-->>CAS_C: Return Nonce and<br/>Credential Acquisition<br/>Mode(s)
+    CAS_C-->>W: Return Nonce,<br/>Credential Type, and<br/>Credential Acquisition<br/>Mode(s)
+

@@ -1,0 +1,36 @@
+%% Minting new proof-of-possession credentials
+sequenceDiagram
+    participant W as Workload
+    participant CAA_C as CAAPI<br/>Client
+    participant CAA_S as CAAPI<br/>Server
+    participant CAS_C as CAS<br/>Client
+    participant CAS_S as CAS<br/>Server
+    participant V as Verifier
+    participant CA as Certificate<br/>Authority
+
+    autonumber
+
+    W->>W: Generate CSK
+    W->>W: Generate CSR(CSK-Pub)
+    W->>W: Generate Evidence<br/>(Nonce, CSR)
+    note over W, CAA_C: CAAPI Client Stub Call
+    W->>CAA_C: New PoP Credential<br/>Request (Target,<br/>Credential Type,<br/>Evidence)
+    note over CAA_C, CAA_S: CAAPI RPC Call
+    CAA_C->>CAA_S: New PoP<br/>Credential Request
+    note over CAA_S, CAS_C: CAAPI Server Stub Call
+    CAA_S->>CAS_C: New PoP<br/>Credential Request
+    CAS_C->>CAS_C: Select CAS Server<br/>based on Target
+    note over CAS_C, CAS_S: CAS Protocol
+    CAS_C->>CAS_S: Mint New PoP<br/>Credential<br/>(Evidence,<br/>Credential Type)
+    note over CAS_S, V: Verifier Protocol
+    CAS_S->>V: Request Attestation<br/>(Evidence)
+    V->>V: Check Evidence
+    V->>V: Include CSR in<br/>Attestation Results
+    V-->>CAS_S: Attestation Results
+    note over CAS_S, CA: CA Protocol
+    CAS_S->>CA: Request Credential<br/>(Evidence,<br/>Attestation Results,<br/>Credential Type)
+    CA->>CA: Validate Attestation<br/>Results incl. CSR
+    CA->>CA: Mint New Credential
+    CA-->>CAS_S: Newly Minted Credential
+    CAS_S-->>CAS_C: Newly Minted Credential
+    CAS_C-->>W: Newly Minted Credential
