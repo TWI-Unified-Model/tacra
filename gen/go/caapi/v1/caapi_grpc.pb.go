@@ -2,7 +2,7 @@
 // versions:
 // - protoc-gen-go-grpc v1.6.2
 // - protoc             v4.25.3
-// source: caapi.proto
+// source: caapi/v1/caapi.proto
 
 package caapiv1
 
@@ -232,5 +232,5 @@ var RemoteAttestationService_ServiceDesc = grpc.ServiceDesc{
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
-	Metadata: "caapi.proto",
+	Metadata: "caapi/v1/caapi.proto",
 }

@@ -7,14 +7,13 @@ PROTO_FILES := $(shell find $(PROTO_DIR) -name '*.proto')
 
 .PHONY: all proto install-tools clean help
 
-# Default target
 all: proto
 
 ## proto: Compiles all .proto files into Go code
 proto:
 	@mkdir -p $(OUT_DIR)
 	protoc \
-		--proto_path=$(PROTO_DIR) \
+		--proto_path=. \
 		--go_out=$(OUT_DIR) \
 		--go_opt=paths=source_relative \
 		--go-grpc_out=$(OUT_DIR) \

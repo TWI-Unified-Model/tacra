@@ -2,7 +2,7 @@
 // versions:
 // 	protoc-gen-go v1.36.12
 // 	protoc        v4.25.3
-// source: caapi.proto
+// source: caapi/v1/caapi.proto
 
 package caapiv1
 
@@ -59,11 +59,11 @@ func (x CredentialAcquisitionMechanism) String() string {
 }
 
 func (CredentialAcquisitionMechanism) Descriptor() protoreflect.EnumDescriptor {
-	return file_caapi_proto_enumTypes[0].Descriptor()
+	return file_caapi_v1_caapi_proto_enumTypes[0].Descriptor()
 }
 
 func (CredentialAcquisitionMechanism) Type() protoreflect.EnumType {
-	return &file_caapi_proto_enumTypes[0]
+	return &file_caapi_v1_caapi_proto_enumTypes[0]
 }
 
 func (x CredentialAcquisitionMechanism) Number() protoreflect.EnumNumber {
@@ -72,7 +72,7 @@ func (x CredentialAcquisitionMechanism) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use CredentialAcquisitionMechanism.Descriptor instead.
 func (CredentialAcquisitionMechanism) EnumDescriptor() ([]byte, []int) {
-	return file_caapi_proto_rawDescGZIP(), []int{0}
+	return file_caapi_v1_caapi_proto_rawDescGZIP(), []int{0}
 }
 
 type ProofOfPossessionCredentialType int32
@@ -111,11 +111,11 @@ func (x ProofOfPossessionCredentialType) String() string {
 }
 
 func (ProofOfPossessionCredentialType) Descriptor() protoreflect.EnumDescriptor {
-	return file_caapi_proto_enumTypes[1].Descriptor()
+	return file_caapi_v1_caapi_proto_enumTypes[1].Descriptor()
 }
 
 func (ProofOfPossessionCredentialType) Type() protoreflect.EnumType {
-	return &file_caapi_proto_enumTypes[1]
+	return &file_caapi_v1_caapi_proto_enumTypes[1]
 }
 
 func (x ProofOfPossessionCredentialType) Number() protoreflect.EnumNumber {
@@ -124,7 +124,7 @@ func (x ProofOfPossessionCredentialType) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use ProofOfPossessionCredentialType.Descriptor instead.
 func (ProofOfPossessionCredentialType) EnumDescriptor() ([]byte, []int) {
-	return file_caapi_proto_rawDescGZIP(), []int{1}
+	return file_caapi_v1_caapi_proto_rawDescGZIP(), []int{1}
 }
 
 type BearerTokenCredentialType int32
@@ -160,11 +160,11 @@ func (x BearerTokenCredentialType) String() string {
 }
 
 func (BearerTokenCredentialType) Descriptor() protoreflect.EnumDescriptor {
-	return file_caapi_proto_enumTypes[2].Descriptor()
+	return file_caapi_v1_caapi_proto_enumTypes[2].Descriptor()
 }
 
 func (BearerTokenCredentialType) Type() protoreflect.EnumType {
-	return &file_caapi_proto_enumTypes[2]
+	return &file_caapi_v1_caapi_proto_enumTypes[2]
 }
 
 func (x BearerTokenCredentialType) Number() protoreflect.EnumNumber {
@@ -173,7 +173,7 @@ func (x BearerTokenCredentialType) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use BearerTokenCredentialType.Descriptor instead.
 func (BearerTokenCredentialType) EnumDescriptor() ([]byte, []int) {
-	return file_caapi_proto_rawDescGZIP(), []int{2}
+	return file_caapi_v1_caapi_proto_rawDescGZIP(), []int{2}
 }
 
 type InitiateCredentialAcquistionRequest struct {
@@ -186,7 +186,7 @@ type InitiateCredentialAcquistionRequest struct {
 
 func (x *InitiateCredentialAcquistionRequest) Reset() {
 	*x = InitiateCredentialAcquistionRequest{}
-	mi := &file_caapi_proto_msgTypes[0]
+	mi := &file_caapi_v1_caapi_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -198,7 +198,7 @@ func (x *InitiateCredentialAcquistionRequest) String() string {
 func (*InitiateCredentialAcquistionRequest) ProtoMessage() {}
 
 func (x *InitiateCredentialAcquistionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_caapi_proto_msgTypes[0]
+	mi := &file_caapi_v1_caapi_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -211,7 +211,7 @@ func (x *InitiateCredentialAcquistionRequest) ProtoReflect() protoreflect.Messag
 
 // Deprecated: Use InitiateCredentialAcquistionRequest.ProtoReflect.Descriptor instead.
 func (*InitiateCredentialAcquistionRequest) Descriptor() ([]byte, []int) {
-	return file_caapi_proto_rawDescGZIP(), []int{0}
+	return file_caapi_v1_caapi_proto_rawDescGZIP(), []int{0}
 }
 
 func (x *InitiateCredentialAcquistionRequest) GetTarget() string {
@@ -239,7 +239,7 @@ type InitiateCredentialAcquisitionResponse struct {
 
 func (x *InitiateCredentialAcquisitionResponse) Reset() {
 	*x = InitiateCredentialAcquisitionResponse{}
-	mi := &file_caapi_proto_msgTypes[1]
+	mi := &file_caapi_v1_caapi_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -251,7 +251,7 @@ func (x *InitiateCredentialAcquisitionResponse) String() string {
 func (*InitiateCredentialAcquisitionResponse) ProtoMessage() {}
 
 func (x *InitiateCredentialAcquisitionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_caapi_proto_msgTypes[1]
+	mi := &file_caapi_v1_caapi_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -264,7 +264,7 @@ func (x *InitiateCredentialAcquisitionResponse) ProtoReflect() protoreflect.Mess
 
 // Deprecated: Use InitiateCredentialAcquisitionResponse.ProtoReflect.Descriptor instead.
 func (*InitiateCredentialAcquisitionResponse) Descriptor() ([]byte, []int) {
-	return file_caapi_proto_rawDescGZIP(), []int{1}
+	return file_caapi_v1_caapi_proto_rawDescGZIP(), []int{1}
 }
 
 func (x *InitiateCredentialAcquisitionResponse) GetMechanism() []CredentialAcquisitionMechanism {
@@ -336,7 +336,7 @@ type NewPoPCredentialRequest struct {
 
 func (x *NewPoPCredentialRequest) Reset() {
 	*x = NewPoPCredentialRequest{}
-	mi := &file_caapi_proto_msgTypes[2]
+	mi := &file_caapi_v1_caapi_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -348,7 +348,7 @@ func (x *NewPoPCredentialRequest) String() string {
 func (*NewPoPCredentialRequest) ProtoMessage() {}
 
 func (x *NewPoPCredentialRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_caapi_proto_msgTypes[2]
+	mi := &file_caapi_v1_caapi_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -361,7 +361,7 @@ func (x *NewPoPCredentialRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use NewPoPCredentialRequest.ProtoReflect.Descriptor instead.
 func (*NewPoPCredentialRequest) Descriptor() ([]byte, []int) {
-	return file_caapi_proto_rawDescGZIP(), []int{2}
+	return file_caapi_v1_caapi_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *NewPoPCredentialRequest) GetTarget() string {
@@ -395,7 +395,7 @@ type NewPoPCredentialResponse struct {
 
 func (x *NewPoPCredentialResponse) Reset() {
 	*x = NewPoPCredentialResponse{}
-	mi := &file_caapi_proto_msgTypes[3]
+	mi := &file_caapi_v1_caapi_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -407,7 +407,7 @@ func (x *NewPoPCredentialResponse) String() string {
 func (*NewPoPCredentialResponse) ProtoMessage() {}
 
 func (x *NewPoPCredentialResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_caapi_proto_msgTypes[3]
+	mi := &file_caapi_v1_caapi_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -420,7 +420,7 @@ func (x *NewPoPCredentialResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use NewPoPCredentialResponse.ProtoReflect.Descriptor instead.
 func (*NewPoPCredentialResponse) Descriptor() ([]byte, []int) {
-	return file_caapi_proto_rawDescGZIP(), []int{3}
+	return file_caapi_v1_caapi_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *NewPoPCredentialResponse) GetPlaintextCredential() []byte {
@@ -442,7 +442,7 @@ type ExistingPoPCredentialRequest struct {
 
 func (x *ExistingPoPCredentialRequest) Reset() {
 	*x = ExistingPoPCredentialRequest{}
-	mi := &file_caapi_proto_msgTypes[4]
+	mi := &file_caapi_v1_caapi_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -454,7 +454,7 @@ func (x *ExistingPoPCredentialRequest) String() string {
 func (*ExistingPoPCredentialRequest) ProtoMessage() {}
 
 func (x *ExistingPoPCredentialRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_caapi_proto_msgTypes[4]
+	mi := &file_caapi_v1_caapi_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -467,7 +467,7 @@ func (x *ExistingPoPCredentialRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExistingPoPCredentialRequest.ProtoReflect.Descriptor instead.
 func (*ExistingPoPCredentialRequest) Descriptor() ([]byte, []int) {
-	return file_caapi_proto_rawDescGZIP(), []int{4}
+	return file_caapi_v1_caapi_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *ExistingPoPCredentialRequest) GetTarget() string {
@@ -502,7 +502,7 @@ type ExistingPoPCredentialResponse struct {
 
 func (x *ExistingPoPCredentialResponse) Reset() {
 	*x = ExistingPoPCredentialResponse{}
-	mi := &file_caapi_proto_msgTypes[5]
+	mi := &file_caapi_v1_caapi_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -514,7 +514,7 @@ func (x *ExistingPoPCredentialResponse) String() string {
 func (*ExistingPoPCredentialResponse) ProtoMessage() {}
 
 func (x *ExistingPoPCredentialResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_caapi_proto_msgTypes[5]
+	mi := &file_caapi_v1_caapi_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -527,7 +527,7 @@ func (x *ExistingPoPCredentialResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExistingPoPCredentialResponse.ProtoReflect.Descriptor instead.
 func (*ExistingPoPCredentialResponse) Descriptor() ([]byte, []int) {
-	return file_caapi_proto_rawDescGZIP(), []int{5}
+	return file_caapi_v1_caapi_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *ExistingPoPCredentialResponse) GetPlaintextCredential() []byte {
@@ -556,7 +556,7 @@ type BearerTokenRequest struct {
 
 func (x *BearerTokenRequest) Reset() {
 	*x = BearerTokenRequest{}
-	mi := &file_caapi_proto_msgTypes[6]
+	mi := &file_caapi_v1_caapi_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -568,7 +568,7 @@ func (x *BearerTokenRequest) String() string {
 func (*BearerTokenRequest) ProtoMessage() {}
 
 func (x *BearerTokenRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_caapi_proto_msgTypes[6]
+	mi := &file_caapi_v1_caapi_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -581,7 +581,7 @@ func (x *BearerTokenRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BearerTokenRequest.ProtoReflect.Descriptor instead.
 func (*BearerTokenRequest) Descriptor() ([]byte, []int) {
-	return file_caapi_proto_rawDescGZIP(), []int{6}
+	return file_caapi_v1_caapi_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *BearerTokenRequest) GetTarget() string {
@@ -614,7 +614,7 @@ type BearerTokenResponse struct {
 
 func (x *BearerTokenResponse) Reset() {
 	*x = BearerTokenResponse{}
-	mi := &file_caapi_proto_msgTypes[7]
+	mi := &file_caapi_v1_caapi_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -626,7 +626,7 @@ func (x *BearerTokenResponse) String() string {
 func (*BearerTokenResponse) ProtoMessage() {}
 
 func (x *BearerTokenResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_caapi_proto_msgTypes[7]
+	mi := &file_caapi_v1_caapi_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -639,7 +639,7 @@ func (x *BearerTokenResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BearerTokenResponse.ProtoReflect.Descriptor instead.
 func (*BearerTokenResponse) Descriptor() ([]byte, []int) {
-	return file_caapi_proto_rawDescGZIP(), []int{7}
+	return file_caapi_v1_caapi_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *BearerTokenResponse) GetWrappedCredential() []byte {
@@ -649,11 +649,11 @@ func (x *BearerTokenResponse) GetWrappedCredential() []byte {
 	return nil
 }
 
-var File_caapi_proto protoreflect.FileDescriptor
+var File_caapi_v1_caapi_proto protoreflect.FileDescriptor
 
-const file_caapi_proto_rawDesc = "" +
+const file_caapi_v1_caapi_proto_rawDesc = "" +
 	"\n" +
-	"\vcaapi.proto\x12\bcaapi.v1\"=\n" +
+	"\x14caapi/v1/caapi.proto\x12\bcaapi.v1\"=\n" +
 	"#InitiateCredentialAcquistionRequest\x12\x16\n" +
 	"\x06target\x18\x01 \x01(\tR\x06target\"\xda\x02\n" +
 	"%InitiateCredentialAcquisitionResponse\x12F\n" +
@@ -703,20 +703,20 @@ const file_caapi_proto_rawDesc = "" +
 	"\x1cRequestBearerTokenCredential\x12\x1c.caapi.v1.BearerTokenRequest\x1a\x1d.caapi.v1.BearerTokenResponseB<Z:github.com/TWI-Unified-Model/twium/gen/go/caapi/v1;caapiv1b\x06proto3"
 
 var (
-	file_caapi_proto_rawDescOnce sync.Once
-	file_caapi_proto_rawDescData []byte
+	file_caapi_v1_caapi_proto_rawDescOnce sync.Once
+	file_caapi_v1_caapi_proto_rawDescData []byte
 )
 
-func file_caapi_proto_rawDescGZIP() []byte {
-	file_caapi_proto_rawDescOnce.Do(func() {
-		file_caapi_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_caapi_proto_rawDesc), len(file_caapi_proto_rawDesc)))
+func file_caapi_v1_caapi_proto_rawDescGZIP() []byte {
+	file_caapi_v1_caapi_proto_rawDescOnce.Do(func() {
+		file_caapi_v1_caapi_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_caapi_v1_caapi_proto_rawDesc), len(file_caapi_v1_caapi_proto_rawDesc)))
 	})
-	return file_caapi_proto_rawDescData
+	return file_caapi_v1_caapi_proto_rawDescData
 }
 
-var file_caapi_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
-var file_caapi_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
-var file_caapi_proto_goTypes = []any{
+var file_caapi_v1_caapi_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
+var file_caapi_v1_caapi_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
+var file_caapi_v1_caapi_proto_goTypes = []any{
 	(CredentialAcquisitionMechanism)(0),           // 0: caapi.v1.CredentialAcquisitionMechanism
 	(ProofOfPossessionCredentialType)(0),          // 1: caapi.v1.ProofOfPossessionCredentialType
 	(BearerTokenCredentialType)(0),                // 2: caapi.v1.BearerTokenCredentialType
@@ -729,7 +729,7 @@ var file_caapi_proto_goTypes = []any{
 	(*BearerTokenRequest)(nil),                    // 9: caapi.v1.BearerTokenRequest
 	(*BearerTokenResponse)(nil),                   // 10: caapi.v1.BearerTokenResponse
 }
-var file_caapi_proto_depIdxs = []int32{
+var file_caapi_v1_caapi_proto_depIdxs = []int32{
 	0,  // 0: caapi.v1.InitiateCredentialAcquisitionResponse.mechanism:type_name -> caapi.v1.CredentialAcquisitionMechanism
 	1,  // 1: caapi.v1.InitiateCredentialAcquisitionResponse.pop_credential:type_name -> caapi.v1.ProofOfPossessionCredentialType
 	2,  // 2: caapi.v1.InitiateCredentialAcquisitionResponse.bearer_token_credential:type_name -> caapi.v1.BearerTokenCredentialType
@@ -751,12 +751,12 @@ var file_caapi_proto_depIdxs = []int32{
 	0,  // [0:6] is the sub-list for field type_name
 }
 
-func init() { file_caapi_proto_init() }
-func file_caapi_proto_init() {
-	if File_caapi_proto != nil {
+func init() { file_caapi_v1_caapi_proto_init() }
+func file_caapi_v1_caapi_proto_init() {
+	if File_caapi_v1_caapi_proto != nil {
 		return
 	}
-	file_caapi_proto_msgTypes[1].OneofWrappers = []any{
+	file_caapi_v1_caapi_proto_msgTypes[1].OneofWrappers = []any{
 		(*InitiateCredentialAcquisitionResponse_PopCredential)(nil),
 		(*InitiateCredentialAcquisitionResponse_BearerTokenCredential)(nil),
 	}
@@ -764,18 +764,18 @@ func file_caapi_proto_init() {
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
-			RawDescriptor: unsafe.Slice(unsafe.StringData(file_caapi_proto_rawDesc), len(file_caapi_proto_rawDesc)),
+			RawDescriptor: unsafe.Slice(unsafe.StringData(file_caapi_v1_caapi_proto_rawDesc), len(file_caapi_v1_caapi_proto_rawDesc)),
 			NumEnums:      3,
 			NumMessages:   8,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
-		GoTypes:           file_caapi_proto_goTypes,
-		DependencyIndexes: file_caapi_proto_depIdxs,
-		EnumInfos:         file_caapi_proto_enumTypes,
-		MessageInfos:      file_caapi_proto_msgTypes,
+		GoTypes:           file_caapi_v1_caapi_proto_goTypes,
+		DependencyIndexes: file_caapi_v1_caapi_proto_depIdxs,
+		EnumInfos:         file_caapi_v1_caapi_proto_enumTypes,
+		MessageInfos:      file_caapi_v1_caapi_proto_msgTypes,
 	}.Build()
-	File_caapi_proto = out.File
-	file_caapi_proto_goTypes = nil
-	file_caapi_proto_depIdxs = nil
+	File_caapi_v1_caapi_proto = out.File
+	file_caapi_v1_caapi_proto_goTypes = nil
+	file_caapi_v1_caapi_proto_depIdxs = nil
 }
