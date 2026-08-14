@@ -1,6 +1,7 @@
 syntax = "proto3";
 
-package proto;
+package caapi.v1;
+option go_package = "github.com/TWI-Unified-Model/twium/gen/go/caapi/v1;caapiv1";
 
 enum CredentialAcquisitionMechanism {
     OPERATION_UNSPECIFIED = 0;
@@ -12,16 +13,16 @@ enum CredentialAcquisitionMechanism {
 }
 
 enum ProofOfPossessionCredentialType {
-    CREDENTIAL_TYPE_UNSPECIFIED = 0;
-    CREDENTIAL_TYPE_X509 = 1;
-    CREDENTIAL_TYPE_WIC = 2;
-    CREDENTIAL_TYPE_WIT = 3;
+    POP_CREDENTIAL_TYPE_UNSPECIFIED = 0;
+    POP_CREDENTIAL_TYPE_X509 = 1;
+    POP_CREDENTIAL_TYPE_WIC = 2;
+    POP_CREDENTIAL_TYPE_WIT = 3;
 }
 
 enum BearerTokenCredentialType {
-    CREDENTIAL_TYPE_UNSPECIFIED = 0;
-    CREDENTIAL_TYPE_JWT = 1;
-    CREDENTIAL_TYPE_PSK = 2;
+    BT_CREDENTIAL_TYPE_BT_UNSPECIFIED = 0;
+    BT_CREDENTIAL_TYPE_JWT = 1;
+    BT_CREDENTIAL_TYPE_PSK = 2;
 }
 
 message InitiateCredentialAcquistionRequest {
