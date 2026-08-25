@@ -65,7 +65,7 @@ Run from workspace root: `/Users/sudsadmin/Downloads/vscode_worspaces/twi-unifie
 | Command | Description |
 |---------|-------------|
 | `build` | Build Docker images from source for selected components |
-| `deploy` | Build (unless `--no-build`) and start containers |
+| `deploy` | Start containers from previously built component images |
 | `stop` | Stop running containers |
 | `status` | Show container status |
 
@@ -74,7 +74,6 @@ Run from workspace root: `/Users/sudsadmin/Downloads/vscode_worspaces/twi-unifie
 | Option | Description | Example |
 |--------|-------------|---------|
 | `--components LIST` | Comma-separated component list or `all` (default: `all`) | `--components globalsign-est,step-ca` |
-| `--no-build LIST` | Reuse existing images for listed components during deploy | `--no-build hashicorp-vault` |
 | `--config-dir PATH` | Runtime configuration directory | `--config-dir "$HOME/twi-config"` |
 | `--platform PLATFORM` | Docker platform (auto-detected by default) | `--platform linux/amd64` |
 | `--docker-host ENDPOINT` | Remote Docker daemon endpoint | `--docker-host ssh://user@vm.example` |
@@ -126,7 +125,7 @@ Set via `--config-dir` or environment variable `DEPLOY_CONFIG_DIR`:
 export DEPLOY_CONFIG_DIR="/path/to/config"
 ```
 
-**Default:** `twium/deploy/config` (not recommended for actual secrets)
+**Default:** `twium/deploy/config/local` (gitignored local development state)
 
 **Recommended for local dev:** `twium/deploy/config/local` (gitignored)
 
@@ -203,6 +202,62 @@ twium/deploy/config/local/globalsign-est/
 - Never commit generated secrets to Git
 - Rotate local configuration periodically
 
+## Local step-ca Configuration: init-local-step-ca-config.sh
+
+`init-local-step-ca-config.sh` creates a disposable local step-ca instance from
+the already-built `twi/step-ca` image. It generates `config/ca.json`, CA
+certificates and keys, Badger database state, and `secrets/password` under
+`config/local/step-ca/`. The password and private-key contents are not printed.
+
+```bash
+./twium/deploy/components.sh build --components step-ca
+./twium/deploy/init-local-step-ca-config.sh
+```
+
+When `DEPLOY_CONFIG_DIR` is the default `twium/deploy/config/local`, deploying
+step-ca runs this initializer automatically if the complete local configuration
+is absent. Existing or partial state is never overwritten; use the explicit
+initializer only after intentionally removing incomplete local state.
+
+## Local Vault and SPIRE Configuration
+
+`init-local-hashicorp-vault-config.sh` creates a disposable Vault file-storage
+configuration with an HTTP listener and UI enabled. `init-local-spiffe-spire-config.sh`
+creates an evaluation-only SPIRE server configuration using SQLite, a disk key
+manager, and join-token node attestation. Both are invoked automatically during
+deployment when the default local configuration directory has no state.
+
+### Initialize and Unseal Local Vault
+
+After deploying Vault for the first time, initialize it and retain the output
+in an approved secret store. The local Vault listener uses HTTP, so set
+`VAULT_ADDR` for each command:
+
+```bash
+docker exec -it -e VAULT_ADDR=http://127.0.0.1:8200 \
+    twi-hashicorp-vault vault operator init
+```
+
+The initialization output includes unseal keys and a root token. Do not commit,
+share, or paste those values into logs. Use the required number of distinct
+unseal keys to unseal Vault; for each key, run:
+
+```bash
+docker exec -it -e VAULT_ADDR=http://127.0.0.1:8200 \
+    twi-hashicorp-vault vault operator unseal
+```
+
+Confirm Vault is initialized and unsealed:
+
+```bash
+docker exec -e VAULT_ADDR=http://127.0.0.1:8200 \
+    twi-hashicorp-vault vault status
+```
+
+The SPIRE helper creates only `server.conf`; it intentionally does not create
+`agent.conf`, because an agent needs a join token and host-specific
+node/workload-attestation configuration.
+
 ## Component-Specific Dockerfiles
 
 ### globalsign-est Dockerfile
@@ -268,11 +323,12 @@ Uses the existing Veraison project's own `make docker-deploy` workflow. The disp
 Build and deploy all components with local configuration:
 
 ```bash
-# Set up local EST configuration (one-time)
+# Select the gitignored local configuration directory.
+# Deployment generates the EST mock CA and certificates when absent.
 export DEPLOY_CONFIG_DIR="$PWD/twium/deploy/config/local"
-./twium/deploy/init-local-est-config.sh
 
-# Build and deploy all components
+# Build images, then deploy them.
+./twium/deploy/components.sh build --components all
 ./twium/deploy/components.sh deploy --components all
 ```
 
@@ -282,13 +338,12 @@ export DEPLOY_CONFIG_DIR="$PWD/twium/deploy/config/local"
 ./twium/deploy/components.sh build --components globalsign-est,step-ca
 ```
 
-### 3. Deploy Without Rebuilding
+### 3. Deploy Built Images
 
-If images already exist:
+Deploy requires the selected component images to already exist in the target Docker daemon:
 
 ```bash
-./twium/deploy/components.sh deploy --components all \
-    --no-build globalsign-est,step-ca
+./twium/deploy/components.sh deploy --components globalsign-est,step-ca
 ```
 
 ### 4. Cross-Platform Build (for VM deployment)
@@ -372,13 +427,17 @@ Add workspace and config directories to Docker Desktop file sharing:
 1. Docker Desktop → Settings → Resources → File sharing
 2. Add paths, click Apply & Restart
 
-### "missing image" with --no-build
+### "missing image"
 
-Build the image first or remove the `--no-build` flag for that component.
+Build the selected component before deployment:
+
+```bash
+./twium/deploy/components.sh build --components <component>
+```
 
 ### "required configuration ... missing"
 
-Create the configuration directory structure documented in `deploy/config/README.md`. For local development, run `init-local-est-config.sh` for EST.
+Create the configuration directory structure documented in `deploy/config/README.md`. With `DEPLOY_CONFIG_DIR` set to `twium/deploy/config/local`, EST deployment automatically generates a missing mock-CA configuration. For external configuration directories, run `init-local-est-config.sh` explicitly only when a local mock-CA setup is intended.
 
 ### Port Already Allocated
 
@@ -419,36 +478,31 @@ Approximate build times on Apple Silicon (M1/M2/M3):
 
 | Component | Build Time | Image Size |
 |-----------|------------|------------|
-| globalsign-est | ~30 seconds | 16 MB |
-| hashicorp-vault | ~5-10 minutes | 150 MB |
-| spiffe-spire | ~3-5 minutes | 150 MB (server), 62 MB (agent) |
-| step-ca | ~3-5 minutes | 147 MB |
+| globalsign-est | Under 1 minute | 16 MB |
+| hashicorp-vault | 10-20 minutes when dependencies are uncached | 150 MB |
+| spiffe-spire | 5-10 minutes | 150 MB (server), 62 MB (agent) |
+| step-ca | 5-10 minutes | 147 MB |
 | veraison-services | ~2-3 minutes | Varies |
 
 Cross-platform builds (e.g., `--platform linux/amd64` on ARM) may take 2-3× longer due to emulation.
+
+`components.sh` does not enforce a timeout for builds: `docker build` runs until Docker succeeds or reports an error. If the script is launched through an IDE task, CI job, or automation agent, configure that caller's timeout separately. For this workspace, allow at least 20 minutes for an uncached Vault build and 10 minutes for SPIRE or step-ca builds on Apple Silicon.
 
 ## Next Steps
 
 After deploying components:
 
-1. **Initialize Vault** (if deployed):
-   ```bash
-   docker exec -it twi-hashicorp-vault vault operator init
-   # Save the unseal keys and root token
-   docker exec -it twi-hashicorp-vault vault operator unseal
-   ```
-
-2. **Verify EST Server**:
+1. **Verify EST Server**:
    ```bash
    curl -k https://localhost:8443/.well-known/est/cacerts
    ```
 
-3. **Check SPIRE Server**:
+2. **Check SPIRE Server**:
    ```bash
    docker exec -it twi-spire-server spire-server healthcheck
    ```
 
-4. **Test step-ca**:
+3. **Test step-ca**:
    ```bash
    curl https://localhost:9000/health
    ```
