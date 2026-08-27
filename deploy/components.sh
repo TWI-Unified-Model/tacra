@@ -173,7 +173,7 @@ build_component() {
             ;;
         veraison-services)
             [[ -z "${DOCKER_HOST_VALUE}" ]] || fail "veraison-services source deployment supports only the local Docker daemon"
-            run make -C "${WORKSPACE_ROOT}/veraison-services" docker-deploy
+            run make -C "${WORKSPACE_ROOT}/veraison-services/deployments/docker" all
             ;;
     esac
 }
@@ -198,7 +198,7 @@ deploy_component() {
             component_dir="${CONFIG_DIR}/globalsign-est"; ensure_local_est_config "${component_dir}"
             [[ "${DRY_RUN}" == true ]] || est_config_is_complete "${component_dir}" || fail "required EST configuration is incomplete: ${component_dir}; run ${SCRIPT_DIR}/init-local-est-config.sh for local development"
             ensure_network; remove_container twi-globalsign-est
-            run docker run -d --name twi-globalsign-est --restart unless-stopped --label twi.component=globalsign-est --network "${NETWORK_NAME}" -p 8443:8443 -v "${component_dir}:/etc/est:ro" "$(image_tag globalsign-est)"
+            run docker run -d --name twi-globalsign-est --restart unless-stopped --label twi.component=globalsign-est --network "${NETWORK_NAME}" -p 9444:8443 -v "${component_dir}:/etc/est:ro" "$(image_tag globalsign-est)"
             ;;
         hashicorp-vault)
             component_dir="${CONFIG_DIR}/hashicorp-vault"; ensure_local_vault_config "${component_dir}"

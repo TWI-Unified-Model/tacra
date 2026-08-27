@@ -99,7 +99,7 @@ All images are built from the checked-out workspace source code. The dispatcher 
 
 | Component | Dockerfile Location | Local Image Tag | Container Name | Ports |
 |-----------|---------------------|-----------------|----------------|-------|
-| globalsign-est | `globalsign-est/Dockerfile` | `twi/globalsign-est:local-<platform>` | `twi-globalsign-est` | 8443 |
+| globalsign-est | `globalsign-est/Dockerfile` | `twi/globalsign-est:local-<platform>` | `twi-globalsign-est` | 9444 (host) -> 8443 (container) |
 | hashicorp-vault | `hashicorp-vault/scripts/docker/Dockerfile` | `twi/hashicorp-vault:local-<platform>` | `twi-hashicorp-vault` | 8200, 8201 |
 | spiffe-spire | `spiffe-spire/Dockerfile` (multi-stage) | `twi/spiffe-spire-server:local-<platform>`, `twi/spiffe-spire-agent:local-<platform>` | `twi-spire-server`, `twi-spire-agent` | 8081 |
 | step-ca | `step-ca/docker/Dockerfile` | `twi/step-ca:local-<platform>` | `twi-step-ca` | 9000 |
@@ -444,7 +444,7 @@ Create the configuration directory structure documented in `deploy/config/README
 Stop conflicting services or change published ports in the dispatcher script.
 
 Default ports:
-- EST: 8443
+- EST: 9444 (host) -> 8443 (container)
 - Vault: 8200, 8201
 - SPIRE Server: 8081
 - step-ca: 9000
@@ -494,7 +494,7 @@ After deploying components:
 
 1. **Verify EST Server**:
    ```bash
-   curl -k https://localhost:8443/.well-known/est/cacerts
+    curl -k https://localhost:9444/.well-known/est/cacerts
    ```
 
 2. **Check SPIRE Server**:
