@@ -52,7 +52,12 @@ For Docker Desktop on macOS, ensure the workspace directory is shared:
 ./twium/deploy/components.sh
 ```
 
-Run from workspace root: `/Users/sudsadmin/Downloads/vscode_worspaces/twi-unified-model`
+Run the commands in this guide from the `twium/` directory unless a section
+states otherwise:
+
+```bash
+cd /Users/sudsadmin/Downloads/vscode_worspaces/twi-unified-model/twium
+```
 
 ### Usage
 
@@ -499,12 +504,13 @@ After deploying components:
 
 2. **Check SPIRE Server**:
    ```bash
-   docker exec -it twi-spire-server spire-server healthcheck
+    docker exec twi-spire-server \
+         /opt/spire/bin/spire-server healthcheck
    ```
 
 3. **Test step-ca**:
    ```bash
-   curl https://localhost:9000/health
+    curl -k https://localhost:9000/health
    ```
 
 ## Deployment Reference
