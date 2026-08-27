@@ -507,6 +507,13 @@ After deploying components:
    curl https://localhost:9000/health
    ```
 
+## Deployment Reference
+
+The following Docker Desktop view shows the local containers after deploying
+the TWI components.
+
+![Docker Desktop showing deployed TWI components](mac_docker_desktop_deployment_image.png)
+
 ## See Also
 
 - [Installation Prerequisites](readme_install_prereq.md) - Install Go and protoc
