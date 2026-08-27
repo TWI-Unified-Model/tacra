@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -22,29 +21,19 @@ func main() {
 		server = "http://" + server
 	}
 
-	var port int
-	if strings.HasPrefix(server, "https://") {
-		port = 443
-	} else if strings.HasPrefix(server, "http://") {
-		port = 8080
-	} else {
-		panic("Unexepcted server prefix")
+	serverUrl, err := url.Parse(server)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Invalid server url: %s", server)
+		os.Exit(1)
 	}
 
-	if len(os.Args) > 2 {
-		var err error
-		if port, err = strconv.Atoi(os.Args[2]); err != nil {
-			fmt.Fprintf(os.Stderr, "Invalid port: \"%s\"%v", os.Args[2], err)
-			os.Exit(1)
-		}
-		if port < 0 || port > 65535 {
-			fmt.Fprintf(os.Stderr, "Port value cannot be negative or too large")
-			os.Exit(1)
-		}
+	if serverUrl.ForceQuery || serverUrl.RawQuery != "" {
+		fmt.Fprintf(os.Stderr, "No query string allowed on server URL")
+		os.Exit(1)
 	}
 
 	// Construct request endpoint with 'Hello, world!' payload
-	reqURL := fmt.Sprintf("%s:%d/?message=%s", server, port, url.QueryEscape("Hello, world!"))
+	reqURL := fmt.Sprintf("%s/?message=%s", server, url.QueryEscape("Hello, world!"))
 
 	client := &http.Client{Timeout: 10 * time.Second}
 
