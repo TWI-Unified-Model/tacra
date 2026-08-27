@@ -58,14 +58,7 @@ sudo unzip -o protoc-25.3-linux-aarch_64.zip -d /usr/local
 rm protoc-25.3-linux-aarch_64.zip
 ```
 
-**macOS (Universal):**
-```bash
-curl -LO https://github.com/protocolbuffers/protobuf/releases/download/v25.3/protoc-25.3-osx-universal_binary.zip
-sudo unzip -o protoc-25.3-osx-universal_binary.zip -d /usr/local
-rm protoc-25.3-osx-universal_binary.zip
-```
-
-Or via Homebrew:
+**macOS:**
 ```bash
 brew install protobuf
 ```
@@ -126,29 +119,6 @@ Remove all generated code:
 
 ```bash
 make clean
-```
-
-## Troubleshooting
-
-### "protoc: command not found"
-
-- Verify `/usr/local/bin` is in your `$PATH`
-- Run `hash -r` to refresh the command cache
-- Check installation: `which protoc`
-
-### "protoc-gen-go: program not found or is not executable"
-
-- Run `make install-tools` again
-- Verify `$(go env GOPATH)/bin` is in your `$PATH`
-- Check: `ls $(go env GOPATH)/bin/protoc-gen-*`
-
-### Outdated protoc Version
-
-If you see errors about proto3 optional fields, you're likely using an old protoc version:
-
-```bash
-protoc --version
-# If < 3.15, upgrade using the GitHub binary installation above
 ```
 
 ## Next Steps

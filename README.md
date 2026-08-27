@@ -1,6 +1,6 @@
 # TWI Unified Model - Proof of Concept
 
-**Twium** defines the Protobuf/gRPC schema contracts that integrate the trusted-workload-identity (TWI) stack components. This repository serves as the central schema definition and deployment orchestration point for the entire TWI ecosystem.
+TWI Unified Model Proof-of-Concept
 
 ## Quick Start
 
@@ -70,18 +70,3 @@ Twium integrates with these upstream projects (vendored in the workspace):
 | **veraison-services** | Attestation verification services | [veraison/services](https://github.com/veraison/services) |
 | **veraison-apiclient** | Go client for Veraison API | [veraison/apiclient](https://github.com/veraison/apiclient) |
 
-## Troubleshooting
-
-### "protoc: command not found"
-
-See [Installation Prerequisites](readme_install_prereq.md) for protoc installation steps.
-
-### "cannot access the Docker daemon"
-
-Ensure Docker Desktop (macOS) or Docker Engine (Linux) is running: `docker info`
-
-### Build Failures
-
-- **Vault:** Verify `.git` is NOT in `hashicorp-vault/.dockerignore`
-- **Long build times:** Source compilation of large Go projects (Vault, SPIRE) can take 5-10 minutes on ARM64
-- **Platform mismatch:** Use `--platform linux/amd64` when building for x86_64 VMs

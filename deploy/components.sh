@@ -7,12 +7,11 @@ readonly NETWORK_NAME="twi-local"
 
 ACTION=""
 COMPONENTS="all"
-CONFIG_DIR="${DEPLOY_CONFIG_DIR:-${SCRIPT_DIR}/config}"
+CONFIG_DIR="${DEPLOY_CONFIG_DIR:-${SCRIPT_DIR}/config/local}"
 PLATFORM=""
 DOCKER_HOST_VALUE=""
-NO_BUILD_COMPONENTS=""
 DRY_RUN=false
-declare -a SELECTED_COMPONENTS=() SKIP_BUILD_COMPONENTS=() PARSED_COMPONENTS=()
+declare -a SELECTED_COMPONENTS=() PARSED_COMPONENTS=()
 
 usage() {
     cat <<'EOF'
@@ -21,7 +20,6 @@ Usage:
 
 Options:
   --components LIST       Comma-separated components, or all (default: all).
-  --no-build LIST         Reuse existing images for listed components during deploy.
   --config-dir PATH       Runtime configuration directory.
   --platform PLATFORM     Docker platform, such as linux/amd64.
   --docker-host ENDPOINT  Docker daemon endpoint for non-Veraison components.
@@ -31,9 +29,8 @@ Options:
 Components:
   globalsign-est, hashicorp-vault, spiffe-spire, step-ca, veraison-services
 
-Deploy builds selected components unless listed in --no-build. --no-build
-requires the image already exist in the target Docker daemon; no application
-image is pulled implicitly.
+Build creates selected component images. Deploy requires those images already
+exist in the target Docker daemon; no application image is pulled implicitly.
 EOF
 }
 
@@ -76,23 +73,75 @@ resolve_components() {
         split_list "${COMPONENTS}"; SELECTED_COMPONENTS=("${PARSED_COMPONENTS[@]}")
     fi
     for component in "${SELECTED_COMPONENTS[@]}"; do validate_component "${component}"; done
-    [[ -z "${NO_BUILD_COMPONENTS}" ]] && {
-        SKIP_BUILD_COMPONENTS=()
-        return
-    }
-    if [[ "${NO_BUILD_COMPONENTS}" == all ]]; then
-        SKIP_BUILD_COMPONENTS=("${SELECTED_COMPONENTS[@]}")
-    else
-        split_list "${NO_BUILD_COMPONENTS}"; SKIP_BUILD_COMPONENTS=("${PARSED_COMPONENTS[@]}")
-    fi
-    for component in "${SKIP_BUILD_COMPONENTS[@]}"; do validate_component "${component}"; done
 }
 
-contains() { local sought="$1" item; shift; for item in "$@"; do [[ "${item}" == "${sought}" ]] && return 0; done; return 1; }
 image_tag() { printf 'twi/%s:local-%s' "$1" "${PLATFORM//\//-}"; }
 image_exists() { [[ "${DRY_RUN}" == true ]] || docker image inspect "$1" >/dev/null 2>&1; }
 require_file() { [[ -f "$1" ]] || fail "required configuration file is missing: $1"; }
 require_directory() { [[ -d "$1" ]] || fail "required configuration directory is missing: $1"; }
+
+est_config_is_complete() {
+    local component_dir="$1"
+    [[ -f "${component_dir}/estserver.json" ]] &&
+        [[ -f "${component_dir}/certs/ca-certificates.pem" ]] &&
+        [[ -f "${component_dir}/certs/ca-key.pem" ]] &&
+        [[ -f "${component_dir}/certs/client-ca.pem" ]] &&
+        [[ -f "${component_dir}/certs/server-certificates.pem" ]] &&
+        [[ -f "${component_dir}/certs/server-key.pem" ]]
+}
+
+ensure_local_est_config() {
+    local component_dir="$1"
+    est_config_is_complete "${component_dir}" && return
+    [[ "${CONFIG_DIR}" == "${SCRIPT_DIR}/config/local" ]] || return
+    [[ ! -e "${component_dir}/estserver.json" ]] || return
+    printf 'Generating local EST development configuration in %s\n' "${component_dir}"
+    DEPLOY_CONFIG_DIR="${CONFIG_DIR}" run "${SCRIPT_DIR}/init-local-est-config.sh"
+}
+
+step_ca_config_is_complete() {
+    local component_dir="$1"
+    [[ -f "${component_dir}/config/ca.json" ]] &&
+        [[ -f "${component_dir}/secrets/password" ]] &&
+        [[ -f "${component_dir}/certs/root_ca.crt" ]] &&
+        [[ -f "${component_dir}/certs/intermediate_ca.crt" ]] &&
+        [[ -d "${component_dir}/db" ]]
+}
+
+ensure_local_step_ca_config() {
+    local component_dir="$1"
+    step_ca_config_is_complete "${component_dir}" && return
+    [[ "${CONFIG_DIR}" == "${SCRIPT_DIR}/config/local" ]] || return
+    [[ ! -e "${component_dir}" || -z "$(find "${component_dir}" -mindepth 1 -print -quit)" ]] || return
+    printf 'Generating local step-ca development configuration in %s\n' "${component_dir}"
+    DEPLOY_CONFIG_DIR="${CONFIG_DIR}" run "${SCRIPT_DIR}/init-local-step-ca-config.sh"
+}
+
+vault_config_is_complete() {
+    [[ -f "$1/config/vault.hcl" ]]
+}
+
+ensure_local_vault_config() {
+    local component_dir="$1"
+    vault_config_is_complete "${component_dir}" && return
+    [[ "${CONFIG_DIR}" == "${SCRIPT_DIR}/config/local" ]] || return
+    [[ ! -e "${component_dir}" || -z "$(find "${component_dir}" -mindepth 1 -print -quit)" ]] || return
+    printf 'Generating local Vault development configuration in %s\n' "${component_dir}"
+    DEPLOY_CONFIG_DIR="${CONFIG_DIR}" run "${SCRIPT_DIR}/init-local-hashicorp-vault-config.sh"
+}
+
+spire_server_config_is_complete() {
+    [[ -f "$1/server.conf" ]]
+}
+
+ensure_local_spire_config() {
+    local component_dir="$1"
+    spire_server_config_is_complete "${component_dir}" && return
+    [[ "${CONFIG_DIR}" == "${SCRIPT_DIR}/config/local" ]] || return
+    [[ ! -e "${component_dir}" || -z "$(find "${component_dir}" -mindepth 1 -print -quit)" ]] || return
+    printf 'Generating local SPIRE server configuration in %s\n' "${component_dir}"
+    DEPLOY_CONFIG_DIR="${CONFIG_DIR}" run "${SCRIPT_DIR}/init-local-spiffe-spire-config.sh"
+}
 
 ensure_network() {
     [[ "${DRY_RUN}" == false ]] && docker network inspect "${NETWORK_NAME}" >/dev/null 2>&1 && return
@@ -146,17 +195,21 @@ deploy_component() {
     local component="$1" component_dir config_dir
     case "${component}" in
         globalsign-est)
-            component_dir="${CONFIG_DIR}/globalsign-est"; require_file "${component_dir}/estserver.json"; require_directory "${component_dir}/certs"
+            component_dir="${CONFIG_DIR}/globalsign-est"; ensure_local_est_config "${component_dir}"
+            [[ "${DRY_RUN}" == true ]] || est_config_is_complete "${component_dir}" || fail "required EST configuration is incomplete: ${component_dir}; run ${SCRIPT_DIR}/init-local-est-config.sh for local development"
             ensure_network; remove_container twi-globalsign-est
             run docker run -d --name twi-globalsign-est --restart unless-stopped --label twi.component=globalsign-est --network "${NETWORK_NAME}" -p 8443:8443 -v "${component_dir}:/etc/est:ro" "$(image_tag globalsign-est)"
             ;;
         hashicorp-vault)
-            config_dir="${CONFIG_DIR}/hashicorp-vault/config"; require_directory "${config_dir}"
+            component_dir="${CONFIG_DIR}/hashicorp-vault"; ensure_local_vault_config "${component_dir}"
+            [[ "${DRY_RUN}" == true ]] || vault_config_is_complete "${component_dir}" || fail "required Vault configuration is incomplete: ${component_dir}; run ${SCRIPT_DIR}/init-local-hashicorp-vault-config.sh for local development"
+            config_dir="${component_dir}/config"
             ensure_network; remove_container twi-hashicorp-vault; run docker volume create twi-vault-file; run docker volume create twi-vault-logs
-            run docker run -d --name twi-hashicorp-vault --restart unless-stopped --label twi.component=hashicorp-vault --network "${NETWORK_NAME}" --cap-add IPC_LOCK -p 8200:8200 -p 8201:8201 -e SKIP_CHOWN=1 -v "${config_dir}:/vault/config:ro" -v twi-vault-file:/vault/file -v twi-vault-logs:/vault/logs "$(image_tag hashicorp-vault)" server
+            run docker run -d --name twi-hashicorp-vault --restart unless-stopped --label twi.component=hashicorp-vault --network "${NETWORK_NAME}" -p 8200:8200 -p 8201:8201 -e SKIP_CHOWN=1 -e SKIP_SETCAP=1 -v "${config_dir}:/vault/config:ro" -v twi-vault-file:/vault/file -v twi-vault-logs:/vault/logs "$(image_tag hashicorp-vault)" server
             ;;
         spiffe-spire)
-            component_dir="${CONFIG_DIR}/spiffe-spire"; require_file "${component_dir}/server.conf"
+            component_dir="${CONFIG_DIR}/spiffe-spire"; ensure_local_spire_config "${component_dir}"
+            [[ "${DRY_RUN}" == true ]] || spire_server_config_is_complete "${component_dir}" || fail "required SPIRE server configuration is incomplete: ${component_dir}; run ${SCRIPT_DIR}/init-local-spiffe-spire-config.sh for local development"
             ensure_network; remove_container twi-spire-server; run docker volume create twi-spire-server-data
             run docker run -d --name twi-spire-server --restart unless-stopped --label twi.component=spiffe-spire --network "${NETWORK_NAME}" -p 8081:8081 -v "${component_dir}/server.conf:/etc/spire/server/server.conf:ro" -v twi-spire-server-data:/var/lib/spire/server "$(image_tag spiffe-spire-server)" -config /etc/spire/server/server.conf
             if [[ -f "${component_dir}/agent.conf" ]]; then
@@ -165,7 +218,8 @@ deploy_component() {
             fi
             ;;
         step-ca)
-            component_dir="${CONFIG_DIR}/step-ca"; require_file "${component_dir}/config/ca.json"; require_file "${component_dir}/secrets/password"
+            component_dir="${CONFIG_DIR}/step-ca"; ensure_local_step_ca_config "${component_dir}"
+            [[ "${DRY_RUN}" == true ]] || step_ca_config_is_complete "${component_dir}" || fail "required step-ca configuration is incomplete: ${component_dir}; run ${SCRIPT_DIR}/init-local-step-ca-config.sh for local development"
             ensure_network; remove_container twi-step-ca
             run docker run -d --name twi-step-ca --restart unless-stopped --label twi.component=step-ca --network "${NETWORK_NAME}" -p 9000:9000 -v "${component_dir}:/home/step" "$(image_tag step-ca)"
             ;;
@@ -197,11 +251,14 @@ status_component() {
 }
 
 parse_args() {
-    [[ $# -gt 0 ]] || { usage; exit 1; }; ACTION="$1"; shift
+    [[ $# -gt 0 ]] || { usage; exit 1; }
+    case "$1" in
+        -h|--help) usage; exit 0 ;;
+    esac
+    ACTION="$1"; shift
     while [[ $# -gt 0 ]]; do
         case "$1" in
             --components) COMPONENTS="${2:?missing value for --components}"; shift 2 ;;
-            --no-build) NO_BUILD_COMPONENTS="${2:?missing value for --no-build}"; shift 2 ;;
             --config-dir) CONFIG_DIR="${2:?missing value for --config-dir}"; shift 2 ;;
             --platform) PLATFORM="${2:?missing value for --platform}"; shift 2 ;;
             --docker-host) DOCKER_HOST_VALUE="${2:?missing value for --docker-host}"; shift 2 ;;
@@ -220,14 +277,7 @@ main() {
     local component
     case "${ACTION}" in
         build) for component in "${SELECTED_COMPONENTS[@]}"; do build_component "${component}"; done ;;
-        deploy) for component in "${SELECTED_COMPONENTS[@]}"; do
-            if ((${#SKIP_BUILD_COMPONENTS[@]} > 0)) && contains "${component}" "${SKIP_BUILD_COMPONENTS[@]}"; then
-                require_component_images "${component}"
-            else
-                build_component "${component}"
-            fi
-            deploy_component "${component}"
-        done ;;
+        deploy) for component in "${SELECTED_COMPONENTS[@]}"; do require_component_images "${component}"; deploy_component "${component}"; done ;;
         stop) for component in "${SELECTED_COMPONENTS[@]}"; do stop_component "${component}"; done ;;
         status) for component in "${SELECTED_COMPONENTS[@]}"; do status_component "${component}"; done ;;
     esac
