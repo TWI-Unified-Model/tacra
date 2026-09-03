@@ -1,0 +1,49 @@
+%% Retrieving existing preshared key, bearer token or proof-of-possession credential
+sequenceDiagram
+    participant A as Attester
+    participant CP as CAS Client Proxy
+    participant PL as Platform Plugin
+    participant SP as CAS Server Proxy
+    participant CAC as Credential<br/>Acquisition<br/>Client
+    participant CAS as Credential<br/>Acquisition<br/>Server
+
+    autonumber
+
+    note over A, CP: Client Proxy Call
+    A->>CP: Obtain Credential<br/>(Context handle,<br/>Credential Type)
+    activate CP
+    CP->>CP: Validate Context handle,<br/>Map to Target
+    note over CP, PL: Platform Plug-in Call
+    CP->>PL: Prepare Key and Evidence<br/>for Credential Retrieval
+    activate PL
+    PL->>PL: Generate CWK
+    PL->>PL: Generate Evidence with CWKpub
+    PL-->>CP: Return CWK, Evidence
+    deactivate PL
+    note over CP, SP: CAS Proxy Call
+    CP->>SP: Obtain Credential<br/>(Target, Evidence, Credential Type)
+    deactivate CP
+    activate SP
+    SP->>SP: Pick Credential Acquisition Client<br/> based on Target
+    note over SP, CAC: Server Proxy Call
+    SP->>CAC: Obtain Credential<br/>(target, Evidence,<br/>Credential Type)
+    deactivate SP
+    activate CAC
+    CAC->>CAC: Check Supported Credential Types,<br/>Reject on Mismatch
+    CAC->>CAC: Encode the Request<br/>in the CAS Protocol Format
+    note over CAC, CAS: CAS Protocol Call
+    CAC->>CAS: Retrieve Credential<br/>(Evidence)
+    deactivate CAC
+    activate CAS
+    CAS->>CAS: Process Retrieval Request<br/>by Contacting Verifier and<br/>Key/Credential Store
+    CAS->>CAS: Encode the Response<br/>in the CAS Protocol Format
+    CAS-->>CAC: Return the Wrapped Credential
+    deactivate CAS
+    activate CAC
+    CAC->>CAC: Decode the Wrapped<br/>Credential Response
+    CAC-->>CP: Return the Wrapped Credential
+    deactivate CAC
+    activate CP
+    CP->>CP: Decrypt the Wrapped Credential<br/>using CWKpri
+    CP-->>A: Return the<br/>Plaintext Credential
+    deactivate CP

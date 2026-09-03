@@ -1,0 +1,40 @@
+%% Initiating credential acquisition
+%% by requesting a nonce from the Verifier
+sequenceDiagram
+    participant A as Attester
+    participant CP as CAS Client Proxy
+    participant SP as CAS Server Proxy
+    participant CAC as Credential<br/>Acquisition<br/>Client
+    participant CAS as Credential<br/>Acquisition<br/>Server
+
+    autonumber
+
+    note over A, CP: Client Proxy Call
+    A->>CP: Initiate Credential Acquisition<br/>(target, list of supported<br/>credential types)
+    note over CP, SP: CAS Proxy Call
+    activate CP
+    CP->>SP: Initiate Remote Attestation<br/>(target, list of supported<br/>credential types)
+    deactivate CP
+    activate SP
+    SP->>SP: Pick Credential Acquisition Client based on Target
+    note over SP, CAC: Server Proxy Call
+    SP->>CAC: Initiate Remote Attestation<br/>(target, list of supported<br/>credential types)
+    deactivate SP
+    activate CAC
+    CAC->>CAC: Check Supported Credential Types<br/>Reject on Mismatch
+    CAC->>CAC: Encode the Request<br/>in the CAS Protocol Format
+    note over CAC, CAS: CAS Protocol Call
+    CAC->>CAS: Request Challenge
+    deactivate CAC
+    activate CAS
+    CAS->>CAS: Process the Challenge Request<br/>e.g., by Contacting Verifier
+    CAS->>CAS: Encode the Response<br/>in the CAS Protocol Format
+    CAS-->>CAC: Return the Challenge and<br/>available Credential<br/>Acquisition Modes
+    deactivate CAS
+    activate CAC
+    CAC-->>CP: Return Attestation Challenges and<br/>Credential Acquisition Modes
+    deactivate CAC
+    activate CP
+    CP->>CP: Map returned value<br/>to Context handle
+    CP-->>A: Return Context handle
+    deactivate CP
