@@ -25,26 +25,21 @@ type CredentialAcquisitionMechanism int32
 
 const (
 	CredentialAcquisitionMechanism_OPERATION_UNSPECIFIED CredentialAcquisitionMechanism = 0
-	// Proof-of-possession mechanisms
-	CredentialAcquisitionMechanism_OPERATION_MINT_NEW_POP CredentialAcquisitionMechanism = 1
-	CredentialAcquisitionMechanism_OPERATION_RETRIEVE_POP CredentialAcquisitionMechanism = 2
-	// Bearer token mechanisms
-	CredentialAcquisitionMechanism_OPERATION_RETRIEVE_BT CredentialAcquisitionMechanism = 1000
+	CredentialAcquisitionMechanism_OPERATION_ENROLL      CredentialAcquisitionMechanism = 1
+	CredentialAcquisitionMechanism_OPERATION_RETRIEVE    CredentialAcquisitionMechanism = 2
 )
 
 // Enum value maps for CredentialAcquisitionMechanism.
 var (
 	CredentialAcquisitionMechanism_name = map[int32]string{
-		0:    "OPERATION_UNSPECIFIED",
-		1:    "OPERATION_MINT_NEW_POP",
-		2:    "OPERATION_RETRIEVE_POP",
-		1000: "OPERATION_RETRIEVE_BT",
+		0: "OPERATION_UNSPECIFIED",
+		1: "OPERATION_ENROLL",
+		2: "OPERATION_RETRIEVE",
 	}
 	CredentialAcquisitionMechanism_value = map[string]int32{
-		"OPERATION_UNSPECIFIED":  0,
-		"OPERATION_MINT_NEW_POP": 1,
-		"OPERATION_RETRIEVE_POP": 2,
-		"OPERATION_RETRIEVE_BT":  1000,
+		"OPERATION_UNSPECIFIED": 0,
+		"OPERATION_ENROLL":      1,
+		"OPERATION_RETRIEVE":    2,
 	}
 )
 
@@ -75,113 +70,77 @@ func (CredentialAcquisitionMechanism) EnumDescriptor() ([]byte, []int) {
 	return file_proto_caapi_v1_caapi_proto_rawDescGZIP(), []int{0}
 }
 
-type ProofOfPossessionCredentialType int32
+type CredentialType int32
 
 const (
-	ProofOfPossessionCredentialType_POP_CREDENTIAL_TYPE_UNSPECIFIED ProofOfPossessionCredentialType = 0
-	ProofOfPossessionCredentialType_POP_CREDENTIAL_TYPE_X509        ProofOfPossessionCredentialType = 1
-	ProofOfPossessionCredentialType_POP_CREDENTIAL_TYPE_WIC         ProofOfPossessionCredentialType = 2
-	ProofOfPossessionCredentialType_POP_CREDENTIAL_TYPE_WIT         ProofOfPossessionCredentialType = 3
+	CredentialType_CREDENTIAL_TYPE_UNSPECIFIED CredentialType = 0
+	// Bearer token credential types
+	CredentialType_BT_CREDENTIAL_TYPE_JWT     CredentialType = 1 // JSON Web Token
+	CredentialType_BT_CREDENTIAL_TYPE_PSK     CredentialType = 2 // Pre-shared Key
+	CredentialType_BT_CREDENTIAL_TYPE_API_KEY CredentialType = 3 // API Key
+	// Proof-of-possession credential types
+	CredentialType_POP_CREDENTIAL_TYPE_X509 CredentialType = 1001 // PKIX Certificate
+	CredentialType_POP_CREDENTIAL_TYPE_WIC  CredentialType = 1002 // WIMSE Workload Identity Certificate
+	CredentialType_POP_CREDENTIAL_TYPE_WIT  CredentialType = 1003 // WIMSE Workload Identity Token
 )
 
-// Enum value maps for ProofOfPossessionCredentialType.
+// Enum value maps for CredentialType.
 var (
-	ProofOfPossessionCredentialType_name = map[int32]string{
-		0: "POP_CREDENTIAL_TYPE_UNSPECIFIED",
-		1: "POP_CREDENTIAL_TYPE_X509",
-		2: "POP_CREDENTIAL_TYPE_WIC",
-		3: "POP_CREDENTIAL_TYPE_WIT",
+	CredentialType_name = map[int32]string{
+		0:    "CREDENTIAL_TYPE_UNSPECIFIED",
+		1:    "BT_CREDENTIAL_TYPE_JWT",
+		2:    "BT_CREDENTIAL_TYPE_PSK",
+		3:    "BT_CREDENTIAL_TYPE_API_KEY",
+		1001: "POP_CREDENTIAL_TYPE_X509",
+		1002: "POP_CREDENTIAL_TYPE_WIC",
+		1003: "POP_CREDENTIAL_TYPE_WIT",
 	}
-	ProofOfPossessionCredentialType_value = map[string]int32{
-		"POP_CREDENTIAL_TYPE_UNSPECIFIED": 0,
-		"POP_CREDENTIAL_TYPE_X509":        1,
-		"POP_CREDENTIAL_TYPE_WIC":         2,
-		"POP_CREDENTIAL_TYPE_WIT":         3,
+	CredentialType_value = map[string]int32{
+		"CREDENTIAL_TYPE_UNSPECIFIED": 0,
+		"BT_CREDENTIAL_TYPE_JWT":      1,
+		"BT_CREDENTIAL_TYPE_PSK":      2,
+		"BT_CREDENTIAL_TYPE_API_KEY":  3,
+		"POP_CREDENTIAL_TYPE_X509":    1001,
+		"POP_CREDENTIAL_TYPE_WIC":     1002,
+		"POP_CREDENTIAL_TYPE_WIT":     1003,
 	}
 )
 
-func (x ProofOfPossessionCredentialType) Enum() *ProofOfPossessionCredentialType {
-	p := new(ProofOfPossessionCredentialType)
+func (x CredentialType) Enum() *CredentialType {
+	p := new(CredentialType)
 	*p = x
 	return p
 }
 
-func (x ProofOfPossessionCredentialType) String() string {
+func (x CredentialType) String() string {
 	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
 }
 
-func (ProofOfPossessionCredentialType) Descriptor() protoreflect.EnumDescriptor {
+func (CredentialType) Descriptor() protoreflect.EnumDescriptor {
 	return file_proto_caapi_v1_caapi_proto_enumTypes[1].Descriptor()
 }
 
-func (ProofOfPossessionCredentialType) Type() protoreflect.EnumType {
+func (CredentialType) Type() protoreflect.EnumType {
 	return &file_proto_caapi_v1_caapi_proto_enumTypes[1]
 }
 
-func (x ProofOfPossessionCredentialType) Number() protoreflect.EnumNumber {
+func (x CredentialType) Number() protoreflect.EnumNumber {
 	return protoreflect.EnumNumber(x)
 }
 
-// Deprecated: Use ProofOfPossessionCredentialType.Descriptor instead.
-func (ProofOfPossessionCredentialType) EnumDescriptor() ([]byte, []int) {
+// Deprecated: Use CredentialType.Descriptor instead.
+func (CredentialType) EnumDescriptor() ([]byte, []int) {
 	return file_proto_caapi_v1_caapi_proto_rawDescGZIP(), []int{1}
-}
-
-type BearerTokenCredentialType int32
-
-const (
-	BearerTokenCredentialType_BT_CREDENTIAL_TYPE_BT_UNSPECIFIED BearerTokenCredentialType = 0
-	BearerTokenCredentialType_BT_CREDENTIAL_TYPE_JWT            BearerTokenCredentialType = 1
-	BearerTokenCredentialType_BT_CREDENTIAL_TYPE_PSK            BearerTokenCredentialType = 2
-)
-
-// Enum value maps for BearerTokenCredentialType.
-var (
-	BearerTokenCredentialType_name = map[int32]string{
-		0: "BT_CREDENTIAL_TYPE_BT_UNSPECIFIED",
-		1: "BT_CREDENTIAL_TYPE_JWT",
-		2: "BT_CREDENTIAL_TYPE_PSK",
-	}
-	BearerTokenCredentialType_value = map[string]int32{
-		"BT_CREDENTIAL_TYPE_BT_UNSPECIFIED": 0,
-		"BT_CREDENTIAL_TYPE_JWT":            1,
-		"BT_CREDENTIAL_TYPE_PSK":            2,
-	}
-)
-
-func (x BearerTokenCredentialType) Enum() *BearerTokenCredentialType {
-	p := new(BearerTokenCredentialType)
-	*p = x
-	return p
-}
-
-func (x BearerTokenCredentialType) String() string {
-	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
-}
-
-func (BearerTokenCredentialType) Descriptor() protoreflect.EnumDescriptor {
-	return file_proto_caapi_v1_caapi_proto_enumTypes[2].Descriptor()
-}
-
-func (BearerTokenCredentialType) Type() protoreflect.EnumType {
-	return &file_proto_caapi_v1_caapi_proto_enumTypes[2]
-}
-
-func (x BearerTokenCredentialType) Number() protoreflect.EnumNumber {
-	return protoreflect.EnumNumber(x)
-}
-
-// Deprecated: Use BearerTokenCredentialType.Descriptor instead.
-func (BearerTokenCredentialType) EnumDescriptor() ([]byte, []int) {
-	return file_proto_caapi_v1_caapi_proto_rawDescGZIP(), []int{2}
 }
 
 type InitiateCredentialAcquistionRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Which endpoint does the workload wish to authenticate to?
-	Target        string `protobuf:"bytes,1,opt,name=target,proto3" json:"target,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Target string `protobuf:"bytes,1,opt,name=target,proto3" json:"target,omitempty"`
+	// Which credential type does the workload with to use?
+	CredentialType CredentialType `protobuf:"varint,2,opt,name=credential_type,json=credentialType,proto3,enum=caapi.v1.CredentialType" json:"credential_type,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *InitiateCredentialAcquistionRequest) Reset() {
@@ -221,20 +180,22 @@ func (x *InitiateCredentialAcquistionRequest) GetTarget() string {
 	return ""
 }
 
+func (x *InitiateCredentialAcquistionRequest) GetCredentialType() CredentialType {
+	if x != nil {
+		return x.CredentialType
+	}
+	return CredentialType_CREDENTIAL_TYPE_UNSPECIFIED
+}
+
 type InitiateCredentialAcquisitionResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Which credential acquisition mechanisms (mint new, or retrieve existing, or both)
+	// Which credential acquisition mechanism
 	// does the CAS support for this endpoint?
-	Mechanism []CredentialAcquisitionMechanism `protobuf:"varint,1,rep,packed,name=mechanism,proto3,enum=caapi.v1.CredentialAcquisitionMechanism" json:"mechanism,omitempty"`
-	// Optional freshness
-	Nonce []byte `protobuf:"bytes,2,opt,name=nonce,proto3,oneof" json:"nonce,omitempty"`
-	// Types that are valid to be assigned to CredentialType:
-	//
-	//	*InitiateCredentialAcquisitionResponse_PopCredential
-	//	*InitiateCredentialAcquisitionResponse_BearerTokenCredential
-	CredentialType isInitiateCredentialAcquisitionResponse_CredentialType `protobuf_oneof:"credential_type"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	Mechanism CredentialAcquisitionMechanism `protobuf:"varint,1,opt,name=mechanism,proto3,enum=caapi.v1.CredentialAcquisitionMechanism" json:"mechanism,omitempty"`
+	// Optional challenge
+	Challenge     []byte `protobuf:"bytes,2,opt,name=challenge,proto3,oneof" json:"challenge,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *InitiateCredentialAcquisitionResponse) Reset() {
@@ -267,87 +228,46 @@ func (*InitiateCredentialAcquisitionResponse) Descriptor() ([]byte, []int) {
 	return file_proto_caapi_v1_caapi_proto_rawDescGZIP(), []int{1}
 }
 
-func (x *InitiateCredentialAcquisitionResponse) GetMechanism() []CredentialAcquisitionMechanism {
+func (x *InitiateCredentialAcquisitionResponse) GetMechanism() CredentialAcquisitionMechanism {
 	if x != nil {
 		return x.Mechanism
 	}
-	return nil
+	return CredentialAcquisitionMechanism_OPERATION_UNSPECIFIED
 }
 
-func (x *InitiateCredentialAcquisitionResponse) GetNonce() []byte {
+func (x *InitiateCredentialAcquisitionResponse) GetChallenge() []byte {
 	if x != nil {
-		return x.Nonce
+		return x.Challenge
 	}
 	return nil
 }
 
-func (x *InitiateCredentialAcquisitionResponse) GetCredentialType() isInitiateCredentialAcquisitionResponse_CredentialType {
-	if x != nil {
-		return x.CredentialType
-	}
-	return nil
-}
-
-func (x *InitiateCredentialAcquisitionResponse) GetPopCredential() ProofOfPossessionCredentialType {
-	if x != nil {
-		if x, ok := x.CredentialType.(*InitiateCredentialAcquisitionResponse_PopCredential); ok {
-			return x.PopCredential
-		}
-	}
-	return ProofOfPossessionCredentialType_POP_CREDENTIAL_TYPE_UNSPECIFIED
-}
-
-func (x *InitiateCredentialAcquisitionResponse) GetBearerTokenCredential() BearerTokenCredentialType {
-	if x != nil {
-		if x, ok := x.CredentialType.(*InitiateCredentialAcquisitionResponse_BearerTokenCredential); ok {
-			return x.BearerTokenCredential
-		}
-	}
-	return BearerTokenCredentialType_BT_CREDENTIAL_TYPE_BT_UNSPECIFIED
-}
-
-type isInitiateCredentialAcquisitionResponse_CredentialType interface {
-	isInitiateCredentialAcquisitionResponse_CredentialType()
-}
-
-type InitiateCredentialAcquisitionResponse_PopCredential struct {
-	PopCredential ProofOfPossessionCredentialType `protobuf:"varint,3,opt,name=pop_credential,json=popCredential,proto3,enum=caapi.v1.ProofOfPossessionCredentialType,oneof"`
-}
-
-type InitiateCredentialAcquisitionResponse_BearerTokenCredential struct {
-	BearerTokenCredential BearerTokenCredentialType `protobuf:"varint,4,opt,name=bearer_token_credential,json=bearerTokenCredential,proto3,enum=caapi.v1.BearerTokenCredentialType,oneof"`
-}
-
-func (*InitiateCredentialAcquisitionResponse_PopCredential) isInitiateCredentialAcquisitionResponse_CredentialType() {
-}
-
-func (*InitiateCredentialAcquisitionResponse_BearerTokenCredential) isInitiateCredentialAcquisitionResponse_CredentialType() {
-}
-
-type NewPoPCredentialRequest struct {
-	state          protoimpl.MessageState          `protogen:"open.v1"`
-	Target         string                          `protobuf:"bytes,1,opt,name=target,proto3" json:"target,omitempty"`
-	CredentialType ProofOfPossessionCredentialType `protobuf:"varint,2,opt,name=credential_type,json=credentialType,proto3,enum=caapi.v1.ProofOfPossessionCredentialType" json:"credential_type,omitempty"`
-	// Workload Evidence including CSR
-	Evidence      []byte `protobuf:"bytes,3,opt,name=evidence,proto3" json:"evidence,omitempty"`
+type EnrollCredentialRequest struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	Target         string                 `protobuf:"bytes,1,opt,name=target,proto3" json:"target,omitempty"`
+	CredentialType CredentialType         `protobuf:"varint,2,opt,name=credential_type,json=credentialType,proto3,enum=caapi.v1.CredentialType" json:"credential_type,omitempty"`
+	// Workload Evidence including CSKpub
+	Evidence []byte `protobuf:"bytes,3,opt,name=evidence,proto3" json:"evidence,omitempty"`
+	// CSR for CSKpub
+	Csr           []byte `protobuf:"bytes,4,opt,name=csr,proto3" json:"csr,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *NewPoPCredentialRequest) Reset() {
-	*x = NewPoPCredentialRequest{}
+func (x *EnrollCredentialRequest) Reset() {
+	*x = EnrollCredentialRequest{}
 	mi := &file_proto_caapi_v1_caapi_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *NewPoPCredentialRequest) String() string {
+func (x *EnrollCredentialRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*NewPoPCredentialRequest) ProtoMessage() {}
+func (*EnrollCredentialRequest) ProtoMessage() {}
 
-func (x *NewPoPCredentialRequest) ProtoReflect() protoreflect.Message {
+func (x *EnrollCredentialRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_proto_caapi_v1_caapi_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -359,54 +279,61 @@ func (x *NewPoPCredentialRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use NewPoPCredentialRequest.ProtoReflect.Descriptor instead.
-func (*NewPoPCredentialRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use EnrollCredentialRequest.ProtoReflect.Descriptor instead.
+func (*EnrollCredentialRequest) Descriptor() ([]byte, []int) {
 	return file_proto_caapi_v1_caapi_proto_rawDescGZIP(), []int{2}
 }
 
-func (x *NewPoPCredentialRequest) GetTarget() string {
+func (x *EnrollCredentialRequest) GetTarget() string {
 	if x != nil {
 		return x.Target
 	}
 	return ""
 }
 
-func (x *NewPoPCredentialRequest) GetCredentialType() ProofOfPossessionCredentialType {
+func (x *EnrollCredentialRequest) GetCredentialType() CredentialType {
 	if x != nil {
 		return x.CredentialType
 	}
-	return ProofOfPossessionCredentialType_POP_CREDENTIAL_TYPE_UNSPECIFIED
+	return CredentialType_CREDENTIAL_TYPE_UNSPECIFIED
 }
 
-func (x *NewPoPCredentialRequest) GetEvidence() []byte {
+func (x *EnrollCredentialRequest) GetEvidence() []byte {
 	if x != nil {
 		return x.Evidence
 	}
 	return nil
 }
 
-type NewPoPCredentialResponse struct {
+func (x *EnrollCredentialRequest) GetCsr() []byte {
+	if x != nil {
+		return x.Csr
+	}
+	return nil
+}
+
+type EnrollCredentialResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// TODO: explore importing existing types
+	// TODO: explore utilizing existing types (protobuf representation of certificates etc.)
 	PlaintextCredential []byte `protobuf:"bytes,1,opt,name=plaintext_credential,json=plaintextCredential,proto3" json:"plaintext_credential,omitempty"`
 	unknownFields       protoimpl.UnknownFields
 	sizeCache           protoimpl.SizeCache
 }
 
-func (x *NewPoPCredentialResponse) Reset() {
-	*x = NewPoPCredentialResponse{}
+func (x *EnrollCredentialResponse) Reset() {
+	*x = EnrollCredentialResponse{}
 	mi := &file_proto_caapi_v1_caapi_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *NewPoPCredentialResponse) String() string {
+func (x *EnrollCredentialResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*NewPoPCredentialResponse) ProtoMessage() {}
+func (*EnrollCredentialResponse) ProtoMessage() {}
 
-func (x *NewPoPCredentialResponse) ProtoReflect() protoreflect.Message {
+func (x *EnrollCredentialResponse) ProtoReflect() protoreflect.Message {
 	mi := &file_proto_caapi_v1_caapi_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -418,42 +345,42 @@ func (x *NewPoPCredentialResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use NewPoPCredentialResponse.ProtoReflect.Descriptor instead.
-func (*NewPoPCredentialResponse) Descriptor() ([]byte, []int) {
+// Deprecated: Use EnrollCredentialResponse.ProtoReflect.Descriptor instead.
+func (*EnrollCredentialResponse) Descriptor() ([]byte, []int) {
 	return file_proto_caapi_v1_caapi_proto_rawDescGZIP(), []int{3}
 }
 
-func (x *NewPoPCredentialResponse) GetPlaintextCredential() []byte {
+func (x *EnrollCredentialResponse) GetPlaintextCredential() []byte {
 	if x != nil {
 		return x.PlaintextCredential
 	}
 	return nil
 }
 
-type ExistingPoPCredentialRequest struct {
-	state          protoimpl.MessageState          `protogen:"open.v1"`
-	Target         string                          `protobuf:"bytes,1,opt,name=target,proto3" json:"target,omitempty"`
-	CredentialType ProofOfPossessionCredentialType `protobuf:"varint,2,opt,name=credential_type,json=credentialType,proto3,enum=caapi.v1.ProofOfPossessionCredentialType" json:"credential_type,omitempty"`
-	// Workload Evidence including Credential Wrapping Key
+type RetrieveCredentialRequest struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	Target         string                 `protobuf:"bytes,1,opt,name=target,proto3" json:"target,omitempty"`
+	CredentialType CredentialType         `protobuf:"varint,2,opt,name=credential_type,json=credentialType,proto3,enum=caapi.v1.CredentialType" json:"credential_type,omitempty"`
+	// Workload Evidence including CEKpub
 	Evidence      []byte `protobuf:"bytes,3,opt,name=evidence,proto3" json:"evidence,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *ExistingPoPCredentialRequest) Reset() {
-	*x = ExistingPoPCredentialRequest{}
+func (x *RetrieveCredentialRequest) Reset() {
+	*x = RetrieveCredentialRequest{}
 	mi := &file_proto_caapi_v1_caapi_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *ExistingPoPCredentialRequest) String() string {
+func (x *RetrieveCredentialRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*ExistingPoPCredentialRequest) ProtoMessage() {}
+func (*RetrieveCredentialRequest) ProtoMessage() {}
 
-func (x *ExistingPoPCredentialRequest) ProtoReflect() protoreflect.Message {
+func (x *RetrieveCredentialRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_proto_caapi_v1_caapi_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -465,168 +392,54 @@ func (x *ExistingPoPCredentialRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ExistingPoPCredentialRequest.ProtoReflect.Descriptor instead.
-func (*ExistingPoPCredentialRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use RetrieveCredentialRequest.ProtoReflect.Descriptor instead.
+func (*RetrieveCredentialRequest) Descriptor() ([]byte, []int) {
 	return file_proto_caapi_v1_caapi_proto_rawDescGZIP(), []int{4}
 }
 
-func (x *ExistingPoPCredentialRequest) GetTarget() string {
+func (x *RetrieveCredentialRequest) GetTarget() string {
 	if x != nil {
 		return x.Target
 	}
 	return ""
 }
 
-func (x *ExistingPoPCredentialRequest) GetCredentialType() ProofOfPossessionCredentialType {
+func (x *RetrieveCredentialRequest) GetCredentialType() CredentialType {
 	if x != nil {
 		return x.CredentialType
 	}
-	return ProofOfPossessionCredentialType_POP_CREDENTIAL_TYPE_UNSPECIFIED
+	return CredentialType_CREDENTIAL_TYPE_UNSPECIFIED
 }
 
-func (x *ExistingPoPCredentialRequest) GetEvidence() []byte {
+func (x *RetrieveCredentialRequest) GetEvidence() []byte {
 	if x != nil {
 		return x.Evidence
 	}
 	return nil
 }
 
-type ExistingPoPCredentialResponse struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// TODO: explore importing existing types
-	PlaintextCredential []byte `protobuf:"bytes,1,opt,name=plaintext_credential,json=plaintextCredential,proto3" json:"plaintext_credential,omitempty"`
-	WrappedSigningKey   []byte `protobuf:"bytes,2,opt,name=wrapped_signing_key,json=wrappedSigningKey,proto3" json:"wrapped_signing_key,omitempty"`
-	unknownFields       protoimpl.UnknownFields
-	sizeCache           protoimpl.SizeCache
-}
-
-func (x *ExistingPoPCredentialResponse) Reset() {
-	*x = ExistingPoPCredentialResponse{}
-	mi := &file_proto_caapi_v1_caapi_proto_msgTypes[5]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ExistingPoPCredentialResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ExistingPoPCredentialResponse) ProtoMessage() {}
-
-func (x *ExistingPoPCredentialResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_caapi_v1_caapi_proto_msgTypes[5]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ExistingPoPCredentialResponse.ProtoReflect.Descriptor instead.
-func (*ExistingPoPCredentialResponse) Descriptor() ([]byte, []int) {
-	return file_proto_caapi_v1_caapi_proto_rawDescGZIP(), []int{5}
-}
-
-func (x *ExistingPoPCredentialResponse) GetPlaintextCredential() []byte {
-	if x != nil {
-		return x.PlaintextCredential
-	}
-	return nil
-}
-
-func (x *ExistingPoPCredentialResponse) GetWrappedSigningKey() []byte {
-	if x != nil {
-		return x.WrappedSigningKey
-	}
-	return nil
-}
-
-type BearerTokenRequest struct {
-	state          protoimpl.MessageState    `protogen:"open.v1"`
-	Target         string                    `protobuf:"bytes,1,opt,name=target,proto3" json:"target,omitempty"`
-	CredentialType BearerTokenCredentialType `protobuf:"varint,2,opt,name=credential_type,json=credentialType,proto3,enum=caapi.v1.BearerTokenCredentialType" json:"credential_type,omitempty"`
-	// Workload Evidence including Credential Wrapping Key
-	Evidence      []byte `protobuf:"bytes,3,opt,name=evidence,proto3" json:"evidence,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *BearerTokenRequest) Reset() {
-	*x = BearerTokenRequest{}
-	mi := &file_proto_caapi_v1_caapi_proto_msgTypes[6]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *BearerTokenRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*BearerTokenRequest) ProtoMessage() {}
-
-func (x *BearerTokenRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_caapi_v1_caapi_proto_msgTypes[6]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use BearerTokenRequest.ProtoReflect.Descriptor instead.
-func (*BearerTokenRequest) Descriptor() ([]byte, []int) {
-	return file_proto_caapi_v1_caapi_proto_rawDescGZIP(), []int{6}
-}
-
-func (x *BearerTokenRequest) GetTarget() string {
-	if x != nil {
-		return x.Target
-	}
-	return ""
-}
-
-func (x *BearerTokenRequest) GetCredentialType() BearerTokenCredentialType {
-	if x != nil {
-		return x.CredentialType
-	}
-	return BearerTokenCredentialType_BT_CREDENTIAL_TYPE_BT_UNSPECIFIED
-}
-
-func (x *BearerTokenRequest) GetEvidence() []byte {
-	if x != nil {
-		return x.Evidence
-	}
-	return nil
-}
-
-type BearerTokenResponse struct {
+type RetrieveCredentialResponse struct {
 	state             protoimpl.MessageState `protogen:"open.v1"`
 	WrappedCredential []byte                 `protobuf:"bytes,1,opt,name=wrapped_credential,json=wrappedCredential,proto3" json:"wrapped_credential,omitempty"`
 	unknownFields     protoimpl.UnknownFields
 	sizeCache         protoimpl.SizeCache
 }
 
-func (x *BearerTokenResponse) Reset() {
-	*x = BearerTokenResponse{}
-	mi := &file_proto_caapi_v1_caapi_proto_msgTypes[7]
+func (x *RetrieveCredentialResponse) Reset() {
+	*x = RetrieveCredentialResponse{}
+	mi := &file_proto_caapi_v1_caapi_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *BearerTokenResponse) String() string {
+func (x *RetrieveCredentialResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*BearerTokenResponse) ProtoMessage() {}
+func (*RetrieveCredentialResponse) ProtoMessage() {}
 
-func (x *BearerTokenResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_caapi_v1_caapi_proto_msgTypes[7]
+func (x *RetrieveCredentialResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_caapi_v1_caapi_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -637,12 +450,12 @@ func (x *BearerTokenResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use BearerTokenResponse.ProtoReflect.Descriptor instead.
-func (*BearerTokenResponse) Descriptor() ([]byte, []int) {
-	return file_proto_caapi_v1_caapi_proto_rawDescGZIP(), []int{7}
+// Deprecated: Use RetrieveCredentialResponse.ProtoReflect.Descriptor instead.
+func (*RetrieveCredentialResponse) Descriptor() ([]byte, []int) {
+	return file_proto_caapi_v1_caapi_proto_rawDescGZIP(), []int{5}
 }
 
-func (x *BearerTokenResponse) GetWrappedCredential() []byte {
+func (x *RetrieveCredentialResponse) GetWrappedCredential() []byte {
 	if x != nil {
 		return x.WrappedCredential
 	}
@@ -653,54 +466,44 @@ var File_proto_caapi_v1_caapi_proto protoreflect.FileDescriptor
 
 const file_proto_caapi_v1_caapi_proto_rawDesc = "" +
 	"\n" +
-	"\x1aproto/caapi/v1/caapi.proto\x12\bcaapi.v1\"=\n" +
+	"\x1aproto/caapi/v1/caapi.proto\x12\bcaapi.v1\"\x80\x01\n" +
 	"#InitiateCredentialAcquistionRequest\x12\x16\n" +
-	"\x06target\x18\x01 \x01(\tR\x06target\"\xda\x02\n" +
+	"\x06target\x18\x01 \x01(\tR\x06target\x12A\n" +
+	"\x0fcredential_type\x18\x02 \x01(\x0e2\x18.caapi.v1.CredentialTypeR\x0ecredentialType\"\xa0\x01\n" +
 	"%InitiateCredentialAcquisitionResponse\x12F\n" +
-	"\tmechanism\x18\x01 \x03(\x0e2(.caapi.v1.CredentialAcquisitionMechanismR\tmechanism\x12\x19\n" +
-	"\x05nonce\x18\x02 \x01(\fH\x01R\x05nonce\x88\x01\x01\x12R\n" +
-	"\x0epop_credential\x18\x03 \x01(\x0e2).caapi.v1.ProofOfPossessionCredentialTypeH\x00R\rpopCredential\x12]\n" +
-	"\x17bearer_token_credential\x18\x04 \x01(\x0e2#.caapi.v1.BearerTokenCredentialTypeH\x00R\x15bearerTokenCredentialB\x11\n" +
-	"\x0fcredential_typeB\b\n" +
-	"\x06_nonce\"\xa1\x01\n" +
-	"\x17NewPoPCredentialRequest\x12\x16\n" +
-	"\x06target\x18\x01 \x01(\tR\x06target\x12R\n" +
-	"\x0fcredential_type\x18\x02 \x01(\x0e2).caapi.v1.ProofOfPossessionCredentialTypeR\x0ecredentialType\x12\x1a\n" +
-	"\bevidence\x18\x03 \x01(\fR\bevidence\"M\n" +
-	"\x18NewPoPCredentialResponse\x121\n" +
-	"\x14plaintext_credential\x18\x01 \x01(\fR\x13plaintextCredential\"\xa6\x01\n" +
-	"\x1cExistingPoPCredentialRequest\x12\x16\n" +
-	"\x06target\x18\x01 \x01(\tR\x06target\x12R\n" +
-	"\x0fcredential_type\x18\x02 \x01(\x0e2).caapi.v1.ProofOfPossessionCredentialTypeR\x0ecredentialType\x12\x1a\n" +
-	"\bevidence\x18\x03 \x01(\fR\bevidence\"\x82\x01\n" +
-	"\x1dExistingPoPCredentialResponse\x121\n" +
-	"\x14plaintext_credential\x18\x01 \x01(\fR\x13plaintextCredential\x12.\n" +
-	"\x13wrapped_signing_key\x18\x02 \x01(\fR\x11wrappedSigningKey\"\x96\x01\n" +
-	"\x12BearerTokenRequest\x12\x16\n" +
-	"\x06target\x18\x01 \x01(\tR\x06target\x12L\n" +
-	"\x0fcredential_type\x18\x02 \x01(\x0e2#.caapi.v1.BearerTokenCredentialTypeR\x0ecredentialType\x12\x1a\n" +
-	"\bevidence\x18\x03 \x01(\fR\bevidence\"D\n" +
-	"\x13BearerTokenResponse\x12-\n" +
-	"\x12wrapped_credential\x18\x01 \x01(\fR\x11wrappedCredential*\x8f\x01\n" +
+	"\tmechanism\x18\x01 \x01(\x0e2(.caapi.v1.CredentialAcquisitionMechanismR\tmechanism\x12!\n" +
+	"\tchallenge\x18\x02 \x01(\fH\x00R\tchallenge\x88\x01\x01B\f\n" +
+	"\n" +
+	"_challenge\"\xa2\x01\n" +
+	"\x17EnrollCredentialRequest\x12\x16\n" +
+	"\x06target\x18\x01 \x01(\tR\x06target\x12A\n" +
+	"\x0fcredential_type\x18\x02 \x01(\x0e2\x18.caapi.v1.CredentialTypeR\x0ecredentialType\x12\x1a\n" +
+	"\bevidence\x18\x03 \x01(\fR\bevidence\x12\x10\n" +
+	"\x03csr\x18\x04 \x01(\fR\x03csr\"M\n" +
+	"\x18EnrollCredentialResponse\x121\n" +
+	"\x14plaintext_credential\x18\x01 \x01(\fR\x13plaintextCredential\"\x92\x01\n" +
+	"\x19RetrieveCredentialRequest\x12\x16\n" +
+	"\x06target\x18\x01 \x01(\tR\x06target\x12A\n" +
+	"\x0fcredential_type\x18\x02 \x01(\x0e2\x18.caapi.v1.CredentialTypeR\x0ecredentialType\x12\x1a\n" +
+	"\bevidence\x18\x03 \x01(\fR\bevidence\"K\n" +
+	"\x1aRetrieveCredentialResponse\x12-\n" +
+	"\x12wrapped_credential\x18\x01 \x01(\fR\x11wrappedCredential*i\n" +
 	"\x1eCredentialAcquisitionMechanism\x12\x19\n" +
-	"\x15OPERATION_UNSPECIFIED\x10\x00\x12\x1a\n" +
-	"\x16OPERATION_MINT_NEW_POP\x10\x01\x12\x1a\n" +
-	"\x16OPERATION_RETRIEVE_POP\x10\x02\x12\x1a\n" +
-	"\x15OPERATION_RETRIEVE_BT\x10\xe8\a*\x9e\x01\n" +
-	"\x1fProofOfPossessionCredentialType\x12#\n" +
-	"\x1fPOP_CREDENTIAL_TYPE_UNSPECIFIED\x10\x00\x12\x1c\n" +
-	"\x18POP_CREDENTIAL_TYPE_X509\x10\x01\x12\x1b\n" +
-	"\x17POP_CREDENTIAL_TYPE_WIC\x10\x02\x12\x1b\n" +
-	"\x17POP_CREDENTIAL_TYPE_WIT\x10\x03*z\n" +
-	"\x19BearerTokenCredentialType\x12%\n" +
-	"!BT_CREDENTIAL_TYPE_BT_UNSPECIFIED\x10\x00\x12\x1a\n" +
+	"\x15OPERATION_UNSPECIFIED\x10\x00\x12\x14\n" +
+	"\x10OPERATION_ENROLL\x10\x01\x12\x16\n" +
+	"\x12OPERATION_RETRIEVE\x10\x02*\xe4\x01\n" +
+	"\x0eCredentialType\x12\x1f\n" +
+	"\x1bCREDENTIAL_TYPE_UNSPECIFIED\x10\x00\x12\x1a\n" +
 	"\x16BT_CREDENTIAL_TYPE_JWT\x10\x01\x12\x1a\n" +
-	"\x16BT_CREDENTIAL_TYPE_PSK\x10\x022\xe3\x03\n" +
-	"\x18RemoteAttestationService\x12{\n" +
-	"\x19InitiateRemoteAttestation\x12-.caapi.v1.InitiateCredentialAcquistionRequest\x1a/.caapi.v1.InitiateCredentialAcquisitionResponse\x12n\n" +
-	"%RequestNewProofOfPossessionCredential\x12!.caapi.v1.NewPoPCredentialRequest\x1a\".caapi.v1.NewPoPCredentialResponse\x12}\n" +
-	"*RequestExistingProofOfPossessionCredential\x12&.caapi.v1.ExistingPoPCredentialRequest\x1a'.caapi.v1.ExistingPoPCredentialResponse\x12[\n" +
-	"\x1cRequestBearerTokenCredential\x12\x1c.caapi.v1.BearerTokenRequest\x1a\x1d.caapi.v1.BearerTokenResponseB<Z:github.com/TWI-Unified-Model/twium/gen/go/caapi/v1;caapiv1b\x06proto3"
+	"\x16BT_CREDENTIAL_TYPE_PSK\x10\x02\x12\x1e\n" +
+	"\x1aBT_CREDENTIAL_TYPE_API_KEY\x10\x03\x12\x1d\n" +
+	"\x18POP_CREDENTIAL_TYPE_X509\x10\xe9\a\x12\x1c\n" +
+	"\x17POP_CREDENTIAL_TYPE_WIC\x10\xea\a\x12\x1c\n" +
+	"\x17POP_CREDENTIAL_TYPE_WIT\x10\xeb\a2\xd7\x02\n" +
+	"\x1cCredentialAcquisitionService\x12{\n" +
+	"\x19InitiateRemoteAttestation\x12-.caapi.v1.InitiateCredentialAcquistionRequest\x1a/.caapi.v1.InitiateCredentialAcquisitionResponse\x12Y\n" +
+	"\x10EnrollCredential\x12!.caapi.v1.EnrollCredentialRequest\x1a\".caapi.v1.EnrollCredentialResponse\x12_\n" +
+	"\x12RetrieveCredential\x12#.caapi.v1.RetrieveCredentialRequest\x1a$.caapi.v1.RetrieveCredentialResponseB<Z:github.com/TWI-Unified-Model/twium/gen/go/caapi/v1;caapiv1b\x06proto3"
 
 var (
 	file_proto_caapi_v1_caapi_proto_rawDescOnce sync.Once
@@ -714,41 +517,34 @@ func file_proto_caapi_v1_caapi_proto_rawDescGZIP() []byte {
 	return file_proto_caapi_v1_caapi_proto_rawDescData
 }
 
-var file_proto_caapi_v1_caapi_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
-var file_proto_caapi_v1_caapi_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
+var file_proto_caapi_v1_caapi_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
+var file_proto_caapi_v1_caapi_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
 var file_proto_caapi_v1_caapi_proto_goTypes = []any{
 	(CredentialAcquisitionMechanism)(0),           // 0: caapi.v1.CredentialAcquisitionMechanism
-	(ProofOfPossessionCredentialType)(0),          // 1: caapi.v1.ProofOfPossessionCredentialType
-	(BearerTokenCredentialType)(0),                // 2: caapi.v1.BearerTokenCredentialType
-	(*InitiateCredentialAcquistionRequest)(nil),   // 3: caapi.v1.InitiateCredentialAcquistionRequest
-	(*InitiateCredentialAcquisitionResponse)(nil), // 4: caapi.v1.InitiateCredentialAcquisitionResponse
-	(*NewPoPCredentialRequest)(nil),               // 5: caapi.v1.NewPoPCredentialRequest
-	(*NewPoPCredentialResponse)(nil),              // 6: caapi.v1.NewPoPCredentialResponse
-	(*ExistingPoPCredentialRequest)(nil),          // 7: caapi.v1.ExistingPoPCredentialRequest
-	(*ExistingPoPCredentialResponse)(nil),         // 8: caapi.v1.ExistingPoPCredentialResponse
-	(*BearerTokenRequest)(nil),                    // 9: caapi.v1.BearerTokenRequest
-	(*BearerTokenResponse)(nil),                   // 10: caapi.v1.BearerTokenResponse
+	(CredentialType)(0),                           // 1: caapi.v1.CredentialType
+	(*InitiateCredentialAcquistionRequest)(nil),   // 2: caapi.v1.InitiateCredentialAcquistionRequest
+	(*InitiateCredentialAcquisitionResponse)(nil), // 3: caapi.v1.InitiateCredentialAcquisitionResponse
+	(*EnrollCredentialRequest)(nil),               // 4: caapi.v1.EnrollCredentialRequest
+	(*EnrollCredentialResponse)(nil),              // 5: caapi.v1.EnrollCredentialResponse
+	(*RetrieveCredentialRequest)(nil),             // 6: caapi.v1.RetrieveCredentialRequest
+	(*RetrieveCredentialResponse)(nil),            // 7: caapi.v1.RetrieveCredentialResponse
 }
 var file_proto_caapi_v1_caapi_proto_depIdxs = []int32{
-	0,  // 0: caapi.v1.InitiateCredentialAcquisitionResponse.mechanism:type_name -> caapi.v1.CredentialAcquisitionMechanism
-	1,  // 1: caapi.v1.InitiateCredentialAcquisitionResponse.pop_credential:type_name -> caapi.v1.ProofOfPossessionCredentialType
-	2,  // 2: caapi.v1.InitiateCredentialAcquisitionResponse.bearer_token_credential:type_name -> caapi.v1.BearerTokenCredentialType
-	1,  // 3: caapi.v1.NewPoPCredentialRequest.credential_type:type_name -> caapi.v1.ProofOfPossessionCredentialType
-	1,  // 4: caapi.v1.ExistingPoPCredentialRequest.credential_type:type_name -> caapi.v1.ProofOfPossessionCredentialType
-	2,  // 5: caapi.v1.BearerTokenRequest.credential_type:type_name -> caapi.v1.BearerTokenCredentialType
-	3,  // 6: caapi.v1.RemoteAttestationService.InitiateRemoteAttestation:input_type -> caapi.v1.InitiateCredentialAcquistionRequest
-	5,  // 7: caapi.v1.RemoteAttestationService.RequestNewProofOfPossessionCredential:input_type -> caapi.v1.NewPoPCredentialRequest
-	7,  // 8: caapi.v1.RemoteAttestationService.RequestExistingProofOfPossessionCredential:input_type -> caapi.v1.ExistingPoPCredentialRequest
-	9,  // 9: caapi.v1.RemoteAttestationService.RequestBearerTokenCredential:input_type -> caapi.v1.BearerTokenRequest
-	4,  // 10: caapi.v1.RemoteAttestationService.InitiateRemoteAttestation:output_type -> caapi.v1.InitiateCredentialAcquisitionResponse
-	6,  // 11: caapi.v1.RemoteAttestationService.RequestNewProofOfPossessionCredential:output_type -> caapi.v1.NewPoPCredentialResponse
-	8,  // 12: caapi.v1.RemoteAttestationService.RequestExistingProofOfPossessionCredential:output_type -> caapi.v1.ExistingPoPCredentialResponse
-	10, // 13: caapi.v1.RemoteAttestationService.RequestBearerTokenCredential:output_type -> caapi.v1.BearerTokenResponse
-	10, // [10:14] is the sub-list for method output_type
-	6,  // [6:10] is the sub-list for method input_type
-	6,  // [6:6] is the sub-list for extension type_name
-	6,  // [6:6] is the sub-list for extension extendee
-	0,  // [0:6] is the sub-list for field type_name
+	1, // 0: caapi.v1.InitiateCredentialAcquistionRequest.credential_type:type_name -> caapi.v1.CredentialType
+	0, // 1: caapi.v1.InitiateCredentialAcquisitionResponse.mechanism:type_name -> caapi.v1.CredentialAcquisitionMechanism
+	1, // 2: caapi.v1.EnrollCredentialRequest.credential_type:type_name -> caapi.v1.CredentialType
+	1, // 3: caapi.v1.RetrieveCredentialRequest.credential_type:type_name -> caapi.v1.CredentialType
+	2, // 4: caapi.v1.CredentialAcquisitionService.InitiateRemoteAttestation:input_type -> caapi.v1.InitiateCredentialAcquistionRequest
+	4, // 5: caapi.v1.CredentialAcquisitionService.EnrollCredential:input_type -> caapi.v1.EnrollCredentialRequest
+	6, // 6: caapi.v1.CredentialAcquisitionService.RetrieveCredential:input_type -> caapi.v1.RetrieveCredentialRequest
+	3, // 7: caapi.v1.CredentialAcquisitionService.InitiateRemoteAttestation:output_type -> caapi.v1.InitiateCredentialAcquisitionResponse
+	5, // 8: caapi.v1.CredentialAcquisitionService.EnrollCredential:output_type -> caapi.v1.EnrollCredentialResponse
+	7, // 9: caapi.v1.CredentialAcquisitionService.RetrieveCredential:output_type -> caapi.v1.RetrieveCredentialResponse
+	7, // [7:10] is the sub-list for method output_type
+	4, // [4:7] is the sub-list for method input_type
+	4, // [4:4] is the sub-list for extension type_name
+	4, // [4:4] is the sub-list for extension extendee
+	0, // [0:4] is the sub-list for field type_name
 }
 
 func init() { file_proto_caapi_v1_caapi_proto_init() }
@@ -756,17 +552,14 @@ func file_proto_caapi_v1_caapi_proto_init() {
 	if File_proto_caapi_v1_caapi_proto != nil {
 		return
 	}
-	file_proto_caapi_v1_caapi_proto_msgTypes[1].OneofWrappers = []any{
-		(*InitiateCredentialAcquisitionResponse_PopCredential)(nil),
-		(*InitiateCredentialAcquisitionResponse_BearerTokenCredential)(nil),
-	}
+	file_proto_caapi_v1_caapi_proto_msgTypes[1].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_caapi_v1_caapi_proto_rawDesc), len(file_proto_caapi_v1_caapi_proto_rawDesc)),
-			NumEnums:      3,
-			NumMessages:   8,
+			NumEnums:      2,
+			NumMessages:   6,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

@@ -12,11 +12,12 @@ enum CredentialAcquisitionMechanism {
 enum CredentialType {
     CREDENTIAL_TYPE_UNSPECIFIED = 0;
 
+    // Bearer token credential types
     BT_CREDENTIAL_TYPE_JWT = 1; // JSON Web Token
     BT_CREDENTIAL_TYPE_PSK = 2; // Pre-shared Key
     BT_CREDENTIAL_TYPE_API_KEY = 3; // API Key
 
-    // Proof-of-possession credentials
+    // Proof-of-possession credential types
     POP_CREDENTIAL_TYPE_X509 = 1001; // PKIX Certificate
     POP_CREDENTIAL_TYPE_WIC = 1002; // WIMSE Workload Identity Certificate
     POP_CREDENTIAL_TYPE_WIT = 1003; // WIMSE Workload Identity Token

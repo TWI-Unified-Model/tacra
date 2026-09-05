@@ -19,216 +19,178 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	RemoteAttestationService_InitiateRemoteAttestation_FullMethodName                  = "/caapi.v1.RemoteAttestationService/InitiateRemoteAttestation"
-	RemoteAttestationService_RequestNewProofOfPossessionCredential_FullMethodName      = "/caapi.v1.RemoteAttestationService/RequestNewProofOfPossessionCredential"
-	RemoteAttestationService_RequestExistingProofOfPossessionCredential_FullMethodName = "/caapi.v1.RemoteAttestationService/RequestExistingProofOfPossessionCredential"
-	RemoteAttestationService_RequestBearerTokenCredential_FullMethodName               = "/caapi.v1.RemoteAttestationService/RequestBearerTokenCredential"
+	CredentialAcquisitionService_InitiateRemoteAttestation_FullMethodName = "/caapi.v1.CredentialAcquisitionService/InitiateRemoteAttestation"
+	CredentialAcquisitionService_EnrollCredential_FullMethodName          = "/caapi.v1.CredentialAcquisitionService/EnrollCredential"
+	CredentialAcquisitionService_RetrieveCredential_FullMethodName        = "/caapi.v1.CredentialAcquisitionService/RetrieveCredential"
 )
 
-// RemoteAttestationServiceClient is the client API for RemoteAttestationService service.
+// CredentialAcquisitionServiceClient is the client API for CredentialAcquisitionService service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
-type RemoteAttestationServiceClient interface {
+type CredentialAcquisitionServiceClient interface {
 	InitiateRemoteAttestation(ctx context.Context, in *InitiateCredentialAcquistionRequest, opts ...grpc.CallOption) (*InitiateCredentialAcquisitionResponse, error)
-	RequestNewProofOfPossessionCredential(ctx context.Context, in *NewPoPCredentialRequest, opts ...grpc.CallOption) (*NewPoPCredentialResponse, error)
-	RequestExistingProofOfPossessionCredential(ctx context.Context, in *ExistingPoPCredentialRequest, opts ...grpc.CallOption) (*ExistingPoPCredentialResponse, error)
-	RequestBearerTokenCredential(ctx context.Context, in *BearerTokenRequest, opts ...grpc.CallOption) (*BearerTokenResponse, error)
+	EnrollCredential(ctx context.Context, in *EnrollCredentialRequest, opts ...grpc.CallOption) (*EnrollCredentialResponse, error)
+	RetrieveCredential(ctx context.Context, in *RetrieveCredentialRequest, opts ...grpc.CallOption) (*RetrieveCredentialResponse, error)
 }
 
-type remoteAttestationServiceClient struct {
+type credentialAcquisitionServiceClient struct {
 	cc grpc.ClientConnInterface
 }
 
-func NewRemoteAttestationServiceClient(cc grpc.ClientConnInterface) RemoteAttestationServiceClient {
-	return &remoteAttestationServiceClient{cc}
+func NewCredentialAcquisitionServiceClient(cc grpc.ClientConnInterface) CredentialAcquisitionServiceClient {
+	return &credentialAcquisitionServiceClient{cc}
 }
 
-func (c *remoteAttestationServiceClient) InitiateRemoteAttestation(ctx context.Context, in *InitiateCredentialAcquistionRequest, opts ...grpc.CallOption) (*InitiateCredentialAcquisitionResponse, error) {
+func (c *credentialAcquisitionServiceClient) InitiateRemoteAttestation(ctx context.Context, in *InitiateCredentialAcquistionRequest, opts ...grpc.CallOption) (*InitiateCredentialAcquisitionResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(InitiateCredentialAcquisitionResponse)
-	err := c.cc.Invoke(ctx, RemoteAttestationService_InitiateRemoteAttestation_FullMethodName, in, out, cOpts...)
+	err := c.cc.Invoke(ctx, CredentialAcquisitionService_InitiateRemoteAttestation_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *remoteAttestationServiceClient) RequestNewProofOfPossessionCredential(ctx context.Context, in *NewPoPCredentialRequest, opts ...grpc.CallOption) (*NewPoPCredentialResponse, error) {
+func (c *credentialAcquisitionServiceClient) EnrollCredential(ctx context.Context, in *EnrollCredentialRequest, opts ...grpc.CallOption) (*EnrollCredentialResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(NewPoPCredentialResponse)
-	err := c.cc.Invoke(ctx, RemoteAttestationService_RequestNewProofOfPossessionCredential_FullMethodName, in, out, cOpts...)
+	out := new(EnrollCredentialResponse)
+	err := c.cc.Invoke(ctx, CredentialAcquisitionService_EnrollCredential_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *remoteAttestationServiceClient) RequestExistingProofOfPossessionCredential(ctx context.Context, in *ExistingPoPCredentialRequest, opts ...grpc.CallOption) (*ExistingPoPCredentialResponse, error) {
+func (c *credentialAcquisitionServiceClient) RetrieveCredential(ctx context.Context, in *RetrieveCredentialRequest, opts ...grpc.CallOption) (*RetrieveCredentialResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(ExistingPoPCredentialResponse)
-	err := c.cc.Invoke(ctx, RemoteAttestationService_RequestExistingProofOfPossessionCredential_FullMethodName, in, out, cOpts...)
+	out := new(RetrieveCredentialResponse)
+	err := c.cc.Invoke(ctx, CredentialAcquisitionService_RetrieveCredential_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *remoteAttestationServiceClient) RequestBearerTokenCredential(ctx context.Context, in *BearerTokenRequest, opts ...grpc.CallOption) (*BearerTokenResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(BearerTokenResponse)
-	err := c.cc.Invoke(ctx, RemoteAttestationService_RequestBearerTokenCredential_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-// RemoteAttestationServiceServer is the server API for RemoteAttestationService service.
-// All implementations must embed UnimplementedRemoteAttestationServiceServer
+// CredentialAcquisitionServiceServer is the server API for CredentialAcquisitionService service.
+// All implementations must embed UnimplementedCredentialAcquisitionServiceServer
 // for forward compatibility.
-type RemoteAttestationServiceServer interface {
+type CredentialAcquisitionServiceServer interface {
 	InitiateRemoteAttestation(context.Context, *InitiateCredentialAcquistionRequest) (*InitiateCredentialAcquisitionResponse, error)
-	RequestNewProofOfPossessionCredential(context.Context, *NewPoPCredentialRequest) (*NewPoPCredentialResponse, error)
-	RequestExistingProofOfPossessionCredential(context.Context, *ExistingPoPCredentialRequest) (*ExistingPoPCredentialResponse, error)
-	RequestBearerTokenCredential(context.Context, *BearerTokenRequest) (*BearerTokenResponse, error)
-	mustEmbedUnimplementedRemoteAttestationServiceServer()
+	EnrollCredential(context.Context, *EnrollCredentialRequest) (*EnrollCredentialResponse, error)
+	RetrieveCredential(context.Context, *RetrieveCredentialRequest) (*RetrieveCredentialResponse, error)
+	mustEmbedUnimplementedCredentialAcquisitionServiceServer()
 }
 
-// UnimplementedRemoteAttestationServiceServer must be embedded to have
+// UnimplementedCredentialAcquisitionServiceServer must be embedded to have
 // forward compatible implementations.
 //
 // NOTE: this should be embedded by value instead of pointer to avoid a nil
 // pointer dereference when methods are called.
-type UnimplementedRemoteAttestationServiceServer struct{}
+type UnimplementedCredentialAcquisitionServiceServer struct{}
 
-func (UnimplementedRemoteAttestationServiceServer) InitiateRemoteAttestation(context.Context, *InitiateCredentialAcquistionRequest) (*InitiateCredentialAcquisitionResponse, error) {
+func (UnimplementedCredentialAcquisitionServiceServer) InitiateRemoteAttestation(context.Context, *InitiateCredentialAcquistionRequest) (*InitiateCredentialAcquisitionResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method InitiateRemoteAttestation not implemented")
 }
-func (UnimplementedRemoteAttestationServiceServer) RequestNewProofOfPossessionCredential(context.Context, *NewPoPCredentialRequest) (*NewPoPCredentialResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method RequestNewProofOfPossessionCredential not implemented")
+func (UnimplementedCredentialAcquisitionServiceServer) EnrollCredential(context.Context, *EnrollCredentialRequest) (*EnrollCredentialResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method EnrollCredential not implemented")
 }
-func (UnimplementedRemoteAttestationServiceServer) RequestExistingProofOfPossessionCredential(context.Context, *ExistingPoPCredentialRequest) (*ExistingPoPCredentialResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method RequestExistingProofOfPossessionCredential not implemented")
+func (UnimplementedCredentialAcquisitionServiceServer) RetrieveCredential(context.Context, *RetrieveCredentialRequest) (*RetrieveCredentialResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method RetrieveCredential not implemented")
 }
-func (UnimplementedRemoteAttestationServiceServer) RequestBearerTokenCredential(context.Context, *BearerTokenRequest) (*BearerTokenResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method RequestBearerTokenCredential not implemented")
+func (UnimplementedCredentialAcquisitionServiceServer) mustEmbedUnimplementedCredentialAcquisitionServiceServer() {
 }
-func (UnimplementedRemoteAttestationServiceServer) mustEmbedUnimplementedRemoteAttestationServiceServer() {
-}
-func (UnimplementedRemoteAttestationServiceServer) testEmbeddedByValue() {}
+func (UnimplementedCredentialAcquisitionServiceServer) testEmbeddedByValue() {}
 
-// UnsafeRemoteAttestationServiceServer may be embedded to opt out of forward compatibility for this service.
-// Use of this interface is not recommended, as added methods to RemoteAttestationServiceServer will
+// UnsafeCredentialAcquisitionServiceServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to CredentialAcquisitionServiceServer will
 // result in compilation errors.
-type UnsafeRemoteAttestationServiceServer interface {
-	mustEmbedUnimplementedRemoteAttestationServiceServer()
+type UnsafeCredentialAcquisitionServiceServer interface {
+	mustEmbedUnimplementedCredentialAcquisitionServiceServer()
 }
 
-func RegisterRemoteAttestationServiceServer(s grpc.ServiceRegistrar, srv RemoteAttestationServiceServer) {
-	// If the following call panics, it indicates UnimplementedRemoteAttestationServiceServer was
+func RegisterCredentialAcquisitionServiceServer(s grpc.ServiceRegistrar, srv CredentialAcquisitionServiceServer) {
+	// If the following call panics, it indicates UnimplementedCredentialAcquisitionServiceServer was
 	// embedded by pointer and is nil.  This will cause panics if an
 	// unimplemented method is ever invoked, so we test this at initialization
 	// time to prevent it from happening at runtime later due to I/O.
 	if t, ok := srv.(interface{ testEmbeddedByValue() }); ok {
 		t.testEmbeddedByValue()
 	}
-	s.RegisterService(&RemoteAttestationService_ServiceDesc, srv)
+	s.RegisterService(&CredentialAcquisitionService_ServiceDesc, srv)
 }
 
-func _RemoteAttestationService_InitiateRemoteAttestation_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _CredentialAcquisitionService_InitiateRemoteAttestation_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(InitiateCredentialAcquistionRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(RemoteAttestationServiceServer).InitiateRemoteAttestation(ctx, in)
+		return srv.(CredentialAcquisitionServiceServer).InitiateRemoteAttestation(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: RemoteAttestationService_InitiateRemoteAttestation_FullMethodName,
+		FullMethod: CredentialAcquisitionService_InitiateRemoteAttestation_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(RemoteAttestationServiceServer).InitiateRemoteAttestation(ctx, req.(*InitiateCredentialAcquistionRequest))
+		return srv.(CredentialAcquisitionServiceServer).InitiateRemoteAttestation(ctx, req.(*InitiateCredentialAcquistionRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _RemoteAttestationService_RequestNewProofOfPossessionCredential_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(NewPoPCredentialRequest)
+func _CredentialAcquisitionService_EnrollCredential_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(EnrollCredentialRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(RemoteAttestationServiceServer).RequestNewProofOfPossessionCredential(ctx, in)
+		return srv.(CredentialAcquisitionServiceServer).EnrollCredential(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: RemoteAttestationService_RequestNewProofOfPossessionCredential_FullMethodName,
+		FullMethod: CredentialAcquisitionService_EnrollCredential_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(RemoteAttestationServiceServer).RequestNewProofOfPossessionCredential(ctx, req.(*NewPoPCredentialRequest))
+		return srv.(CredentialAcquisitionServiceServer).EnrollCredential(ctx, req.(*EnrollCredentialRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _RemoteAttestationService_RequestExistingProofOfPossessionCredential_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ExistingPoPCredentialRequest)
+func _CredentialAcquisitionService_RetrieveCredential_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RetrieveCredentialRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(RemoteAttestationServiceServer).RequestExistingProofOfPossessionCredential(ctx, in)
+		return srv.(CredentialAcquisitionServiceServer).RetrieveCredential(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: RemoteAttestationService_RequestExistingProofOfPossessionCredential_FullMethodName,
+		FullMethod: CredentialAcquisitionService_RetrieveCredential_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(RemoteAttestationServiceServer).RequestExistingProofOfPossessionCredential(ctx, req.(*ExistingPoPCredentialRequest))
+		return srv.(CredentialAcquisitionServiceServer).RetrieveCredential(ctx, req.(*RetrieveCredentialRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _RemoteAttestationService_RequestBearerTokenCredential_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(BearerTokenRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(RemoteAttestationServiceServer).RequestBearerTokenCredential(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: RemoteAttestationService_RequestBearerTokenCredential_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(RemoteAttestationServiceServer).RequestBearerTokenCredential(ctx, req.(*BearerTokenRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-// RemoteAttestationService_ServiceDesc is the grpc.ServiceDesc for RemoteAttestationService service.
+// CredentialAcquisitionService_ServiceDesc is the grpc.ServiceDesc for CredentialAcquisitionService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
-var RemoteAttestationService_ServiceDesc = grpc.ServiceDesc{
-	ServiceName: "caapi.v1.RemoteAttestationService",
-	HandlerType: (*RemoteAttestationServiceServer)(nil),
+var CredentialAcquisitionService_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "caapi.v1.CredentialAcquisitionService",
+	HandlerType: (*CredentialAcquisitionServiceServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
 			MethodName: "InitiateRemoteAttestation",
-			Handler:    _RemoteAttestationService_InitiateRemoteAttestation_Handler,
+			Handler:    _CredentialAcquisitionService_InitiateRemoteAttestation_Handler,
 		},
 		{
-			MethodName: "RequestNewProofOfPossessionCredential",
-			Handler:    _RemoteAttestationService_RequestNewProofOfPossessionCredential_Handler,
+			MethodName: "EnrollCredential",
+			Handler:    _CredentialAcquisitionService_EnrollCredential_Handler,
 		},
 		{
-			MethodName: "RequestExistingProofOfPossessionCredential",
-			Handler:    _RemoteAttestationService_RequestExistingProofOfPossessionCredential_Handler,
-		},
-		{
-			MethodName: "RequestBearerTokenCredential",
-			Handler:    _RemoteAttestationService_RequestBearerTokenCredential_Handler,
+			MethodName: "RetrieveCredential",
+			Handler:    _CredentialAcquisitionService_RetrieveCredential_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
