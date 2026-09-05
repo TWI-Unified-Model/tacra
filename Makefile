@@ -10,9 +10,17 @@ SERVER_BIN := $(BIN_DIR)/server
 # Find all .proto files inside the PROTO_DIR directory
 PROTO_FILES := $(shell find $(PROTO_DIR) -name '*.proto')
 
-.PHONY: all proto install-tools clean help client server
+.PHONY: all proto install-tools clean help client server test platform
 
 all: proto client server
+
+## test: Runs unit tests for library packages
+test:
+	cd platform && GOWORK=off go test ./...
+
+## platform: Runs the platform plug-in tests
+platform:
+	cd platform && GOWORK=off go test ./...
 
 ## proto: Compiles all .proto files into Go code
 proto:
