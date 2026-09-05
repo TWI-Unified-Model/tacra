@@ -5,94 +5,76 @@ option go_package = "github.com/TWI-Unified-Model/twium/gen/go/caapi/v1;caapiv1"
 
 enum CredentialAcquisitionMechanism {
     OPERATION_UNSPECIFIED = 0;
-    // Proof-of-possession mechanisms
-    OPERATION_MINT_NEW_POP = 1;
-    OPERATION_RETRIEVE_POP = 2;
-    // Bearer token mechanisms
-    OPERATION_RETRIEVE_BT = 1000;
+    OPERATION_ENROLL = 1;
+    OPERATION_RETRIEVE = 2;
 }
 
-enum ProofOfPossessionCredentialType {
-    POP_CREDENTIAL_TYPE_UNSPECIFIED = 0;
-    POP_CREDENTIAL_TYPE_X509 = 1;
-    POP_CREDENTIAL_TYPE_WIC = 2;
-    POP_CREDENTIAL_TYPE_WIT = 3;
-}
+enum CredentialType {
+    CREDENTIAL_TYPE_UNSPECIFIED = 0;
 
-enum BearerTokenCredentialType {
-    BT_CREDENTIAL_TYPE_BT_UNSPECIFIED = 0;
-    BT_CREDENTIAL_TYPE_JWT = 1;
-    BT_CREDENTIAL_TYPE_PSK = 2;
+    BT_CREDENTIAL_TYPE_JWT = 1; // JSON Web Token
+    BT_CREDENTIAL_TYPE_PSK = 2; // Pre-shared Key
+    BT_CREDENTIAL_TYPE_API_KEY = 3; // API Key
+
+    // Proof-of-possession credentials
+    POP_CREDENTIAL_TYPE_X509 = 1001; // PKIX Certificate
+    POP_CREDENTIAL_TYPE_WIC = 1002; // WIMSE Workload Identity Certificate
+    POP_CREDENTIAL_TYPE_WIT = 1003; // WIMSE Workload Identity Token
 }
 
 message InitiateCredentialAcquistionRequest {
     // Which endpoint does the workload wish to authenticate to?
     string target = 1;
+
+    // Which credential type does the workload with to use?
+    CredentialType credential_type = 2;
 }
 
 message InitiateCredentialAcquisitionResponse {
-    // Which credential acquisition mechanisms (mint new, or retrieve existing, or both)
+    // Which credential acquisition mechanism
     // does the CAS support for this endpoint?
-    repeated CredentialAcquisitionMechanism mechanism = 1;
+    CredentialAcquisitionMechanism mechanism = 1;
 
-    // Optional freshness
-    optional bytes nonce = 2;
+    // Optional challenge
+    optional bytes challenge = 2;
 
-    oneof credential_type {
-        ProofOfPossessionCredentialType pop_credential = 3;
-        BearerTokenCredentialType bearer_token_credential = 4;
-    }
+    // TODO: research and add supported ciphers and other fields
 }
 
-message NewPoPCredentialRequest {
+message EnrollCredentialRequest {
     string target = 1;
 
-    ProofOfPossessionCredentialType credential_type = 2;
+    CredentialType credential_type = 2;
 
-    // Workload Evidence including CSR
+    // Workload Evidence including CSKpub
     bytes evidence = 3;
+
+    // CSR for CSKpub
+    bytes csr = 4;
 }
 
-message NewPoPCredentialResponse {
-    // TODO: explore importing existing types
+message EnrollCredentialResponse {
+    // TODO: explore utilizing existing types (protobuf representation of certificates etc.)
     bytes plaintext_credential = 1;
 }
 
-message ExistingPoPCredentialRequest {
+message RetrieveCredentialRequest {
     string target = 1;
 
-    ProofOfPossessionCredentialType credential_type = 2;
+    CredentialType credential_type = 2;
 
-    // Workload Evidence including Credential Wrapping Key
+    // Workload Evidence including CEKpub
     bytes evidence = 3;
 }
 
-message ExistingPoPCredentialResponse {
-    // TODO: explore importing existing types
-    bytes plaintext_credential = 1;
-
-    bytes wrapped_signing_key = 2;
-}
-
-message BearerTokenRequest {
-    string target = 1;
-
-    BearerTokenCredentialType credential_type = 2;
-
-    // Workload Evidence including Credential Wrapping Key
-    bytes evidence = 3;
-}
-
-message BearerTokenResponse {
+message RetrieveCredentialResponse {
     bytes wrapped_credential = 1;
 }
 
-service RemoteAttestationService {
+service CredentialAcquisitionService {
     rpc InitiateRemoteAttestation(InitiateCredentialAcquistionRequest) returns (InitiateCredentialAcquisitionResponse);
 
-    rpc RequestNewProofOfPossessionCredential(NewPoPCredentialRequest) returns (NewPoPCredentialResponse);
+    rpc EnrollCredential(EnrollCredentialRequest) returns (EnrollCredentialResponse);
 
-    rpc RequestExistingProofOfPossessionCredential(ExistingPoPCredentialRequest) returns (ExistingPoPCredentialResponse);
-
-    rpc RequestBearerTokenCredential(BearerTokenRequest) returns (BearerTokenResponse);
+    rpc RetrieveCredential(RetrieveCredentialRequest) returns (RetrieveCredentialResponse);
 }
