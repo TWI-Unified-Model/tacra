@@ -4,7 +4,12 @@ This document explains how to build Docker images for all TWI stack components a
 
 ## Overview
 
-Twium provides a unified deployment dispatcher (`components.sh`) that builds and deploys all trusted-workload-identity (TWI) stack components from source. The script manages:
+Twium provides two Docker paths:
+
+1. **TWI stack components** via `components.sh` (EST, Vault, SPIRE, step-ca, Veraison).
+2. **PoC attester** via `docker compose` in this directory: a workload **client** plus a **CAI sidecar**. The sidecar talks to CAAPI; the client only calls `AcquireCredential`, then authenticates to the PoC HTTPS server with mTLS and a JWT.
+
+The dispatcher (`components.sh`) manages:
 
 - **globalsign-est**: RFC 7030 EST server for certificate enrollment
 - **hashicorp-vault**: Secrets and identity management platform
@@ -12,7 +17,7 @@ Twium provides a unified deployment dispatcher (`components.sh`) that builds and
 - **step-ca**: Online CA for TLS/SSH/ACME certificates
 - **veraison-services**: Attestation verification services
 
-**Note:** `twium` itself is a schema/protobuf project and `veraison-apiclient` is a client library—neither is deployed as a service.
+`veraison-apiclient` is a client library and is not deployed as a service. The PoC **client**, **CAI sidecar**, and **server** images are built from Dockerfiles in this repository (see [PoC Client and CAI Sidecar](#poc-client-and-cai-sidecar)); they are not started by `components.sh`.
 
 ## Prerequisites
 
@@ -117,6 +122,160 @@ The script automatically detects your platform:
 - Intel/AMD x86_64: `linux/amd64`
 
 Override with `--platform` when building for remote deployment (e.g., building ARM images on an Intel Mac for transfer to an ARM VM).
+
+## PoC Client and CAI Sidecar
+
+The attester (HTTP client) runs in Docker and does **not** link the CAI library. It calls a CAI sidecar over gRPC. The sidecar owns the platform plug-in and the CAAPI client.
+
+```
+┌─────────────┐   AcquireCredential gRPC   ┌──────────────┐  CAAPI gRPC   ┌─────────────────────┐
+│ client      │ ─────────────────────────► │ cai sidecar  │ ────────────► │ server :9090 (CAS)  │
+│ (attester)  │                            │ :50051       │               └─────────────────────┘
+└──────┬──────┘                            └──────────────┘
+       │ HTTPS mTLS + Bearer JWT
+       ▼
+┌─────────────────────┐
+│ server :8443 (RUP)  │
+└─────────────────────┘
+```
+
+`docker-compose.yml` starts **cai** and **client**. The PoC **server** (CAAPI + HTTPS mTLS) is expected on the host unless you point the compose file at another address.
+
+### Prerequisites
+
+From `twium/`, generate protobuf stubs **before** building images. The Dockerfiles copy `gen/go/` into the build context:
+
+```bash
+cd twium
+make proto
+```
+
+The host must be able to reach Docker (`docker info`). On Linux, `extra_hosts: host.docker.internal:host-gateway` in the compose file lets containers reach services on the host.
+
+### Quick start (server on the host)
+
+Terminal 1 — PoC server (CAAPI `:9090`, HTTPS mTLS `:8443`):
+
+```bash
+cd twium
+make server
+./bin/server
+```
+
+Terminal 2 — sidecar + client:
+
+```bash
+cd twium
+docker compose up --build
+```
+
+The client container calls the sidecar at `cai:50051`, acquires an X.509 client certificate and a JWT, then GETs `https://host.docker.internal:8443` with mTLS and `Authorization: Bearer <jwt>`. On success it prints `Received valid URI: https://example.com/received` and exits. Compose then stops the sidecar if you used `--abort-on-container-exit`:
+
+```bash
+docker compose up --build --abort-on-container-exit --exit-code-from client
+```
+
+Stop leftovers:
+
+```bash
+docker compose down
+```
+
+### Compose services
+
+| Service | Dockerfile | Image (compose) | Role |
+|---------|------------|-----------------|------|
+| `cai` | `cai/Dockerfile` | `twium-cai` | CAI sidecar: platform plug-in + CAAPI client; gRPC `AcquireCredential` on `:50051` |
+| `client` | `client/Dockerfile` | `twium-client` | Attester: calls the sidecar, then HTTPS mTLS + JWT to the server |
+
+Build context for both is the `twium/` directory (not the subdirectory).
+
+### Environment variables
+
+| Variable | Set on | Default | Meaning |
+|----------|--------|---------|---------|
+| `CAAPI_ADDR` | `cai` | `host.docker.internal:9090` | CAS / CAAPI gRPC address the sidecar dials |
+| `CAI_LISTEN` | `cai` | `:50051` | Sidecar listen address |
+| `CAI_ADDR` | `client` | `cai:50051` (compose) | CAI sidecar gRPC address |
+| `TLS_SERVER_NAME` | `client` | `localhost` | SNI / certificate hostname for the HTTPS server |
+| `CLIENT_SERVER` | compose `command` | `https://host.docker.internal:8443` | HTTPS URL passed as the client argument |
+| `HTTPS_ADDR` | host `./bin/server` | `:8443` | HTTPS mTLS listen address |
+| `CAAPI_ADDR` | host `./bin/server` | `:9090` | CAAPI gRPC listen address |
+
+Example: server not on the default host ports:
+
+```bash
+CAAPI_ADDR=host.docker.internal:19090 \
+CLIENT_SERVER=https://host.docker.internal:18443 \
+TLS_SERVER_NAME=localhost \
+  docker compose up --build
+```
+
+`TLS_SERVER_NAME` should match a SAN on the server certificate (`localhost`, `twium-server`, `host.docker.internal`, `127.0.0.1`, or `::1`). The default `localhost` works with `https://host.docker.internal:8443` because verification uses SNI, not the TCP hostname.
+
+### Build images without compose
+
+```bash
+cd twium
+make proto
+docker build -f cai/Dockerfile -t twium-cai .
+docker build -f client/Dockerfile -t twium-client .
+docker build -f server/Dockerfile -t twium-server .
+```
+
+`cai/Dockerfile` copies `cai/`, `platform/`, and `gen/go/`.  
+`client/Dockerfile` copies `client/` and `gen/go/` only (no CAI library).  
+`server/Dockerfile` copies `server/`, `cai/`, `platform/`, `gen/go/`, and `go.work`.
+
+### Run the sidecar and client manually
+
+```bash
+docker network create twium-poc
+
+docker run -d --name twium-cai --network twium-poc \
+  --add-host host.docker.internal:host-gateway \
+  -e CAAPI_ADDR=host.docker.internal:9090 \
+  -e CAI_LISTEN=:50051 \
+  twium-cai
+
+docker run --rm --name twium-client --network twium-poc \
+  --add-host host.docker.internal:host-gateway \
+  -e CAI_ADDR=cai:50051 \
+  -e TLS_SERVER_NAME=localhost \
+  twium-client https://host.docker.internal:8443
+```
+
+With a user-defined bridge network, the sidecar's hostname is the container name (`twium-cai`), so set `CAI_ADDR=twium-cai:50051` instead of `cai:50051`. Compose DNS uses the service name `cai`.
+
+### PoC server in Docker
+
+Compose does not start the server. To run it in a container (CAAPI and HTTPS published to the host):
+
+```bash
+docker build -f server/Dockerfile -t twium-server .
+docker run --rm -p 8443:8443 -p 9090:9090 --name twium-server twium-server
+```
+
+Then run `docker compose up --build` as above so the sidecar and client still use `host.docker.internal`.
+
+### Local binaries (no Docker)
+
+Same split, on the host:
+
+```bash
+make server cai client
+./bin/server          # CAAPI :9090, HTTPS :8443
+./bin/cai             # sidecar :50051, CAAPI 127.0.0.1:9090
+./bin/client https://127.0.0.1:8443
+```
+
+### Ports
+
+| Process | Port | Protocol |
+|---------|------|----------|
+| PoC server HTTPS (mTLS + JWT) | 8443 | HTTPS |
+| PoC server CAAPI | 9090 | gRPC |
+| CAI sidecar | 50051 | gRPC |
 
 ## Configuration Management
 
@@ -321,6 +480,18 @@ Builds the `step-ca` binary and sets up the CA environment. The mounted configur
 
 Uses the existing Veraison project's own `make docker-deploy` workflow. The dispatcher invokes this for veraison-services instead of building a custom image.
 
+### PoC CAI sidecar, client, and server
+
+These images are **not** built by `components.sh`. Build them from `twium/` so the context includes `gen/go/` (run `make proto` first).
+
+| Image | Dockerfile | Build context | Copies | Listens |
+|-------|------------|---------------|--------|---------|
+| CAI sidecar | `cai/Dockerfile` | `twium/` | `cai/`, `platform/`, `gen/go/` | gRPC `:50051` |
+| Attester client | `client/Dockerfile` | `twium/` | `client/`, `gen/go/` | (one-shot; argument is the HTTPS URL) |
+| PoC server | `server/Dockerfile` | `twium/` | `server/`, `cai/`, `platform/`, `gen/go/`, `go.work` | HTTPS `:8443`, CAAPI `:9090` |
+
+CAI and client Dockerfiles set `GOWORK=off` and use Go `replace` directives to sibling modules. The client image does not contain the CAI library or platform plug-in.
+
 ## Deployment Workflows
 
 ### 1. Local Development Deployment
@@ -453,6 +624,13 @@ Default ports:
 - Vault: 8200, 8201
 - SPIRE Server: 8081
 - step-ca: 9000
+- PoC server HTTPS: 8443
+- PoC server CAAPI: 9090
+- CAI sidecar: 50051 (compose network only unless you publish it)
+
+If `docker compose up` fails with "connection refused" to `host.docker.internal:9090` or `:8443`, start `./bin/server` on the host first (or run the `twium-server` image as in [PoC server in Docker](#poc-server-in-docker)).
+
+If the client fails TLS hostname verification, set `TLS_SERVER_NAME` to a SAN on the server certificate (`localhost` is the compose default).
 
 ### Container Exits Immediately
 
@@ -525,3 +703,5 @@ the TWI components.
 - [Installation Prerequisites](readme_install_prereq.md) - Install Go and protoc
 - [deploy/config/README.md](deploy/config/README.md) - Configuration directory structure
 - [README.md](README.md) - Main project overview
+- [proto/cai/v1/cai.proto](proto/cai/v1/cai.proto) - Attester-facing CAI gRPC (`AcquireCredential`)
+- [docker-compose.yml](docker-compose.yml) - Client + CAI sidecar compose file
