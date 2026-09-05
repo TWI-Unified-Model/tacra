@@ -9,9 +9,9 @@ sequenceDiagram
     note over CAI, CAS: Credential Acquisition Initiation Flow
     CAI->>CAS: Initiate-Credential-Acquisition<br/>(Target, Credential Type)
     CAS->>CAS: Invoke the CAS Server
-    alt Invalid Credential Type
-        CAS-->>A: Error: Invalid Credential Type
-    else Valid Credential Type
+    alt Invalid Credential Type or other Error Condition
+        CAS-->>A: Error: Invalid Credential Type,<br/>Invalid Target,<br/>Unavailable Server, etc.
+    else Success
         CAS-->>CAI: CAAPI Context:<br/>[Credential Acquisition Mode,<br/>Verifier Challenge,<br/>Cipher Suites, etc.]
     end
     alt Credential Acquisition Mode is Retrieve
