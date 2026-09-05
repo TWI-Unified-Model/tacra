@@ -2,10 +2,9 @@
 PROTO_DIR := proto
 OUT_DIR   := gen/go
 BIN_DIR   := bin
-CLIENT_SRC := client/main.go
-SERVER_SRC := server/main.go
 CLIENT_BIN := $(BIN_DIR)/client
 SERVER_BIN := $(BIN_DIR)/server
+CAI_BIN    := $(BIN_DIR)/cai
 
 # Find all .proto files inside the PROTO_DIR directory
 PROTO_FILES := $(shell find $(PROTO_DIR) -name '*.proto')
@@ -32,13 +31,15 @@ platform:
 	cd platform && go build ./...
 	@echo "Successfully built platform library"
 
-## cai: Builds the credential acquisition interface library
+## cai: Builds the CAI library and sidecar binary
 cai: proto
 	cd cai && go build ./...
-	@echo "Successfully built cai library"
+	@mkdir -p $(BIN_DIR)
+	go build -o $(CAI_BIN) ./cai/cmd/sidecar
+	@echo "Successfully built cai library and sidecar to $(CAI_BIN)"
 
-## client: Compiles the HTTP client
-client: cai
+## client: Compiles the HTTP client (talks to the CAI sidecar)
+client: proto
 	@mkdir -p $(BIN_DIR)
 	go build -o $(CLIENT_BIN) ./client
 	@echo "Successfully compiled client to $(CLIENT_BIN)"
@@ -57,7 +58,7 @@ install-tools:
 
 ## clean: Removes generated Go files, binaries, and cai/platform build artifacts
 clean:
-	rm -rf $(OUT_DIR)/caapi $(OUT_DIR)/proto $(BIN_DIR)
+	rm -rf $(OUT_DIR)/caapi $(OUT_DIR)/cai $(OUT_DIR)/proto $(BIN_DIR)
 	cd platform && go clean ./...
 	cd cai && go clean ./...
 	@echo "Cleaned generated files, binaries, and cai/platform artifacts."

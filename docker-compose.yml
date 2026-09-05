@@ -1,0 +1,32 @@
+# Client + CAI sidecar. The sidecar owns platform + CAAPI; the client only
+# calls AcquireCredential on the sidecar, then uses the cert and JWT.
+#
+# Server (CAAPI + HTTPS) is expected on the host by default:
+#   ./bin/server
+#   docker compose up --build
+#
+# Override CAAPI_ADDR / CLIENT_SERVER if the server is elsewhere.
+
+services:
+  cai:
+    build:
+      context: .
+      dockerfile: cai/Dockerfile
+    environment:
+      CAI_LISTEN: ":50051"
+      CAAPI_ADDR: ${CAAPI_ADDR:-host.docker.internal:9090}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  client:
+    build:
+      context: .
+      dockerfile: client/Dockerfile
+    depends_on:
+      - cai
+    environment:
+      CAI_ADDR: cai:50051
+      TLS_SERVER_NAME: ${TLS_SERVER_NAME:-localhost}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    command: ["${CLIENT_SERVER:-https://host.docker.internal:8443}"]

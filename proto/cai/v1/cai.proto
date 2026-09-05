@@ -1,0 +1,32 @@
+syntax = "proto3";
+
+package cai.v1;
+option go_package = "github.com/TWI-Unified-Model/twium/gen/go/cai/v1;caiv1";
+
+import "caapi/v1/caapi.proto";
+
+// CredentialAcquisitionInterface is the Attester-facing CAI: one RPC that
+// hides CAAPI, the platform plug-in, enrollment, and retrieval.
+service CredentialAcquisitionInterface {
+    rpc AcquireCredential(AcquireCredentialRequest) returns (AcquireCredentialResponse);
+}
+
+message AcquireCredentialRequest {
+    // Endpoint the workload will authenticate to.
+    string target = 1;
+
+    caapi.v1.CredentialType credential_type = 2;
+}
+
+message AcquireCredentialResponse {
+    caapi.v1.CredentialType type = 1;
+
+    caapi.v1.CredentialAcquisitionMechanism mechanism = 2;
+
+    // Credential document: PEM certificate bundle, JWT, API key, etc.
+    bytes document = 3;
+
+    // PKCS#8 encoding of the CSK private key after Enrollment.
+    // Empty for Retrieval.
+    bytes private_key_pkcs8 = 4;
+}

@@ -7,15 +7,14 @@ import (
 	"encoding/pem"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
 	"net/url"
 	"os"
 	"strings"
 	"time"
 
-	"github.com/TWI-Unified-Model/twium/cai"
-	"github.com/TWI-Unified-Model/twium/platform"
+	caapiv1 "github.com/TWI-Unified-Model/twium/gen/go/caapi/v1"
+	caiv1 "github.com/TWI-Unified-Model/twium/gen/go/cai/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
@@ -45,47 +44,46 @@ func main() {
 		os.Exit(1)
 	}
 
-	caapiAddr := os.Getenv("CAAPI_ADDR")
-	if caapiAddr == "" {
-		caapiAddr = net.JoinHostPort(serverURL.Hostname(), "9090")
-	}
+	caiAddr := envOr("CAI_ADDR", "127.0.0.1:50051")
+	serverName := envOr("TLS_SERVER_NAME", serverURL.Hostname())
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	plugin, err := platform.NewSimulated()
+	conn, err := grpc.NewClient(caiAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "platform plug-in: %v\n", err)
-		os.Exit(1)
-	}
-
-	caiClient, conn, err := cai.Dial(caapiAddr, plugin, grpc.WithTransportCredentials(insecure.NewCredentials()))
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "CAI dial %s: %v\n", caapiAddr, err)
+		fmt.Fprintf(os.Stderr, "CAI sidecar dial %s: %v\n", caiAddr, err)
 		os.Exit(1)
 	}
 	defer conn.Close()
+	caiClient := caiv1.NewCredentialAcquisitionInterfaceClient(conn)
 
-	fmt.Printf("Acquiring X.509 client certificate for %s via CAI...\n", serverURL.String())
-	x509Cred, err := caiClient.AcquireCredential(ctx, serverURL.String(), cai.CredentialTypeX509)
+	fmt.Printf("Acquiring X.509 client certificate for %s via CAI sidecar...\n", serverURL.String())
+	x509Resp, err := caiClient.AcquireCredential(ctx, &caiv1.AcquireCredentialRequest{
+		Target:         serverURL.String(),
+		CredentialType: caapiv1.CredentialType_POP_CREDENTIAL_TYPE_X509,
+	})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "AcquireCredential X509: %v\n", err)
 		os.Exit(1)
 	}
-	tlsCert, roots, err := tlsCertFromCredential(x509Cred)
+	tlsCert, roots, err := tlsCertFromCAI(x509Resp)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "X.509 credential: %v\n", err)
 		os.Exit(1)
 	}
 	fmt.Println("Acquired X.509 certificate.")
 
-	fmt.Printf("Acquiring JWT for %s via CAI...\n", serverURL.String())
-	jwtCred, err := caiClient.AcquireCredential(ctx, serverURL.String(), cai.CredentialTypeJWT)
+	fmt.Printf("Acquiring JWT for %s via CAI sidecar...\n", serverURL.String())
+	jwtResp, err := caiClient.AcquireCredential(ctx, &caiv1.AcquireCredentialRequest{
+		Target:         serverURL.String(),
+		CredentialType: caapiv1.CredentialType_BT_CREDENTIAL_TYPE_JWT,
+	})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "AcquireCredential JWT: %v\n", err)
 		os.Exit(1)
 	}
-	if len(jwtCred.Document) == 0 {
+	if len(jwtResp.GetDocument()) == 0 {
 		fmt.Fprintf(os.Stderr, "empty JWT\n")
 		os.Exit(1)
 	}
@@ -98,7 +96,7 @@ func main() {
 				MinVersion:   tls.VersionTLS12,
 				Certificates: []tls.Certificate{tlsCert},
 				RootCAs:      roots,
-				ServerName:   serverURL.Hostname(),
+				ServerName:   serverName,
 			},
 		},
 	}
@@ -110,7 +108,7 @@ func main() {
 		os.Exit(1)
 	}
 	req.Header.Set("X-Greeting", "Hello, world!")
-	req.Header.Set("Authorization", "Bearer "+string(jwtCred.Document))
+	req.Header.Set("Authorization", "Bearer "+string(jwtResp.GetDocument()))
 
 	resp, err := httpClient.Do(req)
 	if err != nil {
@@ -138,19 +136,23 @@ func main() {
 	fmt.Printf("Received valid URI: %s\n", receivedURI)
 }
 
-func tlsCertFromCredential(cred *cai.Credential) (tls.Certificate, *x509.CertPool, error) {
-	if cred == nil {
+func tlsCertFromCAI(resp *caiv1.AcquireCredentialResponse) (tls.Certificate, *x509.CertPool, error) {
+	if resp == nil {
 		return tls.Certificate{}, nil, fmt.Errorf("nil X.509 credential")
 	}
-	if cred.PrivateKey == nil {
+	if len(resp.GetPrivateKeyPkcs8()) == 0 {
 		return tls.Certificate{}, nil, fmt.Errorf("X.509 enrollment did not return a private key")
 	}
-	certs, err := parseCerts(cred.Document)
+	key, err := x509.ParsePKCS8PrivateKey(resp.GetPrivateKeyPkcs8())
+	if err != nil {
+		return tls.Certificate{}, nil, fmt.Errorf("CSK PKCS#8: %w", err)
+	}
+	certs, err := parseCerts(resp.GetDocument())
 	if err != nil {
 		return tls.Certificate{}, nil, err
 	}
-	if len(certs) == 0 {
-		return tls.Certificate{}, nil, fmt.Errorf("no certificates in X.509 credential")
+	if len(certs) < 2 {
+		return tls.Certificate{}, nil, fmt.Errorf("X.509 credential has no CA certificate to verify the server")
 	}
 
 	chain := make([][]byte, 0, len(certs))
@@ -161,20 +163,16 @@ func tlsCertFromCredential(cred *cai.Credential) (tls.Certificate, *x509.CertPoo
 			roots.AddCert(c)
 		}
 	}
-	if len(certs) < 2 {
-		return tls.Certificate{}, nil, fmt.Errorf("X.509 credential has no CA certificate to verify the server")
-	}
-
 	return tls.Certificate{
 		Certificate: chain,
-		PrivateKey:  cred.PrivateKey,
+		PrivateKey:  key,
 	}, roots, nil
 }
 
 func parseCerts(doc []byte) ([]*x509.Certificate, error) {
 	var certs []*x509.Certificate
 	rest := doc
-	if bytesHasPEM(rest) {
+	if strings.Contains(string(rest), "-----BEGIN ") {
 		for {
 			var block *pem.Block
 			block, rest = pem.Decode(rest)
@@ -199,6 +197,9 @@ func parseCerts(doc []byte) ([]*x509.Certificate, error) {
 	return []*x509.Certificate{c}, nil
 }
 
-func bytesHasPEM(b []byte) bool {
-	return strings.Contains(string(b), "-----BEGIN ")
+func envOr(key, fallback string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return fallback
 }
