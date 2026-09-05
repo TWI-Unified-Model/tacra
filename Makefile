@@ -11,7 +11,7 @@ SERVER_BIN := $(BIN_DIR)/server
 PROTO_FILES := $(shell find $(PROTO_DIR) -name '*.proto')
 PROTO_SRCS  := $(patsubst $(PROTO_DIR)/%,%,$(PROTO_FILES))
 
-.PHONY: all proto install-tools clean help client server test platform cai
+.PHONY: all proto install-tools clean help client server platform cai
 
 all: proto platform cai client server
 
@@ -37,11 +37,6 @@ cai: proto
 	cd cai && go build ./...
 	@echo "Successfully built cai library"
 
-## test: Runs unit tests for library packages
-test: proto
-	cd platform && go test ./...
-	cd cai && go test ./...
-
 ## client: Compiles the HTTP client
 client:
 	@mkdir -p $(BIN_DIR)
@@ -60,10 +55,12 @@ install-tools:
 	go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
 	go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
 
-## clean: Removes all generated Go files and binaries
+## clean: Removes generated Go files, binaries, and cai/platform build artifacts
 clean:
 	rm -rf $(OUT_DIR)/caapi $(OUT_DIR)/proto $(BIN_DIR)
-	@echo "Cleaned generated files and binaries."
+	cd platform && go clean ./...
+	cd cai && go clean ./...
+	@echo "Cleaned generated files, binaries, and cai/platform artifacts."
 
 ## help: Shows available Makefile targets
 help:
