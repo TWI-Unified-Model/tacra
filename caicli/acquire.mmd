@@ -22,7 +22,8 @@ sequenceDiagram
         PL-->>CAI: Evidence incl. CEKpub
         CAI->>CAS: Retrieve-Credential<br/>(Evidence incl. CEKpub)
         CAS->>CAS: Invoke the CAS Server's<br/>Retrieve() function
-        CAS-->>CAI: Retrieved (pre-existing) Credential
+        CAS-->>CAI: Retrieved (pre-existing) Credential<br/>encrypted to CEKpub
+        CAI-->>CAI: Unwrap the returned credential<br/>using CEKpri
     else Credential Acquisition Mode is Enroll
         note over CAI, CAS: Credential Enrollment Flow
         CAI->>PL: Generate Asymmetric Credential Signing Key CSK
