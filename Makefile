@@ -9,30 +9,38 @@ SERVER_BIN := $(BIN_DIR)/server
 
 # Find all .proto files inside the PROTO_DIR directory
 PROTO_FILES := $(shell find $(PROTO_DIR) -name '*.proto')
+PROTO_SRCS  := $(patsubst $(PROTO_DIR)/%,%,$(PROTO_FILES))
 
-.PHONY: all proto install-tools clean help client server test platform
+.PHONY: all proto install-tools clean help client server test platform cai
 
-all: proto client server
-
-## test: Runs unit tests for library packages
-test:
-	cd platform && GOWORK=off go test ./...
-
-## platform: Runs the platform plug-in tests
-platform:
-	cd platform && GOWORK=off go test ./...
+all: proto platform cai client server
 
 ## proto: Compiles all .proto files into Go code
 proto:
 	@mkdir -p $(OUT_DIR)
 	protoc \
-		--proto_path=. \
+		--proto_path=$(PROTO_DIR) \
 		--go_out=$(OUT_DIR) \
 		--go_opt=paths=source_relative \
 		--go-grpc_out=$(OUT_DIR) \
 		--go-grpc_opt=paths=source_relative \
-		$(PROTO_FILES)
+		$(PROTO_SRCS)
 	@echo "Successfully compiled proto files to $(OUT_DIR)"
+
+## platform: Builds the platform plug-in library
+platform:
+	cd platform && go build ./...
+	@echo "Successfully built platform library"
+
+## cai: Builds the credential acquisition interface library
+cai: proto
+	cd cai && go build ./...
+	@echo "Successfully built cai library"
+
+## test: Runs unit tests for library packages
+test: proto
+	cd platform && go test ./...
+	cd cai && go test ./...
 
 ## client: Compiles the HTTP client
 client:
@@ -54,7 +62,7 @@ install-tools:
 
 ## clean: Removes all generated Go files and binaries
 clean:
-	rm -rf $(OUT_DIR) $(BIN_DIR)
+	rm -rf $(OUT_DIR)/caapi $(OUT_DIR)/proto $(BIN_DIR)
 	@echo "Cleaned generated files and binaries."
 
 ## help: Shows available Makefile targets

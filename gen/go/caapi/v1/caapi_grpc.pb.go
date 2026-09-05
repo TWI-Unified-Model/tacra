@@ -2,7 +2,7 @@
 // versions:
 // - protoc-gen-go-grpc v1.6.2
 // - protoc             v4.25.3
-// source: proto/caapi/v1/caapi.proto
+// source: caapi/v1/caapi.proto
 
 package caapiv1
 
@@ -194,5 +194,5 @@ var CredentialAcquisitionService_ServiceDesc = grpc.ServiceDesc{
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
-	Metadata: "proto/caapi/v1/caapi.proto",
+	Metadata: "caapi/v1/caapi.proto",
 }

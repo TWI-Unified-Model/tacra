@@ -5,4 +5,5 @@ use (
 	./server
 	./gen/go
 	./platform
+	./cai
 )
