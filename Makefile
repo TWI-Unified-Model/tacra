@@ -38,15 +38,15 @@ cai: proto
 	@echo "Successfully built cai library"
 
 ## client: Compiles the HTTP client
-client:
+client: cai
 	@mkdir -p $(BIN_DIR)
-	go build -o $(CLIENT_BIN) $(CLIENT_SRC)
+	go build -o $(CLIENT_BIN) ./client
 	@echo "Successfully compiled client to $(CLIENT_BIN)"
 
-## server: Compiles the HTTP server
-server:
+## server: Compiles the HTTPS mTLS server and PoC CAAPI
+server: cai
 	@mkdir -p $(BIN_DIR)
-	go build -o $(SERVER_BIN) $(SERVER_SRC)
+	go build -o $(SERVER_BIN) ./server
 	@echo "Successfully compiled server to $(SERVER_BIN)"
 
 ## install-tools: Installs necessary protoc Go plugins

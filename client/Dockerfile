@@ -1,20 +1,19 @@
-# Stage 1: Build binary
+# Build from the twium/ directory:
+#   docker build -f client/Dockerfile .
 FROM golang:1.26-alpine AS builder
 
-WORKDIR /app
+WORKDIR /src
+COPY go.work go.work.sum ./
+COPY client/ client/
+COPY cai/ cai/
+COPY platform/ platform/
+COPY gen/go/ gen/go/
 
-COPY go.mod ./
-RUN go mod download
+WORKDIR /src/client
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o /client .
 
-COPY . .
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o client main.go
-
-# Stage 2: Minimal runtime container
 FROM alpine:latest
-
 RUN apk --no-cache add ca-certificates
-
 WORKDIR /root/
-COPY --from=builder /app/client .
-
+COPY --from=builder /client .
 ENTRYPOINT ["./client"]
