@@ -18,7 +18,7 @@ sequenceDiagram
     deactivate W
     note over CAS_C, CAS_S: Invoke CAS Server<br/>over CAS Protocol
     activate CAS_C
-    CAS_C->>CAS_S: Enroll Credential<br/>(Target, Credential Type,<br/>Evidence incl. CEKpub)
+    CAS_C->>CAS_S: Enroll Credential<br/>(Target, Credential Type,<br/>Evidence incl. CSR)
     deactivate CAS_C
     note over CAS_S, V: Verifier Protocol
     activate CAS_S
