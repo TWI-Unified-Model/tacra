@@ -1,9 +1,10 @@
 go 1.26.5
 
 use (
+	./cai
 	./client
-	./server
+	./est
 	./gen/go
 	./platform
-	./cai
+	./server
 )
