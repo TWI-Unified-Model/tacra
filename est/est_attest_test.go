@@ -18,6 +18,7 @@ import (
 
 const (
 	defaultTarget        = "RUP-workload-1"
+	retrieveTargetName   = "RUP-workload-2"
 	rejectedTarget       = "RUP-workload-unknown"
 	credentialTypeX509   = est.CredentialTypeX509
 	credentialTypeBearer = est.CredentialTypePSK
@@ -25,6 +26,8 @@ const (
 )
 
 func target() string { return envOr("EST_TARGET", defaultTarget) }
+
+func retrieveTarget() string { return envOr("EST_RETRIEVE_TARGET", retrieveTargetName) }
 
 // newCEK generates the Content Encryption Key used in Attested Retrieval Mode.
 func newCEK(t *testing.T) (*ecdh.PrivateKey, []byte) {
@@ -105,7 +108,7 @@ func TestAttestedCredentialAcquisition(t *testing.T) {
 	})
 
 	t.Run("Initiate/RetrieveMode", func(t *testing.T) {
-		resp, err := client.InitiateRemoteAttestation(ctx, target(), credentialTypeBearer)
+		resp, err := client.InitiateRemoteAttestation(ctx, retrieveTarget(), credentialTypeBearer)
 		if err != nil {
 			t.Fatalf("attest-initiate: %v", err)
 		}
@@ -243,21 +246,76 @@ func TestAttestedCredentialAcquisition(t *testing.T) {
 		assertStatus(t, err, 403)
 	})
 
+	// The CAS decides the mechanism per target, not from the credential type,
+	// so varying the type must not change the mechanism.
+	t.Run("Initiate/MechanismIndependentOfCredentialType", func(t *testing.T) {
+		for _, ct := range []string{
+			est.CredentialTypeX509,
+			est.CredentialTypeWIT,
+			est.CredentialTypePSK,
+			est.CredentialTypeJWT,
+		} {
+			enrollResp, err := client.InitiateRemoteAttestation(ctx, target(), ct)
+			if err != nil {
+				t.Fatalf("attest-initiate %s on enroll target: %v", ct, err)
+			}
+			if enrollResp.Mechanism != est.MechanismEnroll {
+				t.Errorf("credential type %q on enroll target gave mechanism %q, want %q",
+					ct, enrollResp.Mechanism, est.MechanismEnroll)
+			}
+
+			retrieveResp, err := client.InitiateRemoteAttestation(ctx, retrieveTarget(), ct)
+			if err != nil {
+				t.Fatalf("attest-initiate %s on retrieve target: %v", ct, err)
+			}
+			if retrieveResp.Mechanism != est.MechanismRetrieve {
+				t.Errorf("credential type %q on retrieve target gave mechanism %q, want %q",
+					ct, retrieveResp.Mechanism, est.MechanismRetrieve)
+			}
+		}
+	})
+
+	// The mechanism is fixed by the CAS, so the wrong second leg is rejected.
+	t.Run("Enroll/WrongMechanismForTarget", func(t *testing.T) {
+		init, err := client.InitiateRemoteAttestation(ctx, retrieveTarget(), credentialTypeX509)
+		if err != nil {
+			t.Fatalf("attest-initiate: %v", err)
+		}
+
+		csr, _ := newCSR(t)
+
+		_, err = client.EnrollCredential(ctx, &est.AttestedEnrollmentRequest{
+			Target:         retrieveTarget(),
+			CredentialType: credentialTypeX509,
+			FreshnessKind:  init.FreshnessKind,
+			Handle:         init.Handle,
+			CSR:            csr.Raw,
+			Evidence: marshalEvidence(t, est.MockEvidence{
+				Target:        retrieveTarget(),
+				FreshnessKind: init.FreshnessKind,
+				Handle:        init.Handle,
+				CSRHash:       est.CSRHash(csr.Raw),
+			}),
+			Binding: est.Binding{Method: est.BindingCSRHash, HashAlg: "SHA-256"},
+		})
+		assertStatus(t, err, 403)
+	})
+
 	retrieve := func(t *testing.T, cekPub []byte) *est.EncryptedCredentialBundle {
 		t.Helper()
 
-		init, err := client.InitiateRemoteAttestation(ctx, target(), credentialTypeBearer)
+		init, err := client.InitiateRemoteAttestation(ctx, retrieveTarget(), credentialTypeBearer)
 		if err != nil {
 			t.Fatalf("attest-initiate: %v", err)
 		}
 
 		bundle, err := client.RetrieveCredential(ctx, &est.AttestedRetrievalRequest{
-			Target:         target(),
+			Target:         retrieveTarget(),
 			CredentialType: credentialTypeBearer,
 			FreshnessKind:  init.FreshnessKind,
 			Handle:         init.Handle,
 			Evidence: marshalEvidence(t, est.MockEvidence{
-				Target:        target(),
+				Target:        retrieveTarget(),
 				FreshnessKind: init.FreshnessKind,
 				Handle:        init.Handle,
 				CEKPub:        cekPub,

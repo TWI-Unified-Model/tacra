@@ -58,7 +58,10 @@ cat > "${CONFIG_DIR}/estserver.json" <<EOF
   },
   "allowed_hosts": ["localhost", "127.0.0.1"],
   "attest": {
-    "allowed_targets": ["RUP-workload-1"]
+    "targets": [
+      { "name": "RUP-workload-1", "mechanism": "enroll" },
+      { "name": "RUP-workload-2", "mechanism": "retrieve" }
+    ]
   },
   "healthcheck_password": "${healthcheck_password}",
   "rate_limit": 150,

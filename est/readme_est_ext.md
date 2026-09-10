@@ -105,16 +105,39 @@ Two kinds are implemented:
 `present-epoch`, `absent-epoch` and `absent-timestamp` are not implemented in
 this POC.
 
-### Mode selection
+### Mechanism selection
 
-The CAS decides the mechanism without the Attester's involvement, per TACRA.
-Bearer token credential types are retrieved; proof-of-possession types are
-enrolled:
+The **CAS Server decides the mechanism**, and it is **not** a function of the
+credential type. TACRA line 80 states the CAS "controls which Credential Types
+and which Credential Acquisition Mechanisms (enrollment, retrieval) can be
+provisioned to the Attester for any Attester-supplied target, without the
+Attester's knowledge or involvement", and Req 5 requires support for "different
+Credential Acquisition Mechanisms **per-target**".
 
-| `credential_type` | Mechanism | Required binding |
+Responsibilities split as follows:
+
+| Concern | Owner | Source |
 | --- | --- | --- |
-| `x509`, `wic`, `wit` | `enroll` | `csr-hash` |
-| `jwt`, `psk`, `api-key` | `retrieve` | `cek-thumbprint` |
+| Target | Attester supplies it | `Acquire-Credential(Target, Credential Type)` |
+| Credential type | Attester supplies it | Req 1: "the workload knows what Credential Type it will need when it launches" |
+| Mechanism | **CAS Server decides it** | Req 1: the workload "discovers whether it will have to retrieve an existing or enroll a new credential at runtime" |
+| Mechanism dispatch | CAI branches on it | Line 86: "opaquely to the Attester, the CAI **discovers** and utilizes one of two Credential Acquisition Modes" |
+
+The mock therefore configures the mechanism **per target**, and any credential
+type the target permits resolves to that same mechanism:
+
+| Target | Mechanism | Required binding |
+| --- | --- | --- |
+| `RUP-workload-1` | `enroll` | `csr-hash` |
+| `RUP-workload-2` | `retrieve` | `cek-thumbprint` |
+
+A target may optionally restrict which credential types it will provision via
+`credential_types`. That is a capability check only — line 80: "If a Credential
+Type specified by the Attester is unavailable due to Credential Acquisition
+System limitations, an error will result" — and it never changes the mechanism.
+
+Because the mechanism is fixed by the CAS, posting the wrong second leg for a
+target is rejected with `403`.
 
 ## Attested Enrollment Mode
 
@@ -250,22 +273,20 @@ CAAPI.
 `est.MechanismRetrieve`. `OPERATION_UNSPECIFIED` has no EST equivalent; the
 server always returns a concrete mechanism.
 
-`CredentialType` maps onto EST wire strings, and the split between bearer and
-proof-of-possession types determines the mechanism directly, matching TACRA:
-bearer tokens are retrieved, proof-of-possession credentials are enrolled.
+`CredentialType` maps onto EST wire strings. The type is supplied by the
+Attester and validated by the CAS, but it does **not** determine the mechanism.
 
-| CAAPI enum | `est` constant | Value | Mechanism |
-| --- | --- | --- | --- |
-| `BT_CREDENTIAL_TYPE_JWT` | `CredentialTypeJWT` | `jwt` | retrieve |
-| `BT_CREDENTIAL_TYPE_PSK` | `CredentialTypePSK` | `psk` | retrieve |
-| `BT_CREDENTIAL_TYPE_API_KEY` | `CredentialTypeAPIKey` | `api-key` | retrieve |
-| `POP_CREDENTIAL_TYPE_X509` | `CredentialTypeX509` | `x509` | enroll |
-| `POP_CREDENTIAL_TYPE_WIC` | `CredentialTypeWIC` | `wic` | enroll |
-| `POP_CREDENTIAL_TYPE_WIT` | `CredentialTypeWIT` | `wit` | enroll |
+| CAAPI enum | `est` constant | Value |
+| --- | --- | --- |
+| `BT_CREDENTIAL_TYPE_JWT` | `CredentialTypeJWT` | `jwt` |
+| `BT_CREDENTIAL_TYPE_PSK` | `CredentialTypePSK` | `psk` |
+| `BT_CREDENTIAL_TYPE_API_KEY` | `CredentialTypeAPIKey` | `api-key` |
+| `POP_CREDENTIAL_TYPE_X509` | `CredentialTypeX509` | `x509` |
+| `POP_CREDENTIAL_TYPE_WIC` | `CredentialTypeWIC` | `wic` |
+| `POP_CREDENTIAL_TYPE_WIT` | `CredentialTypeWIT` | `wit` |
 
-Only `x509` (enroll) and `psk` (retrieve) are exercised by the tests. The
-remaining types resolve to a mechanism but are otherwise handled identically by
-the mock, which always issues an X.509 credential.
+The mock always issues an X.509 credential regardless of the requested type, so
+the type is carried and validated but not yet honoured in the payload.
 
 The CAAPI `InitiateCredentialAcquistionRequest` message name contains a typo in
 the proto. It is left as-is here since the generated bindings depend on it.
@@ -285,17 +306,24 @@ status list, which has no code for an unsupported backing CA.
 
 ## Configuration
 
-The whitelist lives in the EST server configuration:
+The whitelist lives in the EST server configuration, with the mechanism set per
+target:
 
 ```json
 "attest": {
-  "allowed_targets": ["RUP-workload-1"]
+  "targets": [
+    { "name": "RUP-workload-1", "mechanism": "enroll" },
+    { "name": "RUP-workload-2", "mechanism": "retrieve" }
+  ]
 }
 ```
 
+Each entry may also carry `credential_types` to restrict which types the CAS
+will provision for that target.
+
 It is emitted by [../deploy/init-local-est-config.sh](../deploy/init-local-est-config.sh)
 into `twium/deploy/config/local/globalsign-est/estserver.json`. If the section
-is absent, `RUP-workload-1` is whitelisted by default.
+is absent, the two default targets above are configured.
 
 ## Running the tests
 
@@ -320,9 +348,10 @@ talk to a live container.
 ### Overrides
 
 In addition to the variables documented in [readme.md](readme.md), the attested
-tests honour `EST_TARGET`, defaulting to `RUP-workload-1`. Changing it to a
-target that is not whitelisted will cause the positive cases to fail with
-`403`.
+tests honour `EST_TARGET` (default `RUP-workload-1`, the enroll target) and
+`EST_RETRIEVE_TARGET` (default `RUP-workload-2`, the retrieve target). Pointing
+either at a target that is not configured will cause the positive cases to fail
+with `403`.
 
 ### Coverage
 
@@ -331,10 +360,12 @@ target that is not whitelisted will cause the positive cases to fail with
 | `Initiate/EnrollMode` | `present-nonce`, non-empty Handle, `mechanism=enroll`, `csr-hash` binding |
 | `Initiate/RetrieveMode` | `mechanism=retrieve`, `cek-thumbprint` binding, advertised CEK suite |
 | `Initiate/RejectedTarget` | Non-whitelisted target rejected with `403` |
+| `Initiate/MechanismIndependentOfCredentialType` | Four credential types across both targets always yield the target's mechanism |
 | `Enroll/PresentNonce` | Certificate issued, CN preserved, chains to the local EST CA |
 | `Enroll/AbsentNone` | Leg two succeeds with no prior server contact |
 | `Enroll/ReplayedHandle` | Second use of a Handle rejected with `409` |
 | `Enroll/EvidenceNotBoundToCSR` | Evidence digesting a different CSR rejected with `403` |
+| `Enroll/WrongMechanismForTarget` | Enrolling against a retrieve target rejected with `403` |
 | `Retrieve/PresentNonce` | Bundle decrypts with `CEKpri`; cert chains; key parses |
 | `Retrieve/ReplicaStability` | Two Attesters, same subject, same `group_id` and credential |
 | `Retrieve/WrongCEK` | A different CEK private key cannot open the bundle |
