@@ -57,6 +57,9 @@ cat > "${CONFIG_DIR}/estserver.json" <<EOF
     "client_cas": ["/etc/est/certs/client-ca.pem"]
   },
   "allowed_hosts": ["localhost", "127.0.0.1"],
+  "attest": {
+    "allowed_targets": ["RUP-workload-1"]
+  },
   "healthcheck_password": "${healthcheck_password}",
   "rate_limit": 150,
   "timeout": 30
