@@ -107,13 +107,14 @@ this POC.
 
 ### Mode selection
 
-The CAS decides the mode without the Attester's involvement, per TACRA. The
-mock maps credential type onto mode:
+The CAS decides the mechanism without the Attester's involvement, per TACRA.
+Bearer token credential types are retrieved; proof-of-possession types are
+enrolled:
 
-| `credential_type` | Mode | Required binding |
+| `credential_type` | Mechanism | Required binding |
 | --- | --- | --- |
-| `x509` (default) | `enroll` | `csr-hash` |
-| `bundle` | `retrieve` | `cek-thumbprint` |
+| `x509`, `wic`, `wit` | `enroll` | `csr-hash` |
+| `jwt`, `psk`, `api-key` | `retrieve` | `cek-thumbprint` |
 
 ## Attested Enrollment Mode
 
@@ -181,9 +182,93 @@ behave identically.
 Likewise `MockCA` is untouched. `mockca.AttestedCA` embeds it, so it still
 satisfies `est.CA` while adding the three attested operations.
 
-Files added: `attest.go`, `attest_client.go`, `internal/mockca/attest.go`.
-Files edited: `server.go` (routes), `common.go` (constants), `errors.go` (two
-errors), `cmd/estserver/{config,main}.go` (whitelist).
+## Changes to globalsign-est
+
+Three files were added and five modified. No existing function signature,
+interface or exported type was changed, so the extensions are purely additive.
+
+### Files added
+
+| File | Lines | Contents |
+| --- | --- | --- |
+| `attest.go` | ~420 | Protocol types, the `est.AttestationCA` optional interface, credential/mechanism constants, `SealCredentialBundle` / `Open` crypto, and the three server handlers |
+| `attest_client.go` | ~150 | Client methods `InitiateRemoteAttestation`, `EnrollCredential`, `RetrieveCredential`, plus the shared `postAttest` helper |
+| `internal/mockca/attest.go` | ~430 | `mockca.AttestedCA`: mock Verifier, mock Credential Authority and mock Secret Vault, Handle store, and target whitelist |
+
+### Files modified
+
+| File | Change |
+| --- | --- |
+| `server.go` | Registered `attest-initiate` (GET), `attest-enroll` (POST) and `attest-retrieve` (POST) on both the base router and the additional-path-segment sub-router; added three log message constants. No existing route or handler altered. |
+| `common.go` | Added `attestInitiateEndpoint`, `attestEnrollEndpoint`, `attestRetrieveEndpoint` to the URI block, and the `attestTargetParam` / `attestCredentialTypeParam` query parameter names. Existing constants unchanged. |
+| `errors.go` | Added `errAttestNotSupported` (501) and `errInvalidJSON` (400). Existing error values unchanged. |
+| `cmd/estserver/config.go` | Added the `attest` config section with `allowed_targets`, and included it in the sample configuration. |
+| `cmd/estserver/main.go` | Wrapped the mock CA with `mockca.NewAttested(ca, cfg.Attest.AllowedTargets)` before passing it to `est.NewRouter`. |
+
+### Files deliberately not modified
+
+`ca.go` keeps the `CA` interface exactly as it was — attestation is a separate
+optional interface — so every existing backing CA implementation compiles and
+behaves identically. `internal/mockca/ca.go` is likewise untouched;
+`AttestedCA` embeds `MockCA` rather than altering it. `client.go`, `http.go`,
+`encoding.go` and `csrattrs.go` are unchanged, and the existing `est_test.go`
+suite in the upstream repository still passes.
+
+The existing `maxBodySize(65536)` and `requireContentType` middleware are
+reused rather than duplicated, and `writeResponse` already handled `[]byte`
+bodies, so no encoding changes were needed.
+
+## CAAPI alignment
+
+The EST client is the CAS Client in TACRA terms, so its operations are named
+after the RPCs in
+[caapi.proto](../proto/caapi/v1/caapi.proto). The EST resource paths follow the
+EST extension draft; only the Go API is CAAPI-aligned.
+
+| `caapi.v1` RPC | EST client method | EST resource |
+| --- | --- | --- |
+| `InitiateRemoteAttestation` | `Client.InitiateRemoteAttestation` | `GET attest-initiate` |
+| `EnrollCredential` | `Client.EnrollCredential` | `POST attest-enroll` |
+| `RetrieveCredential` | `Client.RetrieveCredential` | `POST attest-retrieve` |
+
+Message fields map as follows. Where the two specifications use different
+names, the EST wire format follows the draft and the Go field name follows
+CAAPI.
+
+| CAAPI field | EST equivalent | Note |
+| --- | --- | --- |
+| `target` | `target` | Query parameter on leg one, body field on leg two |
+| `credential_type` | `credential_type` | See the enum mapping below |
+| `mechanism` | `AttestationInitiateResponse.Mechanism` | JSON tag remains `mode` per the draft |
+| `challenge` | `AttestationInitiateResponse.Handle` | The draft calls this the Handle |
+| `evidence` | `evidence` | Opaque byte string in both |
+| `csr` | `csr` | DER-encoded PKCS#10 |
+| `plaintext_credential` | PKCS#7 response body | Returned as for `simpleenroll` |
+| `wrapped_credential` | `EncryptedCredentialBundle` | Sealed to CEKpub |
+
+`CredentialAcquisitionMechanism` maps to `est.MechanismEnroll` and
+`est.MechanismRetrieve`. `OPERATION_UNSPECIFIED` has no EST equivalent; the
+server always returns a concrete mechanism.
+
+`CredentialType` maps onto EST wire strings, and the split between bearer and
+proof-of-possession types determines the mechanism directly, matching TACRA:
+bearer tokens are retrieved, proof-of-possession credentials are enrolled.
+
+| CAAPI enum | `est` constant | Value | Mechanism |
+| --- | --- | --- | --- |
+| `BT_CREDENTIAL_TYPE_JWT` | `CredentialTypeJWT` | `jwt` | retrieve |
+| `BT_CREDENTIAL_TYPE_PSK` | `CredentialTypePSK` | `psk` | retrieve |
+| `BT_CREDENTIAL_TYPE_API_KEY` | `CredentialTypeAPIKey` | `api-key` | retrieve |
+| `POP_CREDENTIAL_TYPE_X509` | `CredentialTypeX509` | `x509` | enroll |
+| `POP_CREDENTIAL_TYPE_WIC` | `CredentialTypeWIC` | `wic` | enroll |
+| `POP_CREDENTIAL_TYPE_WIT` | `CredentialTypeWIT` | `wit` | enroll |
+
+Only `x509` (enroll) and `psk` (retrieve) are exercised by the tests. The
+remaining types resolve to a mechanism but are otherwise handled identically by
+the mock, which always issues an X.509 credential.
+
+The CAAPI `InitiateCredentialAcquistionRequest` message name contains a typo in
+the proto. It is left as-is here since the generated bindings depend on it.
 
 ### Error mapping
 
@@ -243,8 +328,8 @@ target that is not whitelisted will cause the positive cases to fail with
 
 | Subtest | Asserts |
 | --- | --- |
-| `Initiate/EnrollMode` | `present-nonce`, non-empty Handle, `mode=enroll`, `csr-hash` binding |
-| `Initiate/RetrieveMode` | `mode=retrieve`, `cek-thumbprint` binding, advertised CEK suite |
+| `Initiate/EnrollMode` | `present-nonce`, non-empty Handle, `mechanism=enroll`, `csr-hash` binding |
+| `Initiate/RetrieveMode` | `mechanism=retrieve`, `cek-thumbprint` binding, advertised CEK suite |
 | `Initiate/RejectedTarget` | Non-whitelisted target rejected with `403` |
 | `Enroll/PresentNonce` | Certificate issued, CN preserved, chains to the local EST CA |
 | `Enroll/AbsentNone` | Leg two succeeds with no prior server contact |

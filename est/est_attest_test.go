@@ -17,11 +17,11 @@ import (
 )
 
 const (
-	defaultTarget      = "RUP-workload-1"
-	rejectedTarget     = "RUP-workload-unknown"
-	credentialTypeX509 = "x509"
-	credentialTypeBndl = "bundle"
-	workloadClaim      = "twi-poc-workload"
+	defaultTarget        = "RUP-workload-1"
+	rejectedTarget       = "RUP-workload-unknown"
+	credentialTypeX509   = est.CredentialTypeX509
+	credentialTypeBearer = est.CredentialTypePSK
+	workloadClaim        = "twi-poc-workload"
 )
 
 func target() string { return envOr("EST_TARGET", defaultTarget) }
@@ -87,7 +87,7 @@ func TestAttestedCredentialAcquisition(t *testing.T) {
 	client := newClient(anchor, nil, nil)
 
 	t.Run("Initiate/EnrollMode", func(t *testing.T) {
-		resp, err := client.AttestInitiate(ctx, target(), credentialTypeX509)
+		resp, err := client.InitiateRemoteAttestation(ctx, target(), credentialTypeX509)
 		if err != nil {
 			t.Fatalf("attest-initiate: %v", err)
 		}
@@ -97,42 +97,42 @@ func TestAttestedCredentialAcquisition(t *testing.T) {
 		if len(resp.Handle) == 0 {
 			t.Error("present-nonce response must carry a handle")
 		}
-		if resp.Mode != est.AttestModeEnroll {
-			t.Errorf("mode = %q, want %q", resp.Mode, est.AttestModeEnroll)
+		if resp.Mechanism != est.MechanismEnroll {
+			t.Errorf("mode = %q, want %q", resp.Mechanism, est.MechanismEnroll)
 		}
 		t.Logf("initiate: kind=%s mode=%s handleLen=%d expiresIn=%d bindings=%v",
-			resp.FreshnessKind, resp.Mode, len(resp.Handle), resp.ExpiresIn, resp.RequiredBindings)
+			resp.FreshnessKind, resp.Mechanism, len(resp.Handle), resp.ExpiresIn, resp.RequiredBindings)
 	})
 
 	t.Run("Initiate/RetrieveMode", func(t *testing.T) {
-		resp, err := client.AttestInitiate(ctx, target(), credentialTypeBndl)
+		resp, err := client.InitiateRemoteAttestation(ctx, target(), credentialTypeBearer)
 		if err != nil {
 			t.Fatalf("attest-initiate: %v", err)
 		}
-		if resp.Mode != est.AttestModeRetrieve {
-			t.Errorf("mode = %q, want %q", resp.Mode, est.AttestModeRetrieve)
+		if resp.Mechanism != est.MechanismRetrieve {
+			t.Errorf("mode = %q, want %q", resp.Mechanism, est.MechanismRetrieve)
 		}
 		if len(resp.AcceptableCEK) == 0 {
 			t.Error("retrieve mode must advertise acceptable CEK suites")
 		}
-		t.Logf("initiate: mode=%s bindings=%v cek=%v", resp.Mode, resp.RequiredBindings, resp.AcceptableCEK)
+		t.Logf("initiate: mode=%s bindings=%v cek=%v", resp.Mechanism, resp.RequiredBindings, resp.AcceptableCEK)
 	})
 
 	// The EST server whitelists only the configured target.
 	t.Run("Initiate/RejectedTarget", func(t *testing.T) {
-		_, err := client.AttestInitiate(ctx, rejectedTarget, credentialTypeX509)
+		_, err := client.InitiateRemoteAttestation(ctx, rejectedTarget, credentialTypeX509)
 		assertStatus(t, err, 403)
 	})
 
 	t.Run("Enroll/PresentNonce", func(t *testing.T) {
-		init, err := client.AttestInitiate(ctx, target(), credentialTypeX509)
+		init, err := client.InitiateRemoteAttestation(ctx, target(), credentialTypeX509)
 		if err != nil {
 			t.Fatalf("attest-initiate: %v", err)
 		}
 
 		csr, _ := newCSR(t)
 
-		cert, err := client.AttestEnroll(ctx, &est.AttestedEnrollmentRequest{
+		cert, err := client.EnrollCredential(ctx, &est.AttestedEnrollmentRequest{
 			Target:         target(),
 			CredentialType: credentialTypeX509,
 			FreshnessKind:  init.FreshnessKind,
@@ -163,7 +163,7 @@ func TestAttestedCredentialAcquisition(t *testing.T) {
 	t.Run("Enroll/AbsentNone", func(t *testing.T) {
 		csr, _ := newCSR(t)
 
-		cert, err := client.AttestEnroll(ctx, &est.AttestedEnrollmentRequest{
+		cert, err := client.EnrollCredential(ctx, &est.AttestedEnrollmentRequest{
 			Target:         target(),
 			CredentialType: credentialTypeX509,
 			FreshnessKind:  est.FreshnessAbsentNone,
@@ -184,14 +184,14 @@ func TestAttestedCredentialAcquisition(t *testing.T) {
 	})
 
 	t.Run("Enroll/ReplayedHandle", func(t *testing.T) {
-		init, err := client.AttestInitiate(ctx, target(), credentialTypeX509)
+		init, err := client.InitiateRemoteAttestation(ctx, target(), credentialTypeX509)
 		if err != nil {
 			t.Fatalf("attest-initiate: %v", err)
 		}
 
 		enroll := func() error {
 			csr, _ := newCSR(t)
-			_, err := client.AttestEnroll(ctx, &est.AttestedEnrollmentRequest{
+			_, err := client.EnrollCredential(ctx, &est.AttestedEnrollmentRequest{
 				Target:         target(),
 				CredentialType: credentialTypeX509,
 				FreshnessKind:  init.FreshnessKind,
@@ -218,7 +218,7 @@ func TestAttestedCredentialAcquisition(t *testing.T) {
 	// Evidence carrying a digest of a different CSR must be rejected, so a CSR
 	// cannot be substituted.
 	t.Run("Enroll/EvidenceNotBoundToCSR", func(t *testing.T) {
-		init, err := client.AttestInitiate(ctx, target(), credentialTypeX509)
+		init, err := client.InitiateRemoteAttestation(ctx, target(), credentialTypeX509)
 		if err != nil {
 			t.Fatalf("attest-initiate: %v", err)
 		}
@@ -226,7 +226,7 @@ func TestAttestedCredentialAcquisition(t *testing.T) {
 		csr, _ := newCSR(t)
 		other, _ := newCSR(t)
 
-		_, err = client.AttestEnroll(ctx, &est.AttestedEnrollmentRequest{
+		_, err = client.EnrollCredential(ctx, &est.AttestedEnrollmentRequest{
 			Target:         target(),
 			CredentialType: credentialTypeX509,
 			FreshnessKind:  init.FreshnessKind,
@@ -246,14 +246,14 @@ func TestAttestedCredentialAcquisition(t *testing.T) {
 	retrieve := func(t *testing.T, cekPub []byte) *est.EncryptedCredentialBundle {
 		t.Helper()
 
-		init, err := client.AttestInitiate(ctx, target(), credentialTypeBndl)
+		init, err := client.InitiateRemoteAttestation(ctx, target(), credentialTypeBearer)
 		if err != nil {
 			t.Fatalf("attest-initiate: %v", err)
 		}
 
-		bundle, err := client.AttestRetrieve(ctx, &est.AttestedRetrievalRequest{
+		bundle, err := client.RetrieveCredential(ctx, &est.AttestedRetrievalRequest{
 			Target:         target(),
-			CredentialType: credentialTypeBndl,
+			CredentialType: credentialTypeBearer,
 			FreshnessKind:  init.FreshnessKind,
 			Handle:         init.Handle,
 			Evidence: marshalEvidence(t, est.MockEvidence{
@@ -359,9 +359,9 @@ func TestAttestedCredentialAcquisition(t *testing.T) {
 	t.Run("Retrieve/RejectedTarget", func(t *testing.T) {
 		_, cekPub := newCEK(t)
 
-		_, err := client.AttestRetrieve(ctx, &est.AttestedRetrievalRequest{
+		_, err := client.RetrieveCredential(ctx, &est.AttestedRetrievalRequest{
 			Target:         rejectedTarget,
-			CredentialType: credentialTypeBndl,
+			CredentialType: credentialTypeBearer,
 			FreshnessKind:  est.FreshnessAbsentNone,
 			Evidence: marshalEvidence(t, est.MockEvidence{
 				Target:        rejectedTarget,
