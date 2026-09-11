@@ -5,11 +5,17 @@ package esttest
 
 import (
 	"context"
+	"crypto"
 	"crypto/ecdh"
+	"crypto/ecdsa"
+	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/x509"
+	"crypto/x509/pkix"
 	"encoding/json"
 	"errors"
+	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -17,12 +23,93 @@ import (
 )
 
 const (
+	defaultHost          = "localhost:9444"
+	defaultCN            = "twi-unified-model-client"
+	defaultCACert        = "../deploy/config/local/globalsign-est/certs/ca-certificates.pem"
 	defaultTarget        = "RUP-workload-1"
 	retrieveTargetName   = "RUP-workload-2"
 	rejectedTarget       = "RUP-workload-unknown"
 	credentialTypeX509   = est.CredentialTypeX509
 	credentialTypeBearer = est.CredentialTypePSK
 )
+
+func envOr(key, fallback string) string {
+	if value := os.Getenv(key); value != "" {
+		return value
+	}
+	return fallback
+}
+
+func explicitAnchor(t *testing.T) *x509.CertPool {
+	t.Helper()
+
+	path := envOr("EST_CA_CERT", defaultCACert)
+	pemBytes, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read EST CA certificate %s: %v", path, err)
+	}
+
+	pool := x509.NewCertPool()
+	if !pool.AppendCertsFromPEM(pemBytes) {
+		t.Fatalf("no PEM certificates found in %s", path)
+	}
+
+	return pool
+}
+
+func newClient(anchor *x509.CertPool, cert *x509.Certificate, key crypto.Signer) *est.Client {
+	client := &est.Client{
+		Host:                  envOr("EST_HOST", defaultHost),
+		AdditionalPathSegment: os.Getenv("EST_APS"),
+		ExplicitAnchor:        anchor,
+	}
+
+	if cert != nil {
+		client.Certificates = []*x509.Certificate{cert}
+		client.PrivateKey = key
+	}
+
+	return client
+}
+
+func newCSR(t *testing.T) (*x509.CertificateRequest, *ecdsa.PrivateKey) {
+	t.Helper()
+
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatalf("generate key: %v", err)
+	}
+
+	template := &x509.CertificateRequest{
+		Subject: pkix.Name{CommonName: envOr("EST_CN", defaultCN)},
+	}
+	if sans := os.Getenv("EST_SANS"); sans != "" {
+		template.DNSNames = strings.Split(sans, ",")
+	}
+
+	der, err := x509.CreateCertificateRequest(rand.Reader, template, key)
+	if err != nil {
+		t.Fatalf("create CSR: %v", err)
+	}
+
+	csr, err := x509.ParseCertificateRequest(der)
+	if err != nil {
+		t.Fatalf("parse CSR: %v", err)
+	}
+
+	return csr, key
+}
+
+func verifyChain(t *testing.T, cert *x509.Certificate, anchor *x509.CertPool) {
+	t.Helper()
+
+	if _, err := cert.Verify(x509.VerifyOptions{
+		Roots:     anchor,
+		KeyUsages: []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
+	}); err != nil {
+		t.Errorf("issued certificate does not chain to the local EST CA: %v", err)
+	}
+}
 
 func target() string { return envOr("EST_TARGET", defaultTarget) }
 
