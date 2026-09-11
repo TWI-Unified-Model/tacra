@@ -87,7 +87,8 @@ est_config_is_complete() {
         [[ -f "${component_dir}/certs/ca-key.pem" ]] &&
         [[ -f "${component_dir}/certs/client-ca.pem" ]] &&
         [[ -f "${component_dir}/certs/server-certificates.pem" ]] &&
-        [[ -f "${component_dir}/certs/server-key.pem" ]]
+        [[ -f "${component_dir}/certs/server-key.pem" ]] &&
+        [[ -f "${component_dir}/certs/mock-tee-provider-public-key.pem" ]]
 }
 
 ensure_local_est_config() {

@@ -12,20 +12,23 @@ import (
 	"crypto/rand"
 	"crypto/x509"
 	"crypto/x509/pkix"
-	"encoding/json"
+	"encoding/pem"
 	"errors"
 	"os"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/fxamacker/cbor/v2"
 	"github.com/globalsign/est"
+	"github.com/veraison/go-cose"
 )
 
 const (
 	defaultHost          = "localhost:9444"
 	defaultCN            = "twi-unified-model-client"
 	defaultCACert        = "../deploy/config/local/globalsign-est/certs/ca-certificates.pem"
+	defaultProviderKey   = "../deploy/config/local/mock-tee-provider/key.pem"
 	defaultTarget        = "RUP-workload-1"
 	retrieveTargetName   = "RUP-workload-2"
 	rejectedTarget       = "RUP-workload-unknown"
@@ -127,23 +130,29 @@ func newCEK(t *testing.T) (*ecdh.PrivateKey, []byte) {
 	return key, key.PublicKey().Bytes()
 }
 
-// marshalEvidence encodes mock Evidence as the opaque byte string the protocol
-// carries.
-func marshalEvidence(t *testing.T, ev est.MockEvidence) []byte {
+func mockProviderKey(t *testing.T) *ecdsa.PrivateKey {
 	t.Helper()
 
-	b, err := json.Marshal(ev)
+	path := envOr("EST_PROVIDER_KEY", defaultProviderKey)
+	b, err := os.ReadFile(path)
 	if err != nil {
-		t.Fatalf("marshal evidence: %v", err)
+		t.Fatalf("read mock TEE provider key %s: %v", path, err)
 	}
-
-	return b
+	block, _ := pem.Decode(b)
+	if block == nil || block.Type != "EC PRIVATE KEY" {
+		t.Fatalf("mock TEE provider key %s is not EC PRIVATE KEY PEM", path)
+	}
+	key, err := x509.ParseECPrivateKey(block.Bytes)
+	if err != nil {
+		t.Fatalf("parse mock TEE provider key: %v", err)
+	}
+	return key
 }
 
-func newMockEvidence(t *testing.T, freshnessKind string, handle []byte) est.MockEvidence {
+func newMockEvidence(t *testing.T, freshnessKind string, handle []byte) []byte {
 	t.Helper()
 
-	evidence, err := est.NewMockEvidence(freshnessKind, handle)
+	evidence, err := est.NewMockEvidence(mockProviderKey(t), freshnessKind, handle)
 	if err != nil {
 		t.Fatalf("generate mock TEE evidence: %v", err)
 	}
@@ -151,31 +160,78 @@ func newMockEvidence(t *testing.T, freshnessKind string, handle []byte) est.Mock
 	return evidence
 }
 
+func signMockClaims(t *testing.T, claims *est.MockEATClaims) []byte {
+	t.Helper()
+
+	payload, err := cbor.Marshal(claims)
+	if err != nil {
+		t.Fatalf("encode mock EAT claims: %v", err)
+	}
+	signer, err := cose.NewSigner(cose.AlgorithmES256, mockProviderKey(t))
+	if err != nil {
+		t.Fatalf("create mock COSE signer: %v", err)
+	}
+	token, err := cose.Sign1(rand.Reader, signer, cose.Headers{
+		Protected: cose.ProtectedHeader{
+			cose.HeaderLabelAlgorithm:   cose.AlgorithmES256,
+			cose.HeaderLabelContentType: est.MockEATMediaType,
+		},
+		Unprotected: cose.UnprotectedHeader{
+			cose.HeaderLabelKeyID: []byte(est.MockTEESigningKeyID),
+		},
+	}, payload, nil)
+	if err != nil {
+		t.Fatalf("sign mock COSE evidence: %v", err)
+	}
+	return token
+}
+
 func TestMockTEEEvidence(t *testing.T) {
 	handle := []byte("freshness-handle")
 	evidence := newMockEvidence(t, est.FreshnessPresentNonce, handle)
+	providerKey := mockProviderKey(t)
 
-	if err := est.VerifyMockEvidence(evidence); err != nil {
+	claims, err := est.VerifyMockEvidence(evidence, &providerKey.PublicKey)
+	if err != nil {
 		t.Fatalf("verify mock TEE evidence: %v", err)
 	}
 
-	encoded := marshalEvidence(t, evidence)
-	var fields map[string]json.RawMessage
-	if err := json.Unmarshal(encoded, &fields); err != nil {
-		t.Fatalf("decode mock TEE evidence: %v", err)
+	var message cose.Sign1Message
+	if err := message.UnmarshalCBOR(evidence); err != nil {
+		t.Fatalf("decode COSE Sign1 evidence: %v", err)
 	}
-	for _, field := range []string{
-		"target", "credential_type", "csr", "csr_hash", "cek_pub",
-		"cek_thumbprint", "binding", "profile", "endorsements", "claims",
-	} {
-		if _, ok := fields[field]; ok {
-			t.Errorf("mock TEE evidence contains request field %q", field)
+	var fields map[int64]cbor.RawMessage
+	if err := cbor.Unmarshal(message.Payload, &fields); err != nil {
+		t.Fatalf("decode mock EAT payload: %v", err)
+	}
+	allowedClaims := map[int64]bool{
+		1: true, 2: true, 6: true, 10: true, 256: true, 259: true,
+		262: true, 263: true, 265: true, 267: true, 268: true, 270: true,
+		-70003: true, -70004: true,
+	}
+	for claim := range fields {
+		if !allowedClaims[claim] {
+			t.Errorf("mock EAT contains unexpected claim label %d", claim)
 		}
 	}
 
-	evidence.PCRs["0"][0] ^= 0xff
-	if err := est.VerifyMockEvidence(evidence); err == nil {
-		t.Error("tampered PCR value passed signature verification")
+	tampered := append([]byte(nil), evidence...)
+	tampered[len(tampered)-1] ^= 0xff
+	if _, err := est.VerifyMockEvidence(tampered, &providerKey.PublicKey); err == nil {
+		t.Error("tampered COSE evidence passed signature verification")
+	}
+	untrustedKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatalf("generate untrusted provider key: %v", err)
+	}
+	if _, err := est.VerifyMockEvidence(evidence, &untrustedKey.PublicKey); err == nil {
+		t.Error("evidence passed verification with an untrusted provider key")
+	}
+
+	claims.PCRs[est.MockTEEPlatformPCR][0] ^= 0xff
+	badMeasurements := signMockClaims(t, claims)
+	if _, err := est.VerifyMockEvidence(badMeasurements, &providerKey.PublicKey); err == nil {
+		t.Error("signed unacceptable PCR value passed appraisal")
 	}
 }
 
@@ -262,7 +318,7 @@ func TestAttestedCredentialAcquisition(t *testing.T) {
 			FreshnessKind:  init.FreshnessKind,
 			Handle:         init.Handle,
 			CSR:            csr.Raw,
-			Evidence:       marshalEvidence(t, newMockEvidence(t, init.FreshnessKind, init.Handle)),
+			Evidence:       newMockEvidence(t, init.FreshnessKind, init.Handle),
 			Binding:        est.Binding{Method: est.BindingCSRHash, HashAlg: "SHA-256"},
 		})
 		if err != nil {
@@ -287,7 +343,7 @@ func TestAttestedCredentialAcquisition(t *testing.T) {
 			CredentialType: credentialTypeX509,
 			FreshnessKind:  est.FreshnessAbsentNone,
 			CSR:            csr.Raw,
-			Evidence:       marshalEvidence(t, newMockEvidence(t, est.FreshnessAbsentNone, nil)),
+			Evidence:       newMockEvidence(t, est.FreshnessAbsentNone, nil),
 			Binding:        est.Binding{Method: est.BindingCSRHash, HashAlg: "SHA-256"},
 		})
 		if err != nil {
@@ -312,7 +368,7 @@ func TestAttestedCredentialAcquisition(t *testing.T) {
 				FreshnessKind:  init.FreshnessKind,
 				Handle:         init.Handle,
 				CSR:            csr.Raw,
-				Evidence:       marshalEvidence(t, newMockEvidence(t, init.FreshnessKind, init.Handle)),
+				Evidence:       newMockEvidence(t, init.FreshnessKind, init.Handle),
 				Binding:        est.Binding{Method: est.BindingCSRHash, HashAlg: "SHA-256"},
 			})
 			return err
@@ -338,7 +394,7 @@ func TestAttestedCredentialAcquisition(t *testing.T) {
 			FreshnessKind:  init.FreshnessKind,
 			Handle:         init.Handle,
 			CSR:            csr.Raw,
-			Evidence:       marshalEvidence(t, newMockEvidence(t, init.FreshnessKind, []byte("wrong-handle"))),
+			Evidence:       newMockEvidence(t, init.FreshnessKind, []byte("wrong-handle")),
 			Binding:        est.Binding{Method: est.BindingCSRHash, HashAlg: "SHA-256"},
 		})
 		assertStatus(t, err, 403)
@@ -354,7 +410,13 @@ func TestAttestedCredentialAcquisition(t *testing.T) {
 
 		csr, _ := newCSR(t)
 		evidence := newMockEvidence(t, init.FreshnessKind, init.Handle)
-		evidence.PCRs[est.MockTEEWorkloadPCR][0] ^= 0xff
+		providerKey := mockProviderKey(t)
+		claims, err := est.VerifyMockEvidence(evidence, &providerKey.PublicKey)
+		if err != nil {
+			t.Fatalf("verify generated evidence: %v", err)
+		}
+		claims.PCRs[est.MockTEEWorkloadPCR][0] ^= 0xff
+		evidence = signMockClaims(t, claims)
 
 		_, err = client.EnrollCredential(ctx, &est.AttestedEnrollmentRequest{
 			Target:         target(),
@@ -362,7 +424,7 @@ func TestAttestedCredentialAcquisition(t *testing.T) {
 			FreshnessKind:  init.FreshnessKind,
 			Handle:         init.Handle,
 			CSR:            csr.Raw,
-			Evidence:       marshalEvidence(t, evidence),
+			Evidence:       evidence,
 			Binding:        est.Binding{Method: est.BindingCSRHash, HashAlg: "SHA-256"},
 		})
 		assertStatus(t, err, 403)
@@ -412,7 +474,7 @@ func TestAttestedCredentialAcquisition(t *testing.T) {
 			FreshnessKind:  init.FreshnessKind,
 			Handle:         init.Handle,
 			CSR:            csr.Raw,
-			Evidence:       marshalEvidence(t, newMockEvidence(t, init.FreshnessKind, init.Handle)),
+			Evidence:       newMockEvidence(t, init.FreshnessKind, init.Handle),
 			Binding:        est.Binding{Method: est.BindingCSRHash, HashAlg: "SHA-256"},
 		})
 		assertStatus(t, err, 403)
@@ -432,7 +494,7 @@ func TestAttestedCredentialAcquisition(t *testing.T) {
 			FreshnessKind:  init.FreshnessKind,
 			Handle:         init.Handle,
 			CEKPub:         cekPub,
-			Evidence:       marshalEvidence(t, newMockEvidence(t, init.FreshnessKind, init.Handle)),
+			Evidence:       newMockEvidence(t, init.FreshnessKind, init.Handle),
 			Binding:        est.Binding{Method: est.BindingCEKThumbprint, HashAlg: "SHA-256"},
 		})
 		if err != nil {
@@ -534,7 +596,7 @@ func TestAttestedCredentialAcquisition(t *testing.T) {
 			CredentialType: credentialTypeBearer,
 			FreshnessKind:  est.FreshnessAbsentNone,
 			CEKPub:         cekPub,
-			Evidence:       marshalEvidence(t, newMockEvidence(t, est.FreshnessAbsentNone, nil)),
+			Evidence:       newMockEvidence(t, est.FreshnessAbsentNone, nil),
 			Binding:        est.Binding{Method: est.BindingCEKThumbprint, HashAlg: "SHA-256"},
 		})
 		assertStatus(t, err, 403)

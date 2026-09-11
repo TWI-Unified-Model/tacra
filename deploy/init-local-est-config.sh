@@ -4,6 +4,7 @@ set -euo pipefail
 readonly SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 readonly CONFIG_DIR="${DEPLOY_CONFIG_DIR:-${SCRIPT_DIR}/config/local}/globalsign-est"
 readonly CERT_DIR="${CONFIG_DIR}/certs"
+readonly PROVIDER_DIR="$(dirname -- "${CONFIG_DIR}")/mock-tee-provider"
 
 if [[ -e "${CONFIG_DIR}/estserver.json" ]]; then
     printf 'Local EST configuration already exists: %s\n' "${CONFIG_DIR}/estserver.json" >&2
@@ -16,7 +17,7 @@ command -v openssl >/dev/null 2>&1 || {
 }
 
 umask 077
-mkdir -p "${CERT_DIR}"
+mkdir -p "${CERT_DIR}" "${PROVIDER_DIR}"
 
 openssl ecparam -name prime256v1 -genkey -noout -out "${CERT_DIR}/ca-key.pem"
 openssl req -x509 -new -sha256 -days 30 \
@@ -42,6 +43,12 @@ openssl x509 -req -sha256 -days 30 \
 rm -f "${CERT_DIR}/server.csr" "${CERT_DIR}/server.ext" "${CERT_DIR}/ca-certificates.srl"
 
 cp "${CERT_DIR}/ca-certificates.pem" "${CERT_DIR}/client-ca.pem"
+
+openssl ecparam -name prime256v1 -genkey -noout \
+  -out "${PROVIDER_DIR}/key.pem"
+openssl ec -in "${PROVIDER_DIR}/key.pem" -pubout \
+  -out "${CERT_DIR}/mock-tee-provider-public-key.pem"
+
 healthcheck_password="$(openssl rand -hex 24)"
 
 cat > "${CONFIG_DIR}/estserver.json" <<EOF
@@ -58,6 +65,7 @@ cat > "${CONFIG_DIR}/estserver.json" <<EOF
   },
   "allowed_hosts": ["localhost", "127.0.0.1"],
   "attest": {
+	"trusted_provider_public_key": "/etc/est/certs/mock-tee-provider-public-key.pem",
     "targets": [
       { "name": "RUP-workload-1", "mechanism": "enroll" },
       { "name": "RUP-workload-2", "mechanism": "retrieve" }
@@ -69,7 +77,8 @@ cat > "${CONFIG_DIR}/estserver.json" <<EOF
 }
 EOF
 
-chmod 600 "${CERT_DIR}"/*-key.pem "${CONFIG_DIR}/estserver.json"
-chmod 644 "${CERT_DIR}"/*-certificates.pem "${CERT_DIR}/client-ca.pem"
+chmod 600 "${CERT_DIR}"/*-key.pem "${PROVIDER_DIR}/key.pem" "${CONFIG_DIR}/estserver.json"
+chmod 644 "${CERT_DIR}"/*-certificates.pem "${CERT_DIR}/client-ca.pem" \
+  "${CERT_DIR}/mock-tee-provider-public-key.pem"
 
 printf 'Created local EST configuration in %s\n' "${CONFIG_DIR}"

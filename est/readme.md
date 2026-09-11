@@ -143,9 +143,11 @@ target is rejected with `403`.
 ## Attested Enrollment Mode
 
 The Attester generates a Content Signing Key and CSR separately from signed
-mock TEE Evidence. The Evidence carries provider and signing-key identifiers,
-TEE type, PCR measurements, and the Freshness kind and Handle returned by
-attest-initiate. `AttestedEnrollmentRequest` carries `target`,
+mock TEE Evidence. Evidence is a CBOR-encoded, tagged COSE Sign1 EAT using
+ES256. Its protected headers carry `alg=ES256` and
+`content-type=application/eat+cwt`; its unprotected `kid` identifies the mock
+provider key. The EAT carries standard TEE claims, PCR measurements, and the
+Freshness kind and Handle returned by attest-initiate. `AttestedEnrollmentRequest` carries `target`,
 `credential_type`, `freshness_kind`, `handle`, `csr`, `evidence` and `binding`.
 
 Server processing follows the draft ordering: validate syntax and media type,
@@ -153,11 +155,31 @@ correlate the Handle, forward Evidence to the Verifier, then forward the CSR
 and Attestation Results to the Credential Authority, which verifies proof of
 possession and authorises issuance.
 
-The mock Verifier validates the provider's Ed25519 signature, appraises the PCR
-values, and compares the signed Freshness with the request and the preceding
-attest-initiate result. The CSR remains a request parameter, and proof of
-possession is verified separately by checking its signature. The `binding`
-object remains request metadata; this POC does not place CSR data in Evidence.
+The mock Verifier validates the provider's P-256 public-key trust anchor and
+COSE signature, appraises the PCR values, and compares the signed Freshness
+with the request and the preceding attest-initiate result. The CSR remains a
+request parameter, and proof of possession is verified separately by checking
+its signature. The `binding` object remains request metadata; this POC does not
+place CSR data in Evidence.
+
+### Mock EAT profile
+
+The profile URI is
+`https://twi.confidentialcomputing.io/tacra-est-mock/1.0.0`, advertised as:
+
+```text
+application/eat+cwt; eat_profile="https://twi.confidentialcomputing.io/tacra-est-mock/1.0.0"
+```
+
+The payload uses standard EAT/CWT labels for `iss`, `sub`, `iat`, `nonce`,
+`ueid`, `hwmodel`, `oemboot`, `dbgstat`, `eat_profile`, `bootcount`, `bootseed`
+and `swname`. Private profile label `-70003` carries the PCR map and `-70004`
+carries `freshness_kind`. For `present-nonce`, EAT `nonce` contains the exact
+Handle from `attest-initiate`; for `absent-none`, `nonce` is absent.
+
+Target, credential type, CSR, CEK public key, binding, profile request and
+endorsements are never EAT claims. They remain method parameters in the EST
+request envelope.
 
 ## Attested Retrieval Mode
 
@@ -314,6 +336,7 @@ target:
 
 ```json
 "attest": {
+  "trusted_provider_public_key": "/etc/est/certs/mock-tee-provider-public-key.pem",
   "targets": [
     { "name": "RUP-workload-1", "mechanism": "enroll" },
     { "name": "RUP-workload-2", "mechanism": "retrieve" }
@@ -323,6 +346,12 @@ target:
 
 Each entry may also carry `credential_types` to restrict which types the CAS
 will provision for that target.
+
+The local generator creates a P-256 provider key pair. The Attester test reads
+the private key from the sibling `local/mock-tee-provider/key.pem` directory;
+the EST server mount receives only
+`certs/mock-tee-provider-public-key.pem`. If the `attest` section is absent,
+attestation resources return `501 Not Implemented`.
 
 It is emitted by [../deploy/init-local-est-config.sh](../deploy/init-local-est-config.sh)
 into `twium/deploy/config/local/globalsign-est/estserver.json`. If the section
@@ -386,12 +415,13 @@ positive cases to fail with `403`.
 ## Known gaps
 
 Background Check mode is not implemented; only Passport is. Evidence is a
-mock JSON TEE report signed by a deterministic, non-production Ed25519 provider
-key and appraised against fixed PCR values; it has no endorsements or real TEE
-trust chain. `present-epoch`,
+non-production CBOR COSE Sign1 EAT signed with a locally generated P-256 mock
+provider key and appraised against fixed PCR values; it has no endorsements or
+real TEE trust chain. `present-epoch`,
 `absent-epoch` and `absent-timestamp` are absent, so the epoch-moved retry path
 is untested. The Handle store is in-memory and per-process, so it does not
-survive a container restart or scale horizontally. Media types are the generic
-`application/json` rather than the to-be-registered types the draft anticipates,
-and request bodies remain capped at 64 KB by the existing EST middleware, which
-is ample for mock Evidence but may not suit real attestation quotes.
+survive a container restart or scale horizontally. Request envelopes still use
+`application/json`; Evidence itself is advertised as the profile-specific
+`application/eat+cwt` media type. Request bodies remain capped at 64 KB by the
+existing EST middleware, which is ample for mock Evidence but may not suit real
+attestation quotes.
