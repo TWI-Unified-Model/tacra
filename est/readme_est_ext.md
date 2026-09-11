@@ -83,7 +83,8 @@ sequenceDiagram
     S-->>C: freshness_kind, handle, mode
     C-->>A: forward response
     A->>A: generate CSK+CSR (enroll) or CEK (retrieve)
-    A->>A: build Evidence bound to Handle and CSR/CEKpub
+    A->>A: build signed TEE Evidence with PCRs and Handle
+    A->>A: keep CSR or CEKpub as a method parameter
     C->>S: POST attest-enroll | attest-retrieve
     S->>V: Evidence
     V-->>S: Attestation Results
@@ -141,26 +142,29 @@ target is rejected with `403`.
 
 ## Attested Enrollment Mode
 
-The Attester generates a Content Signing Key and CSR, and Evidence carrying
-`H(csr_der)`. `AttestedEnrollmentRequest` carries `target`, `credential_type`,
-`freshness_kind`, `handle`, `csr`, `evidence` and `binding`.
+The Attester generates a Content Signing Key and CSR separately from signed
+mock TEE Evidence. The Evidence carries provider and signing-key identifiers,
+TEE type, PCR measurements, and the Freshness kind and Handle returned by
+attest-initiate. `AttestedEnrollmentRequest` carries `target`,
+`credential_type`, `freshness_kind`, `handle`, `csr`, `evidence` and `binding`.
 
 Server processing follows the draft ordering: validate syntax and media type,
 correlate the Handle, forward Evidence to the Verifier, then forward the CSR
 and Attestation Results to the Credential Authority, which verifies proof of
 possession and authorises issuance.
 
-Two bindings are enforced. **Evidence-to-CSR** means Evidence must contain
-`H(csr_der)` matching the submitted CSR, so a different CSR cannot be
-substituted. **Evidence-to-Freshness** means Evidence must carry the Handle
-returned by attest-initiate. Proof of possession is verified separately by
-checking the CSR signature.
+The mock Verifier validates the provider's Ed25519 signature, appraises the PCR
+values, and compares the signed Freshness with the request and the preceding
+attest-initiate result. The CSR remains a request parameter, and proof of
+possession is verified separately by checking its signature. The `binding`
+object remains request metadata; this POC does not place CSR data in Evidence.
 
 ## Attested Retrieval Mode
 
-The Attester generates a Content Encryption Key (ECDH P-256) and Evidence
-carrying `CEKpub` plus its SHA-256 thumbprint. The mock Secret Vault maps
-Attestation Results onto a credential group:
+The Attester generates a Content Encryption Key (ECDH P-256). `CEKpub` is a
+field of `AttestedRetrievalRequest`, not part of Evidence. The signed mock TEE
+Evidence has the same TEE and Freshness-only shape used for enrollment. The
+mock Secret Vault maps Attestation Results onto a credential group:
 
 ```text
 group_id = SHA-256(attestation_subject || profile || policy_version)
@@ -296,7 +300,7 @@ the proto. It is left as-is here since the generated bindings depend on it.
 | Status | Condition |
 | --- | --- |
 | `400` | Malformed envelope, missing CSR, unsupported freshness kind or binding method |
-| `403` | Target not whitelisted, attestation failed, Evidence not bound to Handle/CSR/CEKpub |
+| `403` | Target not whitelisted, provider signature or PCR appraisal failed, Evidence not bound to Handle |
 | `409` | Handle replay, expiry, or unknown Handle |
 | `415` | Content type is not `application/json` |
 | `501` | Backing CA does not implement `est.AttestationCA` |
@@ -361,10 +365,12 @@ with `403`.
 | `Initiate/RetrieveMode` | `mechanism=retrieve`, `cek-thumbprint` binding, advertised CEK suite |
 | `Initiate/RejectedTarget` | Non-whitelisted target rejected with `403` |
 | `Initiate/MechanismIndependentOfCredentialType` | Four credential types across both targets always yield the target's mechanism |
+| `TestMockTEEEvidence` | Signed TEE Evidence verifies, excludes request fields, and rejects a tampered PCR |
 | `Enroll/PresentNonce` | Certificate issued, CN preserved, chains to the local EST CA |
 | `Enroll/AbsentNone` | Leg two succeeds with no prior server contact |
 | `Enroll/ReplayedHandle` | Second use of a Handle rejected with `409` |
-| `Enroll/EvidenceNotBoundToCSR` | Evidence digesting a different CSR rejected with `403` |
+| `Enroll/EvidenceFreshnessMismatch` | Correctly signed Evidence carrying a different Handle rejected with `403` |
+| `Enroll/TamperedMeasurement` | Evidence with a modified PCR rejected with `403` |
 | `Enroll/WrongMechanismForTarget` | Enrolling against a retrieve target rejected with `403` |
 | `Retrieve/PresentNonce` | Bundle decrypts with `CEKpri`; cert chains; key parses |
 | `Retrieve/ReplicaStability` | Two Attesters, same subject, same `group_id` and credential |
@@ -376,9 +382,10 @@ continues to pass, confirming the extensions are additive.
 
 ## Known gaps
 
-Background Check mode is not implemented; only Passport is. Evidence is an
-unsigned JSON claims blob validated structurally by the mock Verifier, with no
-signature, endorsements or real appraisal policy. `present-epoch`,
+Background Check mode is not implemented; only Passport is. Evidence is a
+mock JSON TEE report signed by a deterministic, non-production Ed25519 provider
+key and appraised against fixed PCR values; it has no endorsements or real TEE
+trust chain. `present-epoch`,
 `absent-epoch` and `absent-timestamp` are absent, so the epoch-moved retry path
 is untested. The Handle store is in-memory and per-process, so it does not
 survive a container restart or scale horizontally. Media types are the generic

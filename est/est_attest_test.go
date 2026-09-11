@@ -22,7 +22,6 @@ const (
 	rejectedTarget       = "RUP-workload-unknown"
 	credentialTypeX509   = est.CredentialTypeX509
 	credentialTypeBearer = est.CredentialTypePSK
-	workloadClaim        = "twi-poc-workload"
 )
 
 func target() string { return envOr("EST_TARGET", defaultTarget) }
@@ -46,16 +45,51 @@ func newCEK(t *testing.T) (*ecdh.PrivateKey, []byte) {
 func marshalEvidence(t *testing.T, ev est.MockEvidence) []byte {
 	t.Helper()
 
-	if ev.Claims == nil {
-		ev.Claims = map[string]string{"workload": workloadClaim}
-	}
-
 	b, err := json.Marshal(ev)
 	if err != nil {
 		t.Fatalf("marshal evidence: %v", err)
 	}
 
 	return b
+}
+
+func newMockEvidence(t *testing.T, freshnessKind string, handle []byte) est.MockEvidence {
+	t.Helper()
+
+	evidence, err := est.NewMockEvidence(freshnessKind, handle)
+	if err != nil {
+		t.Fatalf("generate mock TEE evidence: %v", err)
+	}
+
+	return evidence
+}
+
+func TestMockTEEEvidence(t *testing.T) {
+	handle := []byte("freshness-handle")
+	evidence := newMockEvidence(t, est.FreshnessPresentNonce, handle)
+
+	if err := est.VerifyMockEvidence(evidence); err != nil {
+		t.Fatalf("verify mock TEE evidence: %v", err)
+	}
+
+	encoded := marshalEvidence(t, evidence)
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(encoded, &fields); err != nil {
+		t.Fatalf("decode mock TEE evidence: %v", err)
+	}
+	for _, field := range []string{
+		"target", "credential_type", "csr", "csr_hash", "cek_pub",
+		"cek_thumbprint", "binding", "profile", "endorsements", "claims",
+	} {
+		if _, ok := fields[field]; ok {
+			t.Errorf("mock TEE evidence contains request field %q", field)
+		}
+	}
+
+	evidence.PCRs["0"][0] ^= 0xff
+	if err := est.VerifyMockEvidence(evidence); err == nil {
+		t.Error("tampered PCR value passed signature verification")
+	}
 }
 
 // assertStatus asserts that err carries the expected HTTP status code.
@@ -141,13 +175,8 @@ func TestAttestedCredentialAcquisition(t *testing.T) {
 			FreshnessKind:  init.FreshnessKind,
 			Handle:         init.Handle,
 			CSR:            csr.Raw,
-			Evidence: marshalEvidence(t, est.MockEvidence{
-				Target:        target(),
-				FreshnessKind: init.FreshnessKind,
-				Handle:        init.Handle,
-				CSRHash:       est.CSRHash(csr.Raw),
-			}),
-			Binding: est.Binding{Method: est.BindingCSRHash, HashAlg: "SHA-256"},
+			Evidence:       marshalEvidence(t, newMockEvidence(t, init.FreshnessKind, init.Handle)),
+			Binding:        est.Binding{Method: est.BindingCSRHash, HashAlg: "SHA-256"},
 		})
 		if err != nil {
 			t.Fatalf("attest-enroll: %v", err)
@@ -171,12 +200,8 @@ func TestAttestedCredentialAcquisition(t *testing.T) {
 			CredentialType: credentialTypeX509,
 			FreshnessKind:  est.FreshnessAbsentNone,
 			CSR:            csr.Raw,
-			Evidence: marshalEvidence(t, est.MockEvidence{
-				Target:        target(),
-				FreshnessKind: est.FreshnessAbsentNone,
-				CSRHash:       est.CSRHash(csr.Raw),
-			}),
-			Binding: est.Binding{Method: est.BindingCSRHash, HashAlg: "SHA-256"},
+			Evidence:       marshalEvidence(t, newMockEvidence(t, est.FreshnessAbsentNone, nil)),
+			Binding:        est.Binding{Method: est.BindingCSRHash, HashAlg: "SHA-256"},
 		})
 		if err != nil {
 			t.Fatalf("attest-enroll: %v", err)
@@ -200,13 +225,8 @@ func TestAttestedCredentialAcquisition(t *testing.T) {
 				FreshnessKind:  init.FreshnessKind,
 				Handle:         init.Handle,
 				CSR:            csr.Raw,
-				Evidence: marshalEvidence(t, est.MockEvidence{
-					Target:        target(),
-					FreshnessKind: init.FreshnessKind,
-					Handle:        init.Handle,
-					CSRHash:       est.CSRHash(csr.Raw),
-				}),
-				Binding: est.Binding{Method: est.BindingCSRHash, HashAlg: "SHA-256"},
+				Evidence:       marshalEvidence(t, newMockEvidence(t, init.FreshnessKind, init.Handle)),
+				Binding:        est.Binding{Method: est.BindingCSRHash, HashAlg: "SHA-256"},
 			})
 			return err
 		}
@@ -218,16 +238,36 @@ func TestAttestedCredentialAcquisition(t *testing.T) {
 		assertStatus(t, enroll(), 409)
 	})
 
-	// Evidence carrying a digest of a different CSR must be rejected, so a CSR
-	// cannot be substituted.
-	t.Run("Enroll/EvidenceNotBoundToCSR", func(t *testing.T) {
+	t.Run("Enroll/EvidenceFreshnessMismatch", func(t *testing.T) {
 		init, err := client.InitiateRemoteAttestation(ctx, target(), credentialTypeX509)
 		if err != nil {
 			t.Fatalf("attest-initiate: %v", err)
 		}
 
 		csr, _ := newCSR(t)
-		other, _ := newCSR(t)
+		_, err = client.EnrollCredential(ctx, &est.AttestedEnrollmentRequest{
+			Target:         target(),
+			CredentialType: credentialTypeX509,
+			FreshnessKind:  init.FreshnessKind,
+			Handle:         init.Handle,
+			CSR:            csr.Raw,
+			Evidence:       marshalEvidence(t, newMockEvidence(t, init.FreshnessKind, []byte("wrong-handle"))),
+			Binding:        est.Binding{Method: est.BindingCSRHash, HashAlg: "SHA-256"},
+		})
+		assertStatus(t, err, 403)
+	})
+
+	// The Verifier rejects a PCR value changed after the mock TEE provider
+	// signed the evidence.
+	t.Run("Enroll/TamperedMeasurement", func(t *testing.T) {
+		init, err := client.InitiateRemoteAttestation(ctx, target(), credentialTypeX509)
+		if err != nil {
+			t.Fatalf("attest-initiate: %v", err)
+		}
+
+		csr, _ := newCSR(t)
+		evidence := newMockEvidence(t, init.FreshnessKind, init.Handle)
+		evidence.PCRs[est.MockTEEWorkloadPCR][0] ^= 0xff
 
 		_, err = client.EnrollCredential(ctx, &est.AttestedEnrollmentRequest{
 			Target:         target(),
@@ -235,13 +275,8 @@ func TestAttestedCredentialAcquisition(t *testing.T) {
 			FreshnessKind:  init.FreshnessKind,
 			Handle:         init.Handle,
 			CSR:            csr.Raw,
-			Evidence: marshalEvidence(t, est.MockEvidence{
-				Target:        target(),
-				FreshnessKind: init.FreshnessKind,
-				Handle:        init.Handle,
-				CSRHash:       est.CSRHash(other.Raw),
-			}),
-			Binding: est.Binding{Method: est.BindingCSRHash, HashAlg: "SHA-256"},
+			Evidence:       marshalEvidence(t, evidence),
+			Binding:        est.Binding{Method: est.BindingCSRHash, HashAlg: "SHA-256"},
 		})
 		assertStatus(t, err, 403)
 	})
@@ -290,13 +325,8 @@ func TestAttestedCredentialAcquisition(t *testing.T) {
 			FreshnessKind:  init.FreshnessKind,
 			Handle:         init.Handle,
 			CSR:            csr.Raw,
-			Evidence: marshalEvidence(t, est.MockEvidence{
-				Target:        retrieveTarget(),
-				FreshnessKind: init.FreshnessKind,
-				Handle:        init.Handle,
-				CSRHash:       est.CSRHash(csr.Raw),
-			}),
-			Binding: est.Binding{Method: est.BindingCSRHash, HashAlg: "SHA-256"},
+			Evidence:       marshalEvidence(t, newMockEvidence(t, init.FreshnessKind, init.Handle)),
+			Binding:        est.Binding{Method: est.BindingCSRHash, HashAlg: "SHA-256"},
 		})
 		assertStatus(t, err, 403)
 	})
@@ -314,14 +344,9 @@ func TestAttestedCredentialAcquisition(t *testing.T) {
 			CredentialType: credentialTypeBearer,
 			FreshnessKind:  init.FreshnessKind,
 			Handle:         init.Handle,
-			Evidence: marshalEvidence(t, est.MockEvidence{
-				Target:        retrieveTarget(),
-				FreshnessKind: init.FreshnessKind,
-				Handle:        init.Handle,
-				CEKPub:        cekPub,
-				CEKThumbprint: est.CEKThumbprint(cekPub),
-			}),
-			Binding: est.Binding{Method: est.BindingCEKThumbprint, HashAlg: "SHA-256"},
+			CEKPub:         cekPub,
+			Evidence:       marshalEvidence(t, newMockEvidence(t, init.FreshnessKind, init.Handle)),
+			Binding:        est.Binding{Method: est.BindingCEKThumbprint, HashAlg: "SHA-256"},
 		})
 		if err != nil {
 			t.Fatalf("attest-retrieve: %v", err)
@@ -421,13 +446,9 @@ func TestAttestedCredentialAcquisition(t *testing.T) {
 			Target:         rejectedTarget,
 			CredentialType: credentialTypeBearer,
 			FreshnessKind:  est.FreshnessAbsentNone,
-			Evidence: marshalEvidence(t, est.MockEvidence{
-				Target:        rejectedTarget,
-				FreshnessKind: est.FreshnessAbsentNone,
-				CEKPub:        cekPub,
-				CEKThumbprint: est.CEKThumbprint(cekPub),
-			}),
-			Binding: est.Binding{Method: est.BindingCEKThumbprint, HashAlg: "SHA-256"},
+			CEKPub:         cekPub,
+			Evidence:       marshalEvidence(t, newMockEvidence(t, est.FreshnessAbsentNone, nil)),
+			Binding:        est.Binding{Method: est.BindingCEKThumbprint, HashAlg: "SHA-256"},
 		})
 		assertStatus(t, err, 403)
 	})
