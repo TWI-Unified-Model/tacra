@@ -45,25 +45,6 @@ All exchanges use HTTPS with server authentication, as RFC 7030 requires.
 Envelopes are JSON, satisfying the draft requirement to support at least one of
 CBOR or JSON. Evidence and Endorsements are opaque byte strings.
 
-### Deviation: target conveyance on attest-initiate
-
-The EST extension draft specifies attest-initiate as "a GET with no body and no
-query parameters". TACRA, however, defines
-`Initiate-Credential-Acquisition(Target, Credential Type)` and requires the CAS
-to validate "that the indicated Target name and Credential Type are supported".
-
-These cannot both hold. The server must know the target in order to whitelist
-`RUP-workload-1` and to decide whether the target is acquired by enrollment or
-retrieval. This POC therefore conveys them as query parameters:
-
-```text
-GET /.well-known/est/attest-initiate?target=RUP-workload-1&credential_type=x509
-```
-
-This is a deliberate, documented deviation from the draft text. The draft
-carries `TODO: validate everything below` over most of these structures, so the
-conflict is expected to be resolved upstream.
-
 ## Two-leg flow
 
 Both modes use two legs. Leg one obtains Freshness; leg two submits Evidence.
@@ -316,7 +297,7 @@ the type is carried and validated but not yet honoured in the payload.
 The CAAPI `InitiateCredentialAcquistionRequest` message name contains a typo in
 the proto. It is left as-is here since the generated bindings depend on it.
 
-### Error mapping
+### Error mapping 
 
 | Status | Condition |
 | --- | --- |
@@ -326,8 +307,7 @@ the proto. It is left as-is here since the generated bindings depend on it.
 | `415` | Content type is not `application/json` |
 | `501` | Backing CA does not implement `est.AttestationCA` |
 
-Error bodies carry no attestation detail. `501` is a deviation from the draft's
-status list, which has no code for an unsupported backing CA.
+Error bodies carry no attestation detail. 
 
 ## Configuration
 
