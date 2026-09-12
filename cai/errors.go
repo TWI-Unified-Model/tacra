@@ -15,7 +15,7 @@ var (
 	ErrInvalidTarget         = errors.New("cai: invalid target")
 	ErrInvalidCredentialType = errors.New("cai: invalid credential type")
 	ErrInvalidChallenge      = errors.New("cai: verifier challenge must be 8-64 bytes")
-	ErrUnsupportedMechanism  = errors.New("cai: unsupported credential acquisition mechanism")
+	ErrUnsupportedMode       = errors.New("cai: unsupported credential acquisition mode")
 	ErrEmptyCredential       = errors.New("cai: CAS returned an empty credential")
 	ErrUnwrap                = errors.New("cai: failed to unwrap retrieved credential")
 )

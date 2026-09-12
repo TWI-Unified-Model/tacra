@@ -61,7 +61,7 @@ func main() {
 	fmt.Printf("Acquiring X.509 client certificate for %s via CAI sidecar...\n", serverURL.String())
 	x509Resp, err := caiClient.AcquireCredential(ctx, &caiv1.AcquireCredentialRequest{
 		Target:         serverURL.String(),
-		CredentialType: caapiv1.CredentialType_POP_CREDENTIAL_TYPE_X509,
+		CredentialType: caapiv1.CredentialType_CREDENTIAL_TYPE_X509,
 	})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "AcquireCredential X509: %v\n", err)
@@ -77,7 +77,7 @@ func main() {
 	fmt.Printf("Acquiring JWT for %s via CAI sidecar...\n", serverURL.String())
 	jwtResp, err := caiClient.AcquireCredential(ctx, &caiv1.AcquireCredentialRequest{
 		Target:         serverURL.String(),
-		CredentialType: caapiv1.CredentialType_BT_CREDENTIAL_TYPE_JWT,
+		CredentialType: caapiv1.CredentialType_CREDENTIAL_TYPE_JWT,
 	})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "AcquireCredential JWT: %v\n", err)

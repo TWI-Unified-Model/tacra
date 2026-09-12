@@ -3,24 +3,24 @@ syntax = "proto3";
 package caapi.v1;
 option go_package = "github.com/TWI-Unified-Model/twium/gen/go/caapi/v1;caapiv1";
 
-enum CredentialAcquisitionMechanism {
-    OPERATION_UNSPECIFIED = 0;
-    OPERATION_ENROLL = 1;
-    OPERATION_RETRIEVE = 2;
+enum CredentialAcquisitionMode {
+    ACQUISITION_UNSPECIFIED = 0;
+    ACQUISITION_ENROLL = 1;
+    ACQUISITION_RETRIEVE = 2;
 }
 
 enum CredentialType {
     CREDENTIAL_TYPE_UNSPECIFIED = 0;
 
     // Bearer token credential types
-    BT_CREDENTIAL_TYPE_JWT = 1; // JSON Web Token
-    BT_CREDENTIAL_TYPE_PSK = 2; // Pre-shared Key
-    BT_CREDENTIAL_TYPE_API_KEY = 3; // API Key
+    CREDENTIAL_TYPE_JWT = 1; // JSON Web Token
+    CREDENTIAL_TYPE_PSK = 2; // Pre-shared Key
+    CREDENTIAL_TYPE_API_KEY = 3; // API Key
 
     // Proof-of-possession credential types
-    POP_CREDENTIAL_TYPE_X509 = 1001; // PKIX Certificate
-    POP_CREDENTIAL_TYPE_WIC = 1002; // WIMSE Workload Identity Certificate
-    POP_CREDENTIAL_TYPE_WIT = 1003; // WIMSE Workload Identity Token
+    CREDENTIAL_TYPE_X509 = 1001; // PKIX Certificate
+    CREDENTIAL_TYPE_WIC  = 1002; // WIMSE Workload Identity Certificate
+    CREDENTIAL_TYPE_WIT = 1003; // WIMSE Workload Identity Token
 }
 
 message InitiateCredentialAcquistionRequest {
@@ -34,7 +34,7 @@ message InitiateCredentialAcquistionRequest {
 message InitiateCredentialAcquisitionResponse {
     // Which credential acquisition mechanism
     // does the CAS support for this endpoint?
-    CredentialAcquisitionMechanism mechanism = 1;
+    CredentialAcquisitionMode mode = 1;
 
     // Optional challenge
     optional bytes challenge = 2;
@@ -47,11 +47,14 @@ message EnrollCredentialRequest {
 
     CredentialType credential_type = 2;
 
+    // Optional credential hint
+    optional string credential_hint = 3;
+
     // Workload Evidence including CSKpub
-    bytes evidence = 3;
+    bytes evidence = 4;
 
     // CSR for CSKpub
-    bytes csr = 4;
+    bytes csr = 5;
 }
 
 message EnrollCredentialResponse {
@@ -64,8 +67,13 @@ message RetrieveCredentialRequest {
 
     CredentialType credential_type = 2;
 
+    // Optional credential hint
+    optional string credential_hint = 3;
+
     // Workload Evidence including CEKpub
-    bytes evidence = 3;
+    bytes evidence = 4;
+
+    // TODO: add CEKpub or is it implicit in Evidence?
 }
 
 message RetrieveCredentialResponse {

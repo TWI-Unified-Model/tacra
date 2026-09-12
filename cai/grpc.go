@@ -28,9 +28,9 @@ func (g *GRPC) AcquireCredential(ctx context.Context, in *caiv1.AcquireCredentia
 		return nil, status.Errorf(codes.Unknown, "%v", err)
 	}
 	resp := &caiv1.AcquireCredentialResponse{
-		Type:      cred.Type,
-		Mechanism: cred.Mechanism,
-		Document:  cred.Document,
+		Type:     cred.Type,
+		Mode:     cred.Mode,
+		Document: cred.Document,
 	}
 	if cred.PrivateKey != nil {
 		pkcs8, err := x509.MarshalPKCS8PrivateKey(cred.PrivateKey)

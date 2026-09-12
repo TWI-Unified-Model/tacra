@@ -63,11 +63,11 @@ func TestAcquireCredentialRetrieve(t *testing.T) {
 
 	fake := &fakeCAAPI{
 		init: func(_ context.Context, in *caapiv1.InitiateCredentialAcquistionRequest) (*caapiv1.InitiateCredentialAcquisitionResponse, error) {
-			if in.GetTarget() != "https://api.example" || in.GetCredentialType() != caapiv1.CredentialType_BT_CREDENTIAL_TYPE_API_KEY {
+			if in.GetTarget() != "https://api.example" || in.GetCredentialType() != caapiv1.CredentialType_CREDENTIAL_TYPE_API_KEY {
 				t.Fatalf("init args: %+v", in)
 			}
 			return &caapiv1.InitiateCredentialAcquisitionResponse{
-				Mechanism: caapiv1.CredentialAcquisitionMechanism_OPERATION_RETRIEVE,
+				Mode:      caapiv1.CredentialAcquisitionMode_ACQUISITION_RETRIEVE,
 				Challenge: challenge,
 			}, nil
 		},
@@ -99,8 +99,8 @@ func TestAcquireCredentialRetrieve(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cred.Mechanism != MechanismRetrieve {
-		t.Fatalf("mechanism %s", cred.Mechanism)
+	if cred.Mode != ModeRetrieve {
+		t.Fatalf("mode %s", cred.Mode)
 	}
 	if !bytes.Equal(cred.Document, secret) {
 		t.Fatalf("document %q", cred.Document)
@@ -118,7 +118,7 @@ func TestAcquireCredentialEnroll(t *testing.T) {
 	fake := &fakeCAAPI{
 		init: func(_ context.Context, _ *caapiv1.InitiateCredentialAcquistionRequest) (*caapiv1.InitiateCredentialAcquisitionResponse, error) {
 			return &caapiv1.InitiateCredentialAcquisitionResponse{
-				Mechanism: caapiv1.CredentialAcquisitionMechanism_OPERATION_ENROLL,
+				Mode:      caapiv1.CredentialAcquisitionMode_ACQUISITION_ENROLL,
 				Challenge: challenge,
 			}, nil
 		},
@@ -164,8 +164,8 @@ func TestAcquireCredentialEnroll(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cred.Mechanism != MechanismEnroll {
-		t.Fatalf("mechanism %s", cred.Mechanism)
+	if cred.Mode != ModeEnroll {
+		t.Fatalf("mode %s", cred.Mode)
 	}
 	if !bytes.Equal(cred.Document, minted) {
 		t.Fatal("minted credential mismatch")
@@ -223,7 +223,7 @@ func TestAcquireCredentialBadChallenge(t *testing.T) {
 	fake := &fakeCAAPI{
 		init: func(context.Context, *caapiv1.InitiateCredentialAcquistionRequest) (*caapiv1.InitiateCredentialAcquisitionResponse, error) {
 			return &caapiv1.InitiateCredentialAcquisitionResponse{
-				Mechanism: caapiv1.CredentialAcquisitionMechanism_OPERATION_RETRIEVE,
+				Mode:      caapiv1.CredentialAcquisitionMode_ACQUISITION_RETRIEVE,
 				Challenge: []byte("short"),
 			}, nil
 		},

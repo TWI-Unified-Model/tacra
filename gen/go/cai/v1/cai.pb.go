@@ -27,6 +27,7 @@ type AcquireCredentialRequest struct {
 	// Endpoint the workload will authenticate to.
 	Target         string            `protobuf:"bytes,1,opt,name=target,proto3" json:"target,omitempty"`
 	CredentialType v1.CredentialType `protobuf:"varint,2,opt,name=credential_type,json=credentialType,proto3,enum=caapi.v1.CredentialType" json:"credential_type,omitempty"`
+	CredentialHint *string           `protobuf:"bytes,3,opt,name=credential_hint,json=credentialHint,proto3,oneof" json:"credential_hint,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -75,10 +76,17 @@ func (x *AcquireCredentialRequest) GetCredentialType() v1.CredentialType {
 	return v1.CredentialType(0)
 }
 
+func (x *AcquireCredentialRequest) GetCredentialHint() string {
+	if x != nil && x.CredentialHint != nil {
+		return *x.CredentialHint
+	}
+	return ""
+}
+
 type AcquireCredentialResponse struct {
-	state     protoimpl.MessageState            `protogen:"open.v1"`
-	Type      v1.CredentialType                 `protobuf:"varint,1,opt,name=type,proto3,enum=caapi.v1.CredentialType" json:"type,omitempty"`
-	Mechanism v1.CredentialAcquisitionMechanism `protobuf:"varint,2,opt,name=mechanism,proto3,enum=caapi.v1.CredentialAcquisitionMechanism" json:"mechanism,omitempty"`
+	state protoimpl.MessageState       `protogen:"open.v1"`
+	Type  v1.CredentialType            `protobuf:"varint,1,opt,name=type,proto3,enum=caapi.v1.CredentialType" json:"type,omitempty"`
+	Mode  v1.CredentialAcquisitionMode `protobuf:"varint,2,opt,name=mode,proto3,enum=caapi.v1.CredentialAcquisitionMode" json:"mode,omitempty"`
 	// Credential document: PEM certificate bundle, JWT, API key, etc.
 	Document []byte `protobuf:"bytes,3,opt,name=document,proto3" json:"document,omitempty"`
 	// PKCS#8 encoding of the CSK private key after Enrollment.
@@ -125,11 +133,11 @@ func (x *AcquireCredentialResponse) GetType() v1.CredentialType {
 	return v1.CredentialType(0)
 }
 
-func (x *AcquireCredentialResponse) GetMechanism() v1.CredentialAcquisitionMechanism {
+func (x *AcquireCredentialResponse) GetMode() v1.CredentialAcquisitionMode {
 	if x != nil {
-		return x.Mechanism
+		return x.Mode
 	}
-	return v1.CredentialAcquisitionMechanism(0)
+	return v1.CredentialAcquisitionMode(0)
 }
 
 func (x *AcquireCredentialResponse) GetDocument() []byte {
@@ -150,13 +158,15 @@ var File_cai_v1_cai_proto protoreflect.FileDescriptor
 
 const file_cai_v1_cai_proto_rawDesc = "" +
 	"\n" +
-	"\x10cai/v1/cai.proto\x12\x06cai.v1\x1a\x14caapi/v1/caapi.proto\"u\n" +
+	"\x10cai/v1/cai.proto\x12\x06cai.v1\x1a\x14caapi/v1/caapi.proto\"\xb7\x01\n" +
 	"\x18AcquireCredentialRequest\x12\x16\n" +
 	"\x06target\x18\x01 \x01(\tR\x06target\x12A\n" +
-	"\x0fcredential_type\x18\x02 \x01(\x0e2\x18.caapi.v1.CredentialTypeR\x0ecredentialType\"\xd9\x01\n" +
+	"\x0fcredential_type\x18\x02 \x01(\x0e2\x18.caapi.v1.CredentialTypeR\x0ecredentialType\x12,\n" +
+	"\x0fcredential_hint\x18\x03 \x01(\tH\x00R\x0ecredentialHint\x88\x01\x01B\x12\n" +
+	"\x10_credential_hint\"\xca\x01\n" +
 	"\x19AcquireCredentialResponse\x12,\n" +
-	"\x04type\x18\x01 \x01(\x0e2\x18.caapi.v1.CredentialTypeR\x04type\x12F\n" +
-	"\tmechanism\x18\x02 \x01(\x0e2(.caapi.v1.CredentialAcquisitionMechanismR\tmechanism\x12\x1a\n" +
+	"\x04type\x18\x01 \x01(\x0e2\x18.caapi.v1.CredentialTypeR\x04type\x127\n" +
+	"\x04mode\x18\x02 \x01(\x0e2#.caapi.v1.CredentialAcquisitionModeR\x04mode\x12\x1a\n" +
 	"\bdocument\x18\x03 \x01(\fR\bdocument\x12*\n" +
 	"\x11private_key_pkcs8\x18\x04 \x01(\fR\x0fprivateKeyPkcs82z\n" +
 	"\x1eCredentialAcquisitionInterface\x12X\n" +
@@ -176,15 +186,15 @@ func file_cai_v1_cai_proto_rawDescGZIP() []byte {
 
 var file_cai_v1_cai_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
 var file_cai_v1_cai_proto_goTypes = []any{
-	(*AcquireCredentialRequest)(nil),       // 0: cai.v1.AcquireCredentialRequest
-	(*AcquireCredentialResponse)(nil),      // 1: cai.v1.AcquireCredentialResponse
-	(v1.CredentialType)(0),                 // 2: caapi.v1.CredentialType
-	(v1.CredentialAcquisitionMechanism)(0), // 3: caapi.v1.CredentialAcquisitionMechanism
+	(*AcquireCredentialRequest)(nil),  // 0: cai.v1.AcquireCredentialRequest
+	(*AcquireCredentialResponse)(nil), // 1: cai.v1.AcquireCredentialResponse
+	(v1.CredentialType)(0),            // 2: caapi.v1.CredentialType
+	(v1.CredentialAcquisitionMode)(0), // 3: caapi.v1.CredentialAcquisitionMode
 }
 var file_cai_v1_cai_proto_depIdxs = []int32{
 	2, // 0: cai.v1.AcquireCredentialRequest.credential_type:type_name -> caapi.v1.CredentialType
 	2, // 1: cai.v1.AcquireCredentialResponse.type:type_name -> caapi.v1.CredentialType
-	3, // 2: cai.v1.AcquireCredentialResponse.mechanism:type_name -> caapi.v1.CredentialAcquisitionMechanism
+	3, // 2: cai.v1.AcquireCredentialResponse.mode:type_name -> caapi.v1.CredentialAcquisitionMode
 	0, // 3: cai.v1.CredentialAcquisitionInterface.AcquireCredential:input_type -> cai.v1.AcquireCredentialRequest
 	1, // 4: cai.v1.CredentialAcquisitionInterface.AcquireCredential:output_type -> cai.v1.AcquireCredentialResponse
 	4, // [4:5] is the sub-list for method output_type
@@ -199,6 +209,7 @@ func file_cai_v1_cai_proto_init() {
 	if File_cai_v1_cai_proto != nil {
 		return
 	}
+	file_cai_v1_cai_proto_msgTypes[0].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{

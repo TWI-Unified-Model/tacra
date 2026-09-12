@@ -11,31 +11,31 @@ import (
 	"google.golang.org/grpc"
 )
 
-// CredentialType and Mechanism are the CAAPI enums, re-exported so the
+// CredentialType and Mode are the CAAPI enums, re-exported so the
 // Attester can depend on cai alone.
 type (
 	CredentialType = caapiv1.CredentialType
-	Mechanism      = caapiv1.CredentialAcquisitionMechanism
+	Mode           = caapiv1.CredentialAcquisitionMode
 )
 
 const (
 	CredentialTypeUnspecified CredentialType = caapiv1.CredentialType_CREDENTIAL_TYPE_UNSPECIFIED
-	CredentialTypeJWT         CredentialType = caapiv1.CredentialType_BT_CREDENTIAL_TYPE_JWT
-	CredentialTypePSK         CredentialType = caapiv1.CredentialType_BT_CREDENTIAL_TYPE_PSK
-	CredentialTypeAPIKey      CredentialType = caapiv1.CredentialType_BT_CREDENTIAL_TYPE_API_KEY
-	CredentialTypeX509        CredentialType = caapiv1.CredentialType_POP_CREDENTIAL_TYPE_X509
-	CredentialTypeWIC         CredentialType = caapiv1.CredentialType_POP_CREDENTIAL_TYPE_WIC
-	CredentialTypeWIT         CredentialType = caapiv1.CredentialType_POP_CREDENTIAL_TYPE_WIT
+	CredentialTypeJWT         CredentialType = caapiv1.CredentialType_CREDENTIAL_TYPE_JWT
+	CredentialTypePSK         CredentialType = caapiv1.CredentialType_CREDENTIAL_TYPE_PSK
+	CredentialTypeAPIKey      CredentialType = caapiv1.CredentialType_CREDENTIAL_TYPE_API_KEY
+	CredentialTypeX509        CredentialType = caapiv1.CredentialType_CREDENTIAL_TYPE_X509
+	CredentialTypeWIC         CredentialType = caapiv1.CredentialType_CREDENTIAL_TYPE_WIC
+	CredentialTypeWIT         CredentialType = caapiv1.CredentialType_CREDENTIAL_TYPE_WIT
 
-	MechanismUnspecified Mechanism = caapiv1.CredentialAcquisitionMechanism_OPERATION_UNSPECIFIED
-	MechanismEnroll      Mechanism = caapiv1.CredentialAcquisitionMechanism_OPERATION_ENROLL
-	MechanismRetrieve    Mechanism = caapiv1.CredentialAcquisitionMechanism_OPERATION_RETRIEVE
+	ModeUnspecified Mode = caapiv1.CredentialAcquisitionMode_ACQUISITION_UNSPECIFIED
+	ModeEnroll      Mode = caapiv1.CredentialAcquisitionMode_ACQUISITION_ENROLL
+	ModeRetrieve    Mode = caapiv1.CredentialAcquisitionMode_ACQUISITION_RETRIEVE
 )
 
 // Credential is the document returned to the Attester.
 type Credential struct {
-	Type      CredentialType
-	Mechanism Mechanism
+	Type CredentialType
+	Mode Mode
 	// Document is the credential bytes (certificate, JWT, API key, …).
 	Document []byte
 	// PrivateKey is the CSK for Enrollment of proof-of-possession
@@ -103,13 +103,13 @@ func (c *Client) AcquireCredential(ctx context.Context, target string, credType 
 		return nil, fmt.Errorf("%w: got %d", ErrInvalidChallenge, n)
 	}
 
-	switch initResp.GetMechanism() {
-	case MechanismRetrieve:
+	switch initResp.GetMode() {
+	case ModeRetrieve:
 		return c.retrieve(ctx, target, credType, challenge)
-	case MechanismEnroll:
+	case ModeEnroll:
 		return c.enroll(ctx, target, credType, challenge)
 	default:
-		return nil, fmt.Errorf("%w: %s", ErrUnsupportedMechanism, initResp.GetMechanism())
+		return nil, fmt.Errorf("%w: %s", ErrUnsupportedMode, initResp.GetMode())
 	}
 }
 
@@ -142,9 +142,9 @@ func (c *Client) retrieve(ctx context.Context, target string, credType Credentia
 		return nil, err
 	}
 	return &Credential{
-		Type:      credType,
-		Mechanism: MechanismRetrieve,
-		Document:  doc,
+		Type:     credType,
+		Mode:     ModeRetrieve,
+		Document: doc,
 	}, nil
 }
 
@@ -180,7 +180,7 @@ func (c *Client) enroll(ctx context.Context, target string, credType CredentialT
 	}
 	return &Credential{
 		Type:       credType,
-		Mechanism:  MechanismEnroll,
+		Mode:       ModeEnroll,
 		Document:   resp.GetPlaintextCredential(),
 		PrivateKey: csk.Private,
 	}, nil

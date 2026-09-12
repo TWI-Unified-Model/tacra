@@ -16,12 +16,14 @@ message AcquireCredentialRequest {
     string target = 1;
 
     caapi.v1.CredentialType credential_type = 2;
+
+    optional string credential_hint = 3;
 }
 
 message AcquireCredentialResponse {
     caapi.v1.CredentialType type = 1;
 
-    caapi.v1.CredentialAcquisitionMechanism mechanism = 2;
+    caapi.v1.CredentialAcquisitionMode mode = 2;
 
     // Credential document: PEM certificate bundle, JWT, API key, etc.
     bytes document = 3;

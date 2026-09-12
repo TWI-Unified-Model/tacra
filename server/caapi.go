@@ -35,7 +35,7 @@ func (s *caapiServer) InitiateRemoteAttestation(_ context.Context, in *caapiv1.I
 	if in.GetTarget() == "" {
 		return nil, status.Error(codes.InvalidArgument, "Invalid Target")
 	}
-	mech, err := mechanismFor(in.GetCredentialType())
+	mode, err := modeFor(in.GetCredentialType())
 	if err != nil {
 		return nil, err
 	}
@@ -44,7 +44,7 @@ func (s *caapiServer) InitiateRemoteAttestation(_ context.Context, in *caapiv1.I
 		return nil, status.Errorf(codes.Internal, "challenge: %v", err)
 	}
 	return &caapiv1.InitiateCredentialAcquisitionResponse{
-		Mechanism: mech,
+		Mode:      mode,
 		Challenge: challenge,
 	}, nil
 }
@@ -121,12 +121,12 @@ func (s *caapiServer) verifyJWT(raw string) error {
 	return err
 }
 
-func mechanismFor(t caapiv1.CredentialType) (caapiv1.CredentialAcquisitionMechanism, error) {
+func modeFor(t caapiv1.CredentialType) (caapiv1.CredentialAcquisitionMode, error) {
 	switch t {
-	case caapiv1.CredentialType_POP_CREDENTIAL_TYPE_X509, caapiv1.CredentialType_POP_CREDENTIAL_TYPE_WIC:
-		return caapiv1.CredentialAcquisitionMechanism_OPERATION_ENROLL, nil
-	case caapiv1.CredentialType_BT_CREDENTIAL_TYPE_JWT, caapiv1.CredentialType_BT_CREDENTIAL_TYPE_PSK, caapiv1.CredentialType_BT_CREDENTIAL_TYPE_API_KEY:
-		return caapiv1.CredentialAcquisitionMechanism_OPERATION_RETRIEVE, nil
+	case caapiv1.CredentialType_CREDENTIAL_TYPE_X509, caapiv1.CredentialType_CREDENTIAL_TYPE_WIC:
+		return caapiv1.CredentialAcquisitionMode_ACQUISITION_ENROLL, nil
+	case caapiv1.CredentialType_CREDENTIAL_TYPE_JWT, caapiv1.CredentialType_CREDENTIAL_TYPE_PSK, caapiv1.CredentialType_CREDENTIAL_TYPE_API_KEY:
+		return caapiv1.CredentialAcquisitionMode_ACQUISITION_RETRIEVE, nil
 	case caapiv1.CredentialType_CREDENTIAL_TYPE_UNSPECIFIED:
 		return 0, status.Error(codes.InvalidArgument, "Invalid Credential Type")
 	default:

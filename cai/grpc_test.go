@@ -19,12 +19,12 @@ func TestGRPCAcquireCredential(t *testing.T) {
 	challenge := bytes.Repeat([]byte{0x0c}, 32)
 	fake := &fakeCAAPI{
 		init: func(_ context.Context, in *caapiv1.InitiateCredentialAcquistionRequest) (*caapiv1.InitiateCredentialAcquisitionResponse, error) {
-			mech := caapiv1.CredentialAcquisitionMechanism_OPERATION_RETRIEVE
-			if in.GetCredentialType() == caapiv1.CredentialType_POP_CREDENTIAL_TYPE_X509 {
-				mech = caapiv1.CredentialAcquisitionMechanism_OPERATION_ENROLL
+			mode := caapiv1.CredentialAcquisitionMode_ACQUISITION_RETRIEVE
+			if in.GetCredentialType() == caapiv1.CredentialType_CREDENTIAL_TYPE_X509 {
+				mode = caapiv1.CredentialAcquisitionMode_ACQUISITION_ENROLL
 			}
 			return &caapiv1.InitiateCredentialAcquisitionResponse{
-				Mechanism: mech,
+				Mode:      mode,
 				Challenge: challenge,
 			}, nil
 		},
@@ -70,7 +70,7 @@ func TestGRPCAcquireCredential(t *testing.T) {
 
 	x509Resp, err := cli.AcquireCredential(ctx, &caiv1.AcquireCredentialRequest{
 		Target:         "https://api.example",
-		CredentialType: caapiv1.CredentialType_POP_CREDENTIAL_TYPE_X509,
+		CredentialType: caapiv1.CredentialType_CREDENTIAL_TYPE_X509,
 	})
 	if err != nil {
 		t.Fatalf("X509: %v", err)
@@ -81,7 +81,7 @@ func TestGRPCAcquireCredential(t *testing.T) {
 
 	jwtResp, err := cli.AcquireCredential(ctx, &caiv1.AcquireCredentialRequest{
 		Target:         "https://api.example",
-		CredentialType: caapiv1.CredentialType_BT_CREDENTIAL_TYPE_JWT,
+		CredentialType: caapiv1.CredentialType_CREDENTIAL_TYPE_JWT,
 	})
 	if err != nil {
 		t.Fatalf("JWT: %v", err)
