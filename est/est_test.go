@@ -10,7 +10,10 @@ import (
 	"crypto/rand"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"net"
 	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -31,13 +34,29 @@ func envOr(key, fallback string) string {
 	return fallback
 }
 
+func defaultCACertPath() string {
+	_, file, _, ok := runtime.Caller(0)
+	if !ok {
+		return defaultCACert
+	}
+	return filepath.Clean(filepath.Join(filepath.Dir(file), defaultCACert))
+}
+
 // explicitAnchor loads the local EST CA as an RFC7030 3.6.1 Explicit TA database.
 func explicitAnchor(t *testing.T) *x509.CertPool {
 	t.Helper()
 
-	path := envOr("EST_CA_CERT", defaultCACert)
+	explicit := os.Getenv("EST_CA_CERT")
+	path := explicit
+	if path == "" {
+		path = defaultCACertPath()
+	}
+
 	pemBytes, err := os.ReadFile(path)
 	if err != nil {
+		if explicit == "" && os.IsNotExist(err) {
+			t.Skipf("EST CA certificate %s not found; generate local config with deploy/init-local-est-config.sh and deploy globalsign-est", path)
+		}
 		t.Fatalf("read EST CA certificate %s: %v", path, err)
 	}
 
@@ -47,6 +66,17 @@ func explicitAnchor(t *testing.T) *x509.CertPool {
 	}
 
 	return pool
+}
+
+func requireESTServer(t *testing.T) {
+	t.Helper()
+
+	host := envOr("EST_HOST", defaultHost)
+	conn, err := net.DialTimeout("tcp", host, 2*time.Second)
+	if err != nil {
+		t.Skipf("EST server %s is not reachable: %v; deploy with ./deploy/components.sh deploy --components globalsign-est", host, err)
+	}
+	_ = conn.Close()
 }
 
 func newClient(anchor *x509.CertPool, cert *x509.Certificate, key crypto.Signer) *est.Client {
@@ -113,6 +143,7 @@ func TestESTOperations(t *testing.T) {
 	}
 
 	anchor := explicitAnchor(t)
+	requireESTServer(t)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()

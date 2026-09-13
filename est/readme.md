@@ -223,8 +223,10 @@ docker ps --filter name=twi-globalsign-est
 docker logs twi-globalsign-est
 ```
 
-If the CA certificate cannot be loaded, run the test from `tacra/est` or set
-an absolute path with `EST_CA_CERT`.
+Without local EST configuration or a running `twi-globalsign-est` container,
+`go test` skips `TestESTOperations` instead of failing. Set `EST_CA_CERT` to an
+explicit path only when the file should already exist; a missing explicit path
+is still a failure.
 
 If the local CA files are missing or expired, regenerate the local EST
 configuration from the workspace root:
