@@ -1,4 +1,4 @@
-module github.com/TWI-Unified-Model/twium/gen/go
+module github.com/TWI-Unified-Model/tacra/gen/go
 
 go 1.26.5
 

@@ -77,10 +77,10 @@ type FreshnessKind int32
 
 const (
 	FreshnessKind_FRESHNESS_KIND_UNSPECIFIED FreshnessKind = 0
-	// No Handle; Attester stamps Evidence from a trusted clock (RFC 9334 §10.1).
-	FreshnessKind_FRESHNESS_KIND_ABSENT_TIMESTAMP FreshnessKind = 1
 	// No Handle; Evidence carries no freshness claim.
-	FreshnessKind_FRESHNESS_KIND_ABSENT_NONE FreshnessKind = 2
+	FreshnessKind_FRESHNESS_KIND_ABSENT_NONE FreshnessKind = 1
+	// No Handle; Attester stamps Evidence from a trusted clock (RFC 9334 §10.1).
+	FreshnessKind_FRESHNESS_KIND_ABSENT_TIMESTAMP FreshnessKind = 2
 	// No Handle; Attester embeds an epoch identifier already held locally (RFC 9334 §10.3).
 	FreshnessKind_FRESHNESS_KIND_ABSENT_EPOCH FreshnessKind = 3
 	// Handle is a single-use nonce the Attester embeds in Evidence (RFC 9334 §10.2).
@@ -94,16 +94,16 @@ const (
 var (
 	FreshnessKind_name = map[int32]string{
 		0: "FRESHNESS_KIND_UNSPECIFIED",
-		1: "FRESHNESS_KIND_ABSENT_TIMESTAMP",
-		2: "FRESHNESS_KIND_ABSENT_NONE",
+		1: "FRESHNESS_KIND_ABSENT_NONE",
+		2: "FRESHNESS_KIND_ABSENT_TIMESTAMP",
 		3: "FRESHNESS_KIND_ABSENT_EPOCH",
 		4: "FRESHNESS_KIND_PRESENT_NONCE",
 		5: "FRESHNESS_KIND_PRESENT_EPOCH",
 	}
 	FreshnessKind_value = map[string]int32{
 		"FRESHNESS_KIND_UNSPECIFIED":      0,
-		"FRESHNESS_KIND_ABSENT_TIMESTAMP": 1,
-		"FRESHNESS_KIND_ABSENT_NONE":      2,
+		"FRESHNESS_KIND_ABSENT_NONE":      1,
+		"FRESHNESS_KIND_ABSENT_TIMESTAMP": 2,
 		"FRESHNESS_KIND_ABSENT_EPOCH":     3,
 		"FRESHNESS_KIND_PRESENT_NONCE":    4,
 		"FRESHNESS_KIND_PRESENT_EPOCH":    5,
@@ -592,9 +592,9 @@ const file_caapi_v1_caapi_proto_rawDesc = "" +
 	"\x12ACQUISITION_ENROLL\x10\x01\x12\x18\n" +
 	"\x14ACQUISITION_RETRIEVE\x10\x02*\xd9\x01\n" +
 	"\rFreshnessKind\x12\x1e\n" +
-	"\x1aFRESHNESS_KIND_UNSPECIFIED\x10\x00\x12#\n" +
-	"\x1fFRESHNESS_KIND_ABSENT_TIMESTAMP\x10\x01\x12\x1e\n" +
-	"\x1aFRESHNESS_KIND_ABSENT_NONE\x10\x02\x12\x1f\n" +
+	"\x1aFRESHNESS_KIND_UNSPECIFIED\x10\x00\x12\x1e\n" +
+	"\x1aFRESHNESS_KIND_ABSENT_NONE\x10\x01\x12#\n" +
+	"\x1fFRESHNESS_KIND_ABSENT_TIMESTAMP\x10\x02\x12\x1f\n" +
 	"\x1bFRESHNESS_KIND_ABSENT_EPOCH\x10\x03\x12 \n" +
 	"\x1cFRESHNESS_KIND_PRESENT_NONCE\x10\x04\x12 \n" +
 	"\x1cFRESHNESS_KIND_PRESENT_EPOCH\x10\x05*\xcf\x01\n" +
@@ -609,7 +609,7 @@ const file_caapi_v1_caapi_proto_rawDesc = "" +
 	"\x1cCredentialAcquisitionService\x12{\n" +
 	"\x19InitiateRemoteAttestation\x12-.caapi.v1.InitiateCredentialAcquistionRequest\x1a/.caapi.v1.InitiateCredentialAcquisitionResponse\x12Y\n" +
 	"\x10EnrollCredential\x12!.caapi.v1.EnrollCredentialRequest\x1a\".caapi.v1.EnrollCredentialResponse\x12_\n" +
-	"\x12RetrieveCredential\x12#.caapi.v1.RetrieveCredentialRequest\x1a$.caapi.v1.RetrieveCredentialResponseB<Z:github.com/TWI-Unified-Model/twium/gen/go/caapi/v1;caapiv1b\x06proto3"
+	"\x12RetrieveCredential\x12#.caapi.v1.RetrieveCredentialRequest\x1a$.caapi.v1.RetrieveCredentialResponseB<Z:github.com/TWI-Unified-Model/tacra/gen/go/caapi/v1;caapiv1b\x06proto3"
 
 var (
 	file_caapi_v1_caapi_proto_rawDescOnce sync.Once

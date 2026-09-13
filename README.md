@@ -25,7 +25,7 @@ export DEPLOY_CONFIG_DIR="$PWD/deploy/config/local"
 | Topic | Description | Link |
 |-------|-------------|------|
 | **Understand TACRA** | This PoC implements the Trustworthy Credential Acquisition using Remote Attestion (TACRA) architecture | [TACRA Informational Draft](https://github.com/TheBankster/rats-tacra/) |
-| **Installation Prerequisites** | Install Go compiler, Protobuf compiler (protoc), and build tools required to compile twium schemas from source. **Start here** if setting up a new development environment. | [readme_install_prereq.md](readme_install_prereq.md) |
+| **Installation Prerequisites** | Install Go compiler, Protobuf compiler (protoc), and build tools required to compile TACRA schemas from source. **Start here** if setting up a new development environment. | [readme_install_prereq.md](readme_install_prereq.md) |
 | **Docker Build & Deployment** | Build Docker images from source for all TWI stack components (globalsign-est, hashicorp-vault, spiffe-spire, step-ca, veraison-services) and deploy them locally or to remote hosts. Covers `components.sh` usage, configuration management, component-specific Dockerfiles, and the `init-local-est-config.sh` script for local development setup. | [readme_docker_build_deploy.md](readme_docker_build_deploy.md) |
 | **Configuration Structure** | Runtime configuration directory layout, certificate/key requirements, and component-specific config examples. | [deploy/config/README.md](deploy/config/README.md) |
 | **CA API Schema** | Protobuf message definitions and gRPC service contracts for the CA API. | [proto/caapi/v1/caapi.proto](proto/caapi/v1/caapi.proto) |
@@ -73,7 +73,7 @@ export DEPLOY_CONFIG_DIR="$PWD/deploy/config/local"
 
 ## Component Integration
 
-Twium integrates with these upstream projects (vendored in the workspace):
+TACRA integrates with these upstream projects (vendored in the workspace):
 
 | Component | Role | Repository |
 |-----------|------|------------|

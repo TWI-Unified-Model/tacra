@@ -13,8 +13,8 @@ import (
 	"strings"
 	"time"
 
-	caapiv1 "github.com/TWI-Unified-Model/twium/gen/go/caapi/v1"
-	caiv1 "github.com/TWI-Unified-Model/twium/gen/go/cai/v1"
+	caapiv1 "github.com/TWI-Unified-Model/tacra/gen/go/caapi/v1"
+	caiv1 "github.com/TWI-Unified-Model/tacra/gen/go/cai/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )

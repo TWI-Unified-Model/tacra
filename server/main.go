@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	caapiv1 "github.com/TWI-Unified-Model/twium/gen/go/caapi/v1"
+	caapiv1 "github.com/TWI-Unified-Model/tacra/gen/go/caapi/v1"
 	"google.golang.org/grpc"
 )
 

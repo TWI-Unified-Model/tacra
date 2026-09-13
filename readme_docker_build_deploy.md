@@ -4,7 +4,7 @@ This document explains how to build Docker images for all TWI stack components a
 
 ## Overview
 
-Twium provides two Docker paths:
+TACRA provides two Docker paths:
 
 1. **TWI stack components** via `components.sh` (EST, Vault, SPIRE, step-ca, Veraison).
 2. **PoC attester** via `docker compose` in this directory: a workload **client** plus a **CAI sidecar**. The sidecar talks to CAAPI; the client only calls `AcquireCredential`, then authenticates to the PoC HTTPS server with mTLS and a JWT.
@@ -54,20 +54,20 @@ For Docker Desktop on macOS, ensure the workspace directory is shared:
 ### Location
 
 ```
-./twium/deploy/components.sh
+./tacra/deploy/components.sh
 ```
 
-Run the commands in this guide from the `twium/` directory unless a section
+Run the commands in this guide from the `tacra/` directory unless a section
 states otherwise:
 
 ```bash
-cd /Users/sudsadmin/Downloads/vscode_worspaces/twi-unified-model/twium
+cd /Users/sudsadmin/Downloads/vscode_worspaces/twi-unified-model/tacra
 ```
 
 ### Usage
 
 ```bash
-./twium/deploy/components.sh <build|deploy|stop|status> [options]
+./tacra/deploy/components.sh <build|deploy|stop|status> [options]
 ```
 
 ### Commands
@@ -143,10 +143,10 @@ The attester (HTTP client) runs in Docker and does **not** link the CAI library.
 
 ### Prerequisites
 
-From `twium/`, generate protobuf stubs **before** building images. The Dockerfiles copy `gen/go/` into the build context:
+From `tacra/`, generate protobuf stubs **before** building images. The Dockerfiles copy `gen/go/` into the build context:
 
 ```bash
-cd twium
+cd tacra
 make proto
 ```
 
@@ -157,7 +157,7 @@ The host must be able to reach Docker (`docker info`). On Linux, `extra_hosts: h
 Terminal 1 — PoC server (CAAPI `:9090`, HTTPS mTLS `:8443`):
 
 ```bash
-cd twium
+cd tacra
 make server
 ./bin/server
 ```
@@ -165,7 +165,7 @@ make server
 Terminal 2 — sidecar + client:
 
 ```bash
-cd twium
+cd tacra
 docker compose up --build
 ```
 
@@ -185,10 +185,10 @@ docker compose down
 
 | Service | Dockerfile | Image (compose) | Role |
 |---------|------------|-----------------|------|
-| `cai` | `cai/Dockerfile` | `twium-cai` | CAI sidecar: platform plug-in + CAAPI client; gRPC `AcquireCredential` on `:50051` |
-| `client` | `client/Dockerfile` | `twium-client` | Attester: calls the sidecar, then HTTPS mTLS + JWT to the server |
+| `cai` | `cai/Dockerfile` | `tacra-cai` | CAI sidecar: platform plug-in + CAAPI client; gRPC `AcquireCredential` on `:50051` |
+| `client` | `client/Dockerfile` | `tacra-client` | Attester: calls the sidecar, then HTTPS mTLS + JWT to the server |
 
-Build context for both is the `twium/` directory (not the subdirectory).
+Build context for both is the `tacra/` directory (not the subdirectory).
 
 ### Environment variables
 
@@ -211,16 +211,16 @@ TLS_SERVER_NAME=localhost \
   docker compose up --build
 ```
 
-`TLS_SERVER_NAME` should match a SAN on the server certificate (`localhost`, `twium-server`, `host.docker.internal`, `127.0.0.1`, or `::1`). The default `localhost` works with `https://host.docker.internal:8443` because verification uses SNI, not the TCP hostname.
+`TLS_SERVER_NAME` should match a SAN on the server certificate (`localhost`, `tacra-server`, `host.docker.internal`, `127.0.0.1`, or `::1`). The default `localhost` works with `https://host.docker.internal:8443` because verification uses SNI, not the TCP hostname.
 
 ### Build images without compose
 
 ```bash
-cd twium
+cd tacra
 make proto
-docker build -f cai/Dockerfile -t twium-cai .
-docker build -f client/Dockerfile -t twium-client .
-docker build -f server/Dockerfile -t twium-server .
+docker build -f cai/Dockerfile -t tacra-cai .
+docker build -f client/Dockerfile -t tacra-client .
+docker build -f server/Dockerfile -t tacra-server .
 ```
 
 `cai/Dockerfile` copies `cai/`, `platform/`, and `gen/go/`.  
@@ -230,30 +230,30 @@ docker build -f server/Dockerfile -t twium-server .
 ### Run the sidecar and client manually
 
 ```bash
-docker network create twium-poc
+docker network create tacra-poc
 
-docker run -d --name twium-cai --network twium-poc \
+docker run -d --name tacra-cai --network tacra-poc \
   --add-host host.docker.internal:host-gateway \
   -e CAAPI_ADDR=host.docker.internal:9090 \
   -e CAI_LISTEN=:50051 \
-  twium-cai
+  tacra-cai
 
-docker run --rm --name twium-client --network twium-poc \
+docker run --rm --name tacra-client --network tacra-poc \
   --add-host host.docker.internal:host-gateway \
   -e CAI_ADDR=cai:50051 \
   -e TLS_SERVER_NAME=localhost \
-  twium-client https://host.docker.internal:8443
+  tacra-client https://host.docker.internal:8443
 ```
 
-With a user-defined bridge network, the sidecar's hostname is the container name (`twium-cai`), so set `CAI_ADDR=twium-cai:50051` instead of `cai:50051`. Compose DNS uses the service name `cai`.
+With a user-defined bridge network, the sidecar's hostname is the container name (`tacra-cai`), so set `CAI_ADDR=tacra-cai:50051` instead of `cai:50051`. Compose DNS uses the service name `cai`.
 
 ### PoC server in Docker
 
 Compose does not start the server. To run it in a container (CAAPI and HTTPS published to the host):
 
 ```bash
-docker build -f server/Dockerfile -t twium-server .
-docker run --rm -p 8443:8443 -p 9090:9090 --name twium-server twium-server
+docker build -f server/Dockerfile -t tacra-server .
+docker run --rm -p 8443:8443 -p 9090:9090 --name tacra-server tacra-server
 ```
 
 Then run `docker compose up --build` as above so the sidecar and client still use `host.docker.internal`.
@@ -289,9 +289,9 @@ Set via `--config-dir` or environment variable `DEPLOY_CONFIG_DIR`:
 export DEPLOY_CONFIG_DIR="/path/to/config"
 ```
 
-**Default:** `twium/deploy/config/local` (gitignored local development state)
+**Default:** `tacra/deploy/config/local` (gitignored local development state)
 
-**Recommended for local dev:** `twium/deploy/config/local` (gitignored)
+**Recommended for local dev:** `tacra/deploy/config/local` (gitignored)
 
 ### Expected Directory Layout
 
@@ -334,14 +334,14 @@ The `init-local-est-config.sh` script generates a **complete local development c
 ### Usage
 
 ```bash
-export DEPLOY_CONFIG_DIR="$PWD/twium/deploy/config/local"
-./twium/deploy/init-local-est-config.sh
+export DEPLOY_CONFIG_DIR="$PWD/tacra/deploy/config/local"
+./tacra/deploy/init-local-est-config.sh
 ```
 
 ### What It Creates
 
 ```
-twium/deploy/config/local/globalsign-est/
+tacra/deploy/config/local/globalsign-est/
 ├── estserver.json                    # EST server configuration
 └── certs/
     ├── ca-certificates.pem           # Mock CA certificate
@@ -374,11 +374,11 @@ certificates and keys, Badger database state, and `secrets/password` under
 `config/local/step-ca/`. The password and private-key contents are not printed.
 
 ```bash
-./twium/deploy/components.sh build --components step-ca
-./twium/deploy/init-local-step-ca-config.sh
+./tacra/deploy/components.sh build --components step-ca
+./tacra/deploy/init-local-step-ca-config.sh
 ```
 
-When `DEPLOY_CONFIG_DIR` is the default `twium/deploy/config/local`, deploying
+When `DEPLOY_CONFIG_DIR` is the default `tacra/deploy/config/local`, deploying
 step-ca runs this initializer automatically if the complete local configuration
 is absent. Existing or partial state is never overwritten; use the explicit
 initializer only after intentionally removing incomplete local state.
@@ -482,13 +482,13 @@ Uses the existing Veraison project's own `make docker-deploy` workflow. The disp
 
 ### PoC CAI sidecar, client, and server
 
-These images are **not** built by `components.sh`. Build them from `twium/` so the context includes `gen/go/` (run `make proto` first).
+These images are **not** built by `components.sh`. Build them from `tacra/` so the context includes `gen/go/` (run `make proto` first).
 
 | Image | Dockerfile | Build context | Copies | Listens |
 |-------|------------|---------------|--------|---------|
-| CAI sidecar | `cai/Dockerfile` | `twium/` | `cai/`, `platform/`, `gen/go/` | gRPC `:50051` |
-| Attester client | `client/Dockerfile` | `twium/` | `client/`, `gen/go/` | (one-shot; argument is the HTTPS URL) |
-| PoC server | `server/Dockerfile` | `twium/` | `server/`, `cai/`, `platform/`, `gen/go/`, `go.work` | HTTPS `:8443`, CAAPI `:9090` |
+| CAI sidecar | `cai/Dockerfile` | `tacra/` | `cai/`, `platform/`, `gen/go/` | gRPC `:50051` |
+| Attester client | `client/Dockerfile` | `tacra/` | `client/`, `gen/go/` | (one-shot; argument is the HTTPS URL) |
+| PoC server | `server/Dockerfile` | `tacra/` | `server/`, `cai/`, `platform/`, `gen/go/`, `go.work` | HTTPS `:8443`, CAAPI `:9090` |
 
 CAI and client Dockerfiles set `GOWORK=off` and use Go `replace` directives to sibling modules. The client image does not contain the CAI library or platform plug-in.
 
@@ -501,17 +501,17 @@ Build and deploy all components with local configuration:
 ```bash
 # Select the gitignored local configuration directory.
 # Deployment generates the EST mock CA and certificates when absent.
-export DEPLOY_CONFIG_DIR="$PWD/twium/deploy/config/local"
+export DEPLOY_CONFIG_DIR="$PWD/tacra/deploy/config/local"
 
 # Build images, then deploy them.
-./twium/deploy/components.sh build --components all
-./twium/deploy/components.sh deploy --components all
+./tacra/deploy/components.sh build --components all
+./tacra/deploy/components.sh deploy --components all
 ```
 
 ### 2. Build Specific Components
 
 ```bash
-./twium/deploy/components.sh build --components globalsign-est,step-ca
+./tacra/deploy/components.sh build --components globalsign-est,step-ca
 ```
 
 ### 3. Deploy Built Images
@@ -519,7 +519,7 @@ export DEPLOY_CONFIG_DIR="$PWD/twium/deploy/config/local"
 Deploy requires the selected component images to already exist in the target Docker daemon:
 
 ```bash
-./twium/deploy/components.sh deploy --components globalsign-est,step-ca
+./tacra/deploy/components.sh deploy --components globalsign-est,step-ca
 ```
 
 ### 4. Cross-Platform Build (for VM deployment)
@@ -527,7 +527,7 @@ Deploy requires the selected component images to already exist in the target Doc
 Build AMD64 images on Apple Silicon for an x86_64 VM:
 
 ```bash
-./twium/deploy/components.sh build --components all \
+./tacra/deploy/components.sh build --components all \
     --platform linux/amd64
 ```
 
@@ -541,7 +541,7 @@ docker save twi/globalsign-est:local-linux-amd64 | \
     ssh user@vm.example 'docker load'
 
 # Option 2: Use remote Docker host directly
-./twium/deploy/components.sh deploy --components globalsign-est \
+./tacra/deploy/components.sh deploy --components globalsign-est \
     --docker-host ssh://user@vm.example \
     --config-dir /opt/twi-config
 ```
@@ -551,7 +551,7 @@ docker save twi/globalsign-est:local-linux-amd64 | \
 ### 6. Check Status
 
 ```bash
-./twium/deploy/components.sh status --components all
+./tacra/deploy/components.sh status --components all
 ```
 
 Or manually:
@@ -563,7 +563,7 @@ docker ps --filter "name=twi-"
 ### 7. Stop Components
 
 ```bash
-./twium/deploy/components.sh stop --components all
+./tacra/deploy/components.sh stop --components all
 ```
 
 ## Container Management
@@ -608,12 +608,12 @@ Add workspace and config directories to Docker Desktop file sharing:
 Build the selected component before deployment:
 
 ```bash
-./twium/deploy/components.sh build --components <component>
+./tacra/deploy/components.sh build --components <component>
 ```
 
 ### "required configuration ... missing"
 
-Create the configuration directory structure documented in `deploy/config/README.md`. With `DEPLOY_CONFIG_DIR` set to `twium/deploy/config/local`, EST deployment automatically generates a missing mock-CA configuration. For external configuration directories, run `init-local-est-config.sh` explicitly only when a local mock-CA setup is intended.
+Create the configuration directory structure documented in `deploy/config/README.md`. With `DEPLOY_CONFIG_DIR` set to `tacra/deploy/config/local`, EST deployment automatically generates a missing mock-CA configuration. For external configuration directories, run `init-local-est-config.sh` explicitly only when a local mock-CA setup is intended.
 
 ### Port Already Allocated
 
@@ -628,7 +628,7 @@ Default ports:
 - PoC server CAAPI: 9090
 - CAI sidecar: 50051 (compose network only unless you publish it)
 
-If `docker compose up` fails with "connection refused" to `host.docker.internal:9090` or `:8443`, start `./bin/server` on the host first (or run the `twium-server` image as in [PoC server in Docker](#poc-server-in-docker)).
+If `docker compose up` fails with "connection refused" to `host.docker.internal:9090` or `:8443`, start `./bin/server` on the host first (or run the `tacra-server` image as in [PoC server in Docker](#poc-server-in-docker)).
 
 If the client fails TLS hostname verification, set `TLS_SERVER_NAME` to a SAN on the server certificate (`localhost` is the compose default).
 

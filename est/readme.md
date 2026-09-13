@@ -49,22 +49,22 @@ replace github.com/globalsign/est => ../../globalsign-est
 ```
 
 The `est` module is also included in [`../go.work`](../go.work), so it can be
-used as part of the twium workspace.
+used as part of the TACRA workspace.
 
 ## Starting the EST server
 
 From the workspace root, build and deploy the EST component with:
 
 ```bash
-./twium/deploy/components.sh build --components globalsign-est
-./twium/deploy/components.sh deploy --components globalsign-est
+./tacra/deploy/components.sh build --components globalsign-est
+./tacra/deploy/components.sh deploy --components globalsign-est
 ```
 
 The deployment script starts a container named `twi-globalsign-est` using the
 local configuration under:
 
 ```text
-twium/deploy/config/local/globalsign-est
+tacra/deploy/config/local/globalsign-est
 ```
 
 The server listens on port `8443` inside the container. The script publishes
@@ -89,7 +89,7 @@ docker ps --filter name=twi-globalsign-est
 Run from this directory:
 
 ```bash
-cd twium/est
+cd tacra/est
 go test -v -count=1 ./...
 ```
 
@@ -223,18 +223,18 @@ docker ps --filter name=twi-globalsign-est
 docker logs twi-globalsign-est
 ```
 
-If the CA certificate cannot be loaded, run the test from `twium/est` or set
+If the CA certificate cannot be loaded, run the test from `tacra/est` or set
 an absolute path with `EST_CA_CERT`.
 
 If the local CA files are missing or expired, regenerate the local EST
 configuration from the workspace root:
 
 ```bash
-./twium/deploy/init-local-est-config.sh
+./tacra/deploy/init-local-est-config.sh
 ```
 
 Then recreate the EST container so it uses the regenerated certificates:
 
 ```bash
-./twium/deploy/components.sh deploy --components globalsign-est
+./tacra/deploy/components.sh deploy --components globalsign-est
 ```

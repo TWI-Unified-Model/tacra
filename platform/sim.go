@@ -14,9 +14,9 @@ import (
 )
 
 const (
-	defaultIssuer = "twium-sim"
-	defaultSWName = "twium-sim"
-	defaultHW     = "twium-sim"
+	defaultIssuer = "tacra-sim"
+	defaultSWName = "tacra-sim"
+	defaultHW     = "tacra-sim"
 )
 
 // Simulated is a software Platform Plug-In for the PoC. It generates P-256

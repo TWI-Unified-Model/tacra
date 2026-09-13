@@ -1,7 +1,7 @@
 syntax = "proto3";
 
 package caapi.v1;
-option go_package = "github.com/TWI-Unified-Model/twium/gen/go/caapi/v1;caapiv1";
+option go_package = "github.com/TWI-Unified-Model/tacra/gen/go/caapi/v1;caapiv1";
 
 enum CredentialAcquisitionMode {
     ACQUISITION_UNSPECIFIED = 0;

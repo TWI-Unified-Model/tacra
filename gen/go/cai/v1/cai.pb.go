@@ -7,7 +7,7 @@
 package caiv1
 
 import (
-	v1 "github.com/TWI-Unified-Model/twium/gen/go/caapi/v1"
+	v1 "github.com/TWI-Unified-Model/tacra/gen/go/caapi/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
@@ -170,7 +170,7 @@ const file_cai_v1_cai_proto_rawDesc = "" +
 	"\bdocument\x18\x03 \x01(\fR\bdocument\x12*\n" +
 	"\x11private_key_pkcs8\x18\x04 \x01(\fR\x0fprivateKeyPkcs82z\n" +
 	"\x1eCredentialAcquisitionInterface\x12X\n" +
-	"\x11AcquireCredential\x12 .cai.v1.AcquireCredentialRequest\x1a!.cai.v1.AcquireCredentialResponseB8Z6github.com/TWI-Unified-Model/twium/gen/go/cai/v1;caiv1b\x06proto3"
+	"\x11AcquireCredential\x12 .cai.v1.AcquireCredentialRequest\x1a!.cai.v1.AcquireCredentialResponseB8Z6github.com/TWI-Unified-Model/tacra/gen/go/cai/v1;caiv1b\x06proto3"
 
 var (
 	file_cai_v1_cai_proto_rawDescOnce sync.Once

@@ -7,15 +7,15 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/TWI-Unified-Model/twium/cai"
-	caapiv1 "github.com/TWI-Unified-Model/twium/gen/go/caapi/v1"
-	"github.com/TWI-Unified-Model/twium/platform"
+	"github.com/TWI-Unified-Model/tacra/cai"
+	caapiv1 "github.com/TWI-Unified-Model/tacra/gen/go/caapi/v1"
+	"github.com/TWI-Unified-Model/tacra/platform"
 	"github.com/golang-jwt/jwt/v5"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
 
-const jwtAudience = "twium-server"
+const jwtAudience = "tacra-server"
 
 type caapiServer struct {
 	caapiv1.UnimplementedCredentialAcquisitionServiceServer
@@ -103,7 +103,7 @@ func (s *caapiServer) RetrieveCredential(_ context.Context, in *caapiv1.Retrieve
 func (s *caapiServer) issueJWT(subject string) (string, error) {
 	now := time.Now()
 	tok := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-		"iss": "twium-cas",
+		"iss": "tacra-cas",
 		"sub": subject,
 		"aud": jwtAudience,
 		"iat": now.Unix(),
@@ -118,7 +118,7 @@ func (s *caapiServer) verifyJWT(raw string) error {
 			return nil, fmt.Errorf("unexpected signing method %v", t.Header["alg"])
 		}
 		return s.jwtKey, nil
-	}, jwt.WithAudience(jwtAudience), jwt.WithIssuer("twium-cas"), jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}))
+	}, jwt.WithAudience(jwtAudience), jwt.WithIssuer("tacra-cas"), jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}))
 	return err
 }
 

@@ -1,7 +1,7 @@
 # Runtime Configuration
 
-The Twium deployment dispatcher reads runtime configuration from `--config-dir`
-or `DEPLOY_CONFIG_DIR`. Its default is `twium/deploy/config/local`, which is
+The TACRA deployment dispatcher reads runtime configuration from `--config-dir`
+or `DEPLOY_CONFIG_DIR`. Its default is `tacra/deploy/config/local`, which is
 ignored by Git through `.gitignore`.
 
 Keep real configuration, keys, certificates, and passwords outside the source
@@ -39,10 +39,10 @@ automatically generates missing configuration under `config/local/`. You can
 also run a generator explicitly:
 
 ```sh
-./twium/deploy/init-local-est-config.sh
-./twium/deploy/init-local-hashicorp-vault-config.sh
-./twium/deploy/init-local-spiffe-spire-config.sh
-./twium/deploy/init-local-step-ca-config.sh
+./tacra/deploy/init-local-est-config.sh
+./tacra/deploy/init-local-hashicorp-vault-config.sh
+./tacra/deploy/init-local-spiffe-spire-config.sh
+./tacra/deploy/init-local-step-ca-config.sh
 ```
 
 The EST generator creates a 30-day local CA, EST TLS certificate, client-CA

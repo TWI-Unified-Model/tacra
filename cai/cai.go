@@ -5,8 +5,8 @@ import (
 	"crypto/ecdsa"
 	"fmt"
 
-	caapiv1 "github.com/TWI-Unified-Model/twium/gen/go/caapi/v1"
-	"github.com/TWI-Unified-Model/twium/platform"
+	caapiv1 "github.com/TWI-Unified-Model/tacra/gen/go/caapi/v1"
+	"github.com/TWI-Unified-Model/tacra/platform"
 	"github.com/veraison/eat"
 	"google.golang.org/grpc"
 )

@@ -5,9 +5,9 @@ import (
 	"net"
 	"os"
 
-	"github.com/TWI-Unified-Model/twium/cai"
-	caiv1 "github.com/TWI-Unified-Model/twium/gen/go/cai/v1"
-	"github.com/TWI-Unified-Model/twium/platform"
+	"github.com/TWI-Unified-Model/tacra/cai"
+	caiv1 "github.com/TWI-Unified-Model/tacra/gen/go/cai/v1"
+	"github.com/TWI-Unified-Model/tacra/platform"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )

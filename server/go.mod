@@ -2,16 +2,16 @@ module http-server
 
 go 1.26.5
 
-replace github.com/TWI-Unified-Model/twium/cai => ../cai
+replace github.com/TWI-Unified-Model/tacra/cai => ../cai
 
-replace github.com/TWI-Unified-Model/twium/platform => ../platform
+replace github.com/TWI-Unified-Model/tacra/platform => ../platform
 
-replace github.com/TWI-Unified-Model/twium/gen/go => ../gen/go
+replace github.com/TWI-Unified-Model/tacra/gen/go => ../gen/go
 
 require (
-	github.com/TWI-Unified-Model/twium/cai v0.0.0-00010101000000-000000000000
-	github.com/TWI-Unified-Model/twium/gen/go v0.0.0-00010101000000-000000000000
-	github.com/TWI-Unified-Model/twium/platform v0.0.0-00010101000000-000000000000
+	github.com/TWI-Unified-Model/tacra/cai v0.0.0-00010101000000-000000000000
+	github.com/TWI-Unified-Model/tacra/gen/go v0.0.0-00010101000000-000000000000
+	github.com/TWI-Unified-Model/tacra/platform v0.0.0-00010101000000-000000000000
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	google.golang.org/grpc v1.83.2
 )

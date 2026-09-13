@@ -2,10 +2,10 @@ module http-client
 
 go 1.26.5
 
-replace github.com/TWI-Unified-Model/twium/gen/go => ../gen/go
+replace github.com/TWI-Unified-Model/tacra/gen/go => ../gen/go
 
 require (
-	github.com/TWI-Unified-Model/twium/gen/go v0.0.0-00010101000000-000000000000
+	github.com/TWI-Unified-Model/tacra/gen/go v0.0.0-00010101000000-000000000000
 	google.golang.org/grpc v1.83.2
 )
 

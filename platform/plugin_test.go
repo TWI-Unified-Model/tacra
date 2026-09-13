@@ -61,7 +61,7 @@ func TestSimulatedEnrollEvidence(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	p, err := NewSimulated(WithAttestationKey(ak), WithIssuer("twium-test"))
+	p, err := NewSimulated(WithAttestationKey(ak), WithIssuer("tacra-test"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -86,7 +86,7 @@ func TestSimulatedEnrollEvidence(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if claims.Issuer != "twium-test" {
+	if claims.Issuer != "tacra-test" {
 		t.Fatalf("issuer %q", claims.Issuer)
 	}
 	if claims.BoundKeyUse != BoundKeyUseSign {

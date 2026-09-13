@@ -16,7 +16,7 @@ declare -a SELECTED_COMPONENTS=() PARSED_COMPONENTS=()
 usage() {
     cat <<'EOF'
 Usage:
-  twium/deploy/components.sh <build|deploy|stop|status> [options]
+  tacra/deploy/components.sh <build|deploy|stop|status> [options]
 
 Options:
   --components LIST       Comma-separated components, or all (default: all).
@@ -60,7 +60,7 @@ split_list() {
 validate_component() {
     case "$1" in
         globalsign-est|hashicorp-vault|spiffe-spire|step-ca|veraison-services) ;;
-        twium|veraison-apiclient) fail "$1 is not deployable: it is a schema or client-library project" ;;
+        tacra|veraison-apiclient) fail "$1 is not deployable: it is a schema or client-library project" ;;
         *) fail "unknown component: $1" ;;
     esac
 }

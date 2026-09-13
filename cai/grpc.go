@@ -4,7 +4,7 @@ import (
 	"context"
 	"crypto/x509"
 
-	caiv1 "github.com/TWI-Unified-Model/twium/gen/go/cai/v1"
+	caiv1 "github.com/TWI-Unified-Model/tacra/gen/go/cai/v1"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )

@@ -34,7 +34,7 @@ func newIssuer() (*issuer, error) {
 	now := time.Now().Add(-time.Minute)
 	caTmpl := &x509.Certificate{
 		SerialNumber:          serial,
-		Subject:               pkix.Name{Organization: []string{"TWIUM"}, CommonName: "twium-poc-ca"},
+		Subject:               pkix.Name{Organization: []string{"TACRA"}, CommonName: "tacra-poc-ca"},
 		NotBefore:             now,
 		NotAfter:              now.Add(365 * 24 * time.Hour),
 		KeyUsage:              x509.KeyUsageCertSign | x509.KeyUsageCRLSign | x509.KeyUsageDigitalSignature,
@@ -71,12 +71,12 @@ func (i *issuer) issueServerCert() error {
 	now := time.Now().Add(-time.Minute)
 	tmpl := &x509.Certificate{
 		SerialNumber: serial,
-		Subject:      pkix.Name{Organization: []string{"TWIUM"}, CommonName: "twium-server"},
+		Subject:      pkix.Name{Organization: []string{"TACRA"}, CommonName: "tacra-server"},
 		NotBefore:    now,
 		NotAfter:     now.Add(24 * time.Hour),
 		KeyUsage:     x509.KeyUsageDigitalSignature,
 		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
-		DNSNames:     []string{"localhost", "twium-server", "host.docker.internal"},
+		DNSNames:     []string{"localhost", "tacra-server", "host.docker.internal"},
 		IPAddresses:  []net.IP{net.IPv4(127, 0, 0, 1), net.IPv6loopback},
 	}
 	der, err := x509.CreateCertificate(rand.Reader, tmpl, i.caCert, &key.PublicKey, i.caKey)
