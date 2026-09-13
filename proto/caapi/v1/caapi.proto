@@ -9,6 +9,29 @@ enum CredentialAcquisitionMode {
     ACQUISITION_RETRIEVE = 2;
 }
 
+// FreshnessKind classifies Evidence freshness for one credential-acquisition
+// exchange (draft-novak-rats-tacra). present-* kinds return a Freshness Handle
+// that the Attester embeds in Evidence; absent-* kinds return no Handle.
+enum FreshnessKind {
+    FRESHNESS_KIND_UNSPECIFIED = 0;
+
+    // No Handle; Evidence carries no freshness claim.
+    FRESHNESS_KIND_ABSENT_NONE = 1;
+
+    // No Handle; Attester stamps Evidence from a trusted clock (RFC 9334 §10.1).
+    FRESHNESS_KIND_ABSENT_TIMESTAMP = 2;
+
+    // No Handle; Attester embeds an epoch identifier already held locally (RFC 9334 §10.3).
+    FRESHNESS_KIND_ABSENT_EPOCH = 3;
+
+    // Handle is a single-use nonce the Attester embeds in Evidence (RFC 9334 §10.2).
+    FRESHNESS_KIND_PRESENT_NONCE = 4;
+
+    // Handle is the current epoch marker; Attester embeds it and retries
+    // Initiate-Credential-Acquisition if the epoch has moved (RFC 9334 §10.3).
+    FRESHNESS_KIND_PRESENT_EPOCH = 5;
+}
+
 enum CredentialType {
     CREDENTIAL_TYPE_UNSPECIFIED = 0;
 
@@ -32,12 +55,16 @@ message InitiateCredentialAcquistionRequest {
 }
 
 message InitiateCredentialAcquisitionResponse {
-    // Which credential acquisition mechanism
+    // Which credential acquisition mode
     // does the CAS support for this endpoint?
     CredentialAcquisitionMode mode = 1;
 
-    // Optional challenge
-    optional bytes challenge = 2;
+    // How freshness is established for this exchange.
+    FreshnessKind freshness_kind = 2;
+
+    // Freshness Handle (attestation nonce or epoch marker). Present when
+    // freshness_kind is present-nonce or present-epoch.
+    optional bytes freshness_handle = 3;
 
     // TODO: research and add supported ciphers and other fields
 }

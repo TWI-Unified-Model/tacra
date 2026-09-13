@@ -70,6 +70,73 @@ func (CredentialAcquisitionMode) EnumDescriptor() ([]byte, []int) {
 	return file_caapi_v1_caapi_proto_rawDescGZIP(), []int{0}
 }
 
+// FreshnessKind classifies Evidence freshness for one credential-acquisition
+// exchange (draft-novak-rats-tacra). present-* kinds return a Freshness Handle
+// that the Attester embeds in Evidence; absent-* kinds return no Handle.
+type FreshnessKind int32
+
+const (
+	FreshnessKind_FRESHNESS_KIND_UNSPECIFIED FreshnessKind = 0
+	// No Handle; Attester stamps Evidence from a trusted clock (RFC 9334 §10.1).
+	FreshnessKind_FRESHNESS_KIND_ABSENT_TIMESTAMP FreshnessKind = 1
+	// No Handle; Evidence carries no freshness claim.
+	FreshnessKind_FRESHNESS_KIND_ABSENT_NONE FreshnessKind = 2
+	// No Handle; Attester embeds an epoch identifier already held locally (RFC 9334 §10.3).
+	FreshnessKind_FRESHNESS_KIND_ABSENT_EPOCH FreshnessKind = 3
+	// Handle is a single-use nonce the Attester embeds in Evidence (RFC 9334 §10.2).
+	FreshnessKind_FRESHNESS_KIND_PRESENT_NONCE FreshnessKind = 4
+	// Handle is the current epoch marker; Attester embeds it and retries
+	// Initiate-Credential-Acquisition if the epoch has moved (RFC 9334 §10.3).
+	FreshnessKind_FRESHNESS_KIND_PRESENT_EPOCH FreshnessKind = 5
+)
+
+// Enum value maps for FreshnessKind.
+var (
+	FreshnessKind_name = map[int32]string{
+		0: "FRESHNESS_KIND_UNSPECIFIED",
+		1: "FRESHNESS_KIND_ABSENT_TIMESTAMP",
+		2: "FRESHNESS_KIND_ABSENT_NONE",
+		3: "FRESHNESS_KIND_ABSENT_EPOCH",
+		4: "FRESHNESS_KIND_PRESENT_NONCE",
+		5: "FRESHNESS_KIND_PRESENT_EPOCH",
+	}
+	FreshnessKind_value = map[string]int32{
+		"FRESHNESS_KIND_UNSPECIFIED":      0,
+		"FRESHNESS_KIND_ABSENT_TIMESTAMP": 1,
+		"FRESHNESS_KIND_ABSENT_NONE":      2,
+		"FRESHNESS_KIND_ABSENT_EPOCH":     3,
+		"FRESHNESS_KIND_PRESENT_NONCE":    4,
+		"FRESHNESS_KIND_PRESENT_EPOCH":    5,
+	}
+)
+
+func (x FreshnessKind) Enum() *FreshnessKind {
+	p := new(FreshnessKind)
+	*p = x
+	return p
+}
+
+func (x FreshnessKind) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (FreshnessKind) Descriptor() protoreflect.EnumDescriptor {
+	return file_caapi_v1_caapi_proto_enumTypes[1].Descriptor()
+}
+
+func (FreshnessKind) Type() protoreflect.EnumType {
+	return &file_caapi_v1_caapi_proto_enumTypes[1]
+}
+
+func (x FreshnessKind) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use FreshnessKind.Descriptor instead.
+func (FreshnessKind) EnumDescriptor() ([]byte, []int) {
+	return file_caapi_v1_caapi_proto_rawDescGZIP(), []int{1}
+}
+
 type CredentialType int32
 
 const (
@@ -117,11 +184,11 @@ func (x CredentialType) String() string {
 }
 
 func (CredentialType) Descriptor() protoreflect.EnumDescriptor {
-	return file_caapi_v1_caapi_proto_enumTypes[1].Descriptor()
+	return file_caapi_v1_caapi_proto_enumTypes[2].Descriptor()
 }
 
 func (CredentialType) Type() protoreflect.EnumType {
-	return &file_caapi_v1_caapi_proto_enumTypes[1]
+	return &file_caapi_v1_caapi_proto_enumTypes[2]
 }
 
 func (x CredentialType) Number() protoreflect.EnumNumber {
@@ -130,7 +197,7 @@ func (x CredentialType) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use CredentialType.Descriptor instead.
 func (CredentialType) EnumDescriptor() ([]byte, []int) {
-	return file_caapi_v1_caapi_proto_rawDescGZIP(), []int{1}
+	return file_caapi_v1_caapi_proto_rawDescGZIP(), []int{2}
 }
 
 type InitiateCredentialAcquistionRequest struct {
@@ -189,13 +256,16 @@ func (x *InitiateCredentialAcquistionRequest) GetCredentialType() CredentialType
 
 type InitiateCredentialAcquisitionResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Which credential acquisition mechanism
+	// Which credential acquisition mode
 	// does the CAS support for this endpoint?
 	Mode CredentialAcquisitionMode `protobuf:"varint,1,opt,name=mode,proto3,enum=caapi.v1.CredentialAcquisitionMode" json:"mode,omitempty"`
-	// Optional challenge
-	Challenge     []byte `protobuf:"bytes,2,opt,name=challenge,proto3,oneof" json:"challenge,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	// How freshness is established for this exchange.
+	FreshnessKind FreshnessKind `protobuf:"varint,2,opt,name=freshness_kind,json=freshnessKind,proto3,enum=caapi.v1.FreshnessKind" json:"freshness_kind,omitempty"`
+	// Freshness Handle (attestation nonce or epoch marker). Present when
+	// freshness_kind is present-nonce or present-epoch.
+	FreshnessHandle []byte `protobuf:"bytes,3,opt,name=freshness_handle,json=freshnessHandle,proto3,oneof" json:"freshness_handle,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *InitiateCredentialAcquisitionResponse) Reset() {
@@ -235,9 +305,16 @@ func (x *InitiateCredentialAcquisitionResponse) GetMode() CredentialAcquisitionM
 	return CredentialAcquisitionMode_ACQUISITION_UNSPECIFIED
 }
 
-func (x *InitiateCredentialAcquisitionResponse) GetChallenge() []byte {
+func (x *InitiateCredentialAcquisitionResponse) GetFreshnessKind() FreshnessKind {
 	if x != nil {
-		return x.Challenge
+		return x.FreshnessKind
+	}
+	return FreshnessKind_FRESHNESS_KIND_UNSPECIFIED
+}
+
+func (x *InitiateCredentialAcquisitionResponse) GetFreshnessHandle() []byte {
+	if x != nil {
+		return x.FreshnessHandle
 	}
 	return nil
 }
@@ -487,12 +564,12 @@ const file_caapi_v1_caapi_proto_rawDesc = "" +
 	"\x14caapi/v1/caapi.proto\x12\bcaapi.v1\"\x80\x01\n" +
 	"#InitiateCredentialAcquistionRequest\x12\x16\n" +
 	"\x06target\x18\x01 \x01(\tR\x06target\x12A\n" +
-	"\x0fcredential_type\x18\x02 \x01(\x0e2\x18.caapi.v1.CredentialTypeR\x0ecredentialType\"\x91\x01\n" +
+	"\x0fcredential_type\x18\x02 \x01(\x0e2\x18.caapi.v1.CredentialTypeR\x0ecredentialType\"\xe5\x01\n" +
 	"%InitiateCredentialAcquisitionResponse\x127\n" +
-	"\x04mode\x18\x01 \x01(\x0e2#.caapi.v1.CredentialAcquisitionModeR\x04mode\x12!\n" +
-	"\tchallenge\x18\x02 \x01(\fH\x00R\tchallenge\x88\x01\x01B\f\n" +
-	"\n" +
-	"_challenge\"\xe4\x01\n" +
+	"\x04mode\x18\x01 \x01(\x0e2#.caapi.v1.CredentialAcquisitionModeR\x04mode\x12>\n" +
+	"\x0efreshness_kind\x18\x02 \x01(\x0e2\x17.caapi.v1.FreshnessKindR\rfreshnessKind\x12.\n" +
+	"\x10freshness_handle\x18\x03 \x01(\fH\x00R\x0ffreshnessHandle\x88\x01\x01B\x13\n" +
+	"\x11_freshness_handle\"\xe4\x01\n" +
 	"\x17EnrollCredentialRequest\x12\x16\n" +
 	"\x06target\x18\x01 \x01(\tR\x06target\x12A\n" +
 	"\x0fcredential_type\x18\x02 \x01(\x0e2\x18.caapi.v1.CredentialTypeR\x0ecredentialType\x12,\n" +
@@ -513,7 +590,14 @@ const file_caapi_v1_caapi_proto_rawDesc = "" +
 	"\x19CredentialAcquisitionMode\x12\x1b\n" +
 	"\x17ACQUISITION_UNSPECIFIED\x10\x00\x12\x16\n" +
 	"\x12ACQUISITION_ENROLL\x10\x01\x12\x18\n" +
-	"\x14ACQUISITION_RETRIEVE\x10\x02*\xcf\x01\n" +
+	"\x14ACQUISITION_RETRIEVE\x10\x02*\xd9\x01\n" +
+	"\rFreshnessKind\x12\x1e\n" +
+	"\x1aFRESHNESS_KIND_UNSPECIFIED\x10\x00\x12#\n" +
+	"\x1fFRESHNESS_KIND_ABSENT_TIMESTAMP\x10\x01\x12\x1e\n" +
+	"\x1aFRESHNESS_KIND_ABSENT_NONE\x10\x02\x12\x1f\n" +
+	"\x1bFRESHNESS_KIND_ABSENT_EPOCH\x10\x03\x12 \n" +
+	"\x1cFRESHNESS_KIND_PRESENT_NONCE\x10\x04\x12 \n" +
+	"\x1cFRESHNESS_KIND_PRESENT_EPOCH\x10\x05*\xcf\x01\n" +
 	"\x0eCredentialType\x12\x1f\n" +
 	"\x1bCREDENTIAL_TYPE_UNSPECIFIED\x10\x00\x12\x17\n" +
 	"\x13CREDENTIAL_TYPE_JWT\x10\x01\x12\x17\n" +
@@ -539,34 +623,36 @@ func file_caapi_v1_caapi_proto_rawDescGZIP() []byte {
 	return file_caapi_v1_caapi_proto_rawDescData
 }
 
-var file_caapi_v1_caapi_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
+var file_caapi_v1_caapi_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
 var file_caapi_v1_caapi_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
 var file_caapi_v1_caapi_proto_goTypes = []any{
 	(CredentialAcquisitionMode)(0),                // 0: caapi.v1.CredentialAcquisitionMode
-	(CredentialType)(0),                           // 1: caapi.v1.CredentialType
-	(*InitiateCredentialAcquistionRequest)(nil),   // 2: caapi.v1.InitiateCredentialAcquistionRequest
-	(*InitiateCredentialAcquisitionResponse)(nil), // 3: caapi.v1.InitiateCredentialAcquisitionResponse
-	(*EnrollCredentialRequest)(nil),               // 4: caapi.v1.EnrollCredentialRequest
-	(*EnrollCredentialResponse)(nil),              // 5: caapi.v1.EnrollCredentialResponse
-	(*RetrieveCredentialRequest)(nil),             // 6: caapi.v1.RetrieveCredentialRequest
-	(*RetrieveCredentialResponse)(nil),            // 7: caapi.v1.RetrieveCredentialResponse
+	(FreshnessKind)(0),                            // 1: caapi.v1.FreshnessKind
+	(CredentialType)(0),                           // 2: caapi.v1.CredentialType
+	(*InitiateCredentialAcquistionRequest)(nil),   // 3: caapi.v1.InitiateCredentialAcquistionRequest
+	(*InitiateCredentialAcquisitionResponse)(nil), // 4: caapi.v1.InitiateCredentialAcquisitionResponse
+	(*EnrollCredentialRequest)(nil),               // 5: caapi.v1.EnrollCredentialRequest
+	(*EnrollCredentialResponse)(nil),              // 6: caapi.v1.EnrollCredentialResponse
+	(*RetrieveCredentialRequest)(nil),             // 7: caapi.v1.RetrieveCredentialRequest
+	(*RetrieveCredentialResponse)(nil),            // 8: caapi.v1.RetrieveCredentialResponse
 }
 var file_caapi_v1_caapi_proto_depIdxs = []int32{
-	1, // 0: caapi.v1.InitiateCredentialAcquistionRequest.credential_type:type_name -> caapi.v1.CredentialType
+	2, // 0: caapi.v1.InitiateCredentialAcquistionRequest.credential_type:type_name -> caapi.v1.CredentialType
 	0, // 1: caapi.v1.InitiateCredentialAcquisitionResponse.mode:type_name -> caapi.v1.CredentialAcquisitionMode
-	1, // 2: caapi.v1.EnrollCredentialRequest.credential_type:type_name -> caapi.v1.CredentialType
-	1, // 3: caapi.v1.RetrieveCredentialRequest.credential_type:type_name -> caapi.v1.CredentialType
-	2, // 4: caapi.v1.CredentialAcquisitionService.InitiateRemoteAttestation:input_type -> caapi.v1.InitiateCredentialAcquistionRequest
-	4, // 5: caapi.v1.CredentialAcquisitionService.EnrollCredential:input_type -> caapi.v1.EnrollCredentialRequest
-	6, // 6: caapi.v1.CredentialAcquisitionService.RetrieveCredential:input_type -> caapi.v1.RetrieveCredentialRequest
-	3, // 7: caapi.v1.CredentialAcquisitionService.InitiateRemoteAttestation:output_type -> caapi.v1.InitiateCredentialAcquisitionResponse
-	5, // 8: caapi.v1.CredentialAcquisitionService.EnrollCredential:output_type -> caapi.v1.EnrollCredentialResponse
-	7, // 9: caapi.v1.CredentialAcquisitionService.RetrieveCredential:output_type -> caapi.v1.RetrieveCredentialResponse
-	7, // [7:10] is the sub-list for method output_type
-	4, // [4:7] is the sub-list for method input_type
-	4, // [4:4] is the sub-list for extension type_name
-	4, // [4:4] is the sub-list for extension extendee
-	0, // [0:4] is the sub-list for field type_name
+	1, // 2: caapi.v1.InitiateCredentialAcquisitionResponse.freshness_kind:type_name -> caapi.v1.FreshnessKind
+	2, // 3: caapi.v1.EnrollCredentialRequest.credential_type:type_name -> caapi.v1.CredentialType
+	2, // 4: caapi.v1.RetrieveCredentialRequest.credential_type:type_name -> caapi.v1.CredentialType
+	3, // 5: caapi.v1.CredentialAcquisitionService.InitiateRemoteAttestation:input_type -> caapi.v1.InitiateCredentialAcquistionRequest
+	5, // 6: caapi.v1.CredentialAcquisitionService.EnrollCredential:input_type -> caapi.v1.EnrollCredentialRequest
+	7, // 7: caapi.v1.CredentialAcquisitionService.RetrieveCredential:input_type -> caapi.v1.RetrieveCredentialRequest
+	4, // 8: caapi.v1.CredentialAcquisitionService.InitiateRemoteAttestation:output_type -> caapi.v1.InitiateCredentialAcquisitionResponse
+	6, // 9: caapi.v1.CredentialAcquisitionService.EnrollCredential:output_type -> caapi.v1.EnrollCredentialResponse
+	8, // 10: caapi.v1.CredentialAcquisitionService.RetrieveCredential:output_type -> caapi.v1.RetrieveCredentialResponse
+	8, // [8:11] is the sub-list for method output_type
+	5, // [5:8] is the sub-list for method input_type
+	5, // [5:5] is the sub-list for extension type_name
+	5, // [5:5] is the sub-list for extension extendee
+	0, // [0:5] is the sub-list for field type_name
 }
 
 func init() { file_caapi_v1_caapi_proto_init() }
@@ -582,7 +668,7 @@ func file_caapi_v1_caapi_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_caapi_v1_caapi_proto_rawDesc), len(file_caapi_v1_caapi_proto_rawDesc)),
-			NumEnums:      2,
+			NumEnums:      3,
 			NumMessages:   6,
 			NumExtensions: 0,
 			NumServices:   1,

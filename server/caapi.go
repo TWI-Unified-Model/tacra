@@ -39,13 +39,14 @@ func (s *caapiServer) InitiateRemoteAttestation(_ context.Context, in *caapiv1.I
 	if err != nil {
 		return nil, err
 	}
-	challenge := make([]byte, 32)
-	if _, err := rand.Read(challenge); err != nil {
-		return nil, status.Errorf(codes.Internal, "challenge: %v", err)
+	handle := make([]byte, 32)
+	if _, err := rand.Read(handle); err != nil {
+		return nil, status.Errorf(codes.Internal, "freshness handle: %v", err)
 	}
 	return &caapiv1.InitiateCredentialAcquisitionResponse{
-		Mode:      mode,
-		Challenge: challenge,
+		Mode:            mode,
+		FreshnessKind:   caapiv1.FreshnessKind_FRESHNESS_KIND_PRESENT_NONCE,
+		FreshnessHandle: handle,
 	}, nil
 }
 

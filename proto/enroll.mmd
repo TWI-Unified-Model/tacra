@@ -11,32 +11,31 @@ sequenceDiagram
 
     note over W, CAA_C: CAAPI Local Call
     activate W
-    note over CAA_C, CAS_C: CAAPI gRPC Call
+    note over CAA_C, CAS_C: CAAPI External Call
     activate CAA_C
-    W->>CAS_C: Enroll Credential<br/>(Target, Credential Type, Evidence incl. CSR)
+    W->>CAS_C: Enroll Credential<br/>(Target, Credential Type,<br/>Evidence)
     deactivate CAA_C
     deactivate W
     note over CAS_C, CAS_S: Invoke CAS Server<br/>over CAS Protocol
     activate CAS_C
-    CAS_C->>CAS_S: Enroll Credential<br/>(Target, Credential Type,<br/>Evidence incl. CSR)
+    CAS_C->>CAS_S: Enroll Credential<br/>(Target, Credential Type,<br/>Evidence)
     deactivate CAS_C
     note over CAS_S, V: Verifier Protocol
     activate CAS_S
-    CAS_S->>CAS_S: Verify Evidence-to-CSR binding
-    CAS_S->>V: Request Attestation<br/>(Evidence incl. CSR)
+    CAS_S->>V: Request Attestation<br/>(Evidence)
     deactivate CAS_S
     activate V
-    V->>V: Check Evidence
+    V->>V: Check Evidence incl. CSR Binding,<br/>Freshness Handle
     V->>V: Include CSR in<br/>Attestation Results
     V-->>CAS_S: Attestation Results
     deactivate V
     note over CAS_S, CA: Certificate Authority Invocation
     activate CAS_S
-    CAS_S->>CA: Enroll Credential<br/>(Attestation Results incl. CSR)
+    CAS_S->>CA: Enroll Credential<br/>(Attestation Results incl. CSR,<br/>Credential Hint)
     deactivate CAS_S
     activate CA
     CA->>CA: Validate<br/>Attestation Results
-    CA->>CA: Mint New Credential<br/>from CSR, Attestation Results
+    CA->>CA: Mint New Credential<br/>from CSR, Attestation Results,<br/>Credential Hint
     CA-->>CAS_S: Newly Minted (Enrolled) Credential
     deactivate CA
     CAS_S-->>CAS_C: Enrolled Credential

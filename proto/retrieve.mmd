@@ -1,43 +1,43 @@
-%% Retrieving existing proof-of-possession or bearer token credentials
+%% Retrieving existing proof-of-posvesvion or bearer token credentials
 sequenceDiagram
     participant W as Workload
     participant CAA_C as CAAPI<br/>Client
     participant CAS_C as CAS<br/>Client
     participant CAS_S as CAS<br/>Server
     participant V as Verifier
-    participant SS as Vault
+    participant SV as VSecret<br/>Vault
 
     autonumber
 
     note over W, CAA_C: CAAPI Local Call
     activate W
-    note over CAA_C, CAS_C: CAAPI gRPC Call
+    note over CAA_C, CAS_C: CAAPI External Call
     activate CAA_C
-    W->>CAS_C: Retrieve Credential<br/>(Target, Credential Type, Evidence incl. CEKpub)
+    W->>CAS_C: Retrieve Credential<br/>(Target, Credential Type, Evidence incl.<br/> CEKpub, Freshness Handle,<br/>Credential Hint)
     deactivate CAA_C
     deactivate W
     note over CAS_C, CAS_S: Invoke CAS Server<br/>over CAS Protocol
     activate CAS_C
-    CAS_C->>CAS_S: Retrieve Credential<br/>(Target, Credential Type,<br/>Evidence incl. CEKpub)
+    CAS_C->>CAS_S: Retrieve Credential<br/>(Target, Credential Type,<br/>Evidence)
     deactivate CAS_C
     note over CAS_S, V: Verifier Protocol
     activate CAS_S
-    CAS_S->>V: Request Attestation<br/>(Evidence incl. CEKpub)
+    CAS_S->>V: Request Attestation<br/>(Evidence)
     deactivate CAS_S
     activate V
-    V->>V: Check Evidence
+    V->>V: Check Evidence<br/>incl. CEKpub binding,<br/>Freshness Handle
     V->>V: Include CEKpub in<br/>Attestation Results
     V-->>CAS_S: Attestation Results
     deactivate V
-    note over CAS_S, SS: Vault Invocation
+    note over CAS_S, SV: Vault Invocation
     activate CAS_S
-    CAS_S->>SS: Retrieve Credential<br/>(Attestation Results incl. CEKpub)
+    CAS_S->>SV: Retrieve Credential<br/>(Attestation Results incl. CEKpub,<br/>Credential Hint)
     deactivate CAS_S
-    activate SS
-    SS->>SS: Validate<br/>Attestation Results
-    SS->>SS: Map Attestation Results<br/>to Credential
-    SS->>SS: Wrap Credential's Secret<br/>in CEKpub
-    SS-->>CAS_S: Retrieved Credential<br/>plus Wrapped Secret
-    deactivate SS
+    activate SV
+    SV->>SV: Validate<br/>Attestation Results
+    SV->>SV: Map Attestation Results<br/>to Credential
+    SV->>SV: Wrap Credential's Secret<br/>in CEKpub
+    SV-->>CAS_S: Retrieved Credential<br/>plus Wrapped Secret
+    deactivate SV
     CAS_S-->>CAS_C: Retrieved Credential<br/>plus Wrapped Secret
     CAS_C-->>W: Retrieved Credential<br/>plus Wrapped Secret

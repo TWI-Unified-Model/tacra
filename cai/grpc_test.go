@@ -16,7 +16,7 @@ import (
 )
 
 func TestGRPCAcquireCredential(t *testing.T) {
-	challenge := bytes.Repeat([]byte{0x0c}, 32)
+	handle := bytes.Repeat([]byte{0x0c}, 32)
 	fake := &fakeCAAPI{
 		init: func(_ context.Context, in *caapiv1.InitiateCredentialAcquistionRequest) (*caapiv1.InitiateCredentialAcquisitionResponse, error) {
 			mode := caapiv1.CredentialAcquisitionMode_ACQUISITION_RETRIEVE
@@ -24,8 +24,9 @@ func TestGRPCAcquireCredential(t *testing.T) {
 				mode = caapiv1.CredentialAcquisitionMode_ACQUISITION_ENROLL
 			}
 			return &caapiv1.InitiateCredentialAcquisitionResponse{
-				Mode:      mode,
-				Challenge: challenge,
+				Mode:            mode,
+				FreshnessKind:   caapiv1.FreshnessKind_FRESHNESS_KIND_PRESENT_NONCE,
+				FreshnessHandle: handle,
 			}, nil
 		},
 		enroll: func(_ context.Context, in *caapiv1.EnrollCredentialRequest) (*caapiv1.EnrollCredentialResponse, error) {

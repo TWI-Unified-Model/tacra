@@ -98,30 +98,30 @@ func (c *Client) AcquireCredential(ctx context.Context, target string, credType 
 		return nil, rpcError("InitiateRemoteAttestation", err)
 	}
 
-	challenge := initResp.GetChallenge()
-	if n := len(challenge); n < eat.MinNonceSize || n > eat.MaxNonceSize {
-		return nil, fmt.Errorf("%w: got %d", ErrInvalidChallenge, n)
+	handle := initResp.GetFreshnessHandle()
+	if n := len(handle); n < eat.MinNonceSize || n > eat.MaxNonceSize {
+		return nil, fmt.Errorf("%w: got %d", ErrInvalidFreshnessHandle, n)
 	}
 
 	switch initResp.GetMode() {
 	case ModeRetrieve:
-		return c.retrieve(ctx, target, credType, challenge)
+		return c.retrieve(ctx, target, credType, handle)
 	case ModeEnroll:
-		return c.enroll(ctx, target, credType, challenge)
+		return c.enroll(ctx, target, credType, handle)
 	default:
 		return nil, fmt.Errorf("%w: %s", ErrUnsupportedMode, initResp.GetMode())
 	}
 }
 
-func (c *Client) retrieve(ctx context.Context, target string, credType CredentialType, challenge []byte) (*Credential, error) {
+func (c *Client) retrieve(ctx context.Context, target string, credType CredentialType, handle []byte) (*Credential, error) {
 	cek, err := c.plugin.GenerateCEK()
 	if err != nil {
 		return nil, fmt.Errorf("cai: generate CEK: %w", err)
 	}
 	ev, err := c.plugin.GenerateEvidence(platform.EvidenceRequest{
-		Challenge:   challenge,
-		BoundKey:    cek.Public(),
-		BoundKeyUse: platform.BoundKeyUseEncrypt,
+		FreshnessHandle: handle,
+		BoundKey:        cek.Public(),
+		BoundKeyUse:     platform.BoundKeyUseEncrypt,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("cai: generate evidence: %w", err)
@@ -148,7 +148,7 @@ func (c *Client) retrieve(ctx context.Context, target string, credType Credentia
 	}, nil
 }
 
-func (c *Client) enroll(ctx context.Context, target string, credType CredentialType, challenge []byte) (*Credential, error) {
+func (c *Client) enroll(ctx context.Context, target string, credType CredentialType, handle []byte) (*Credential, error) {
 	csk, err := c.plugin.GenerateCSK()
 	if err != nil {
 		return nil, fmt.Errorf("cai: generate CSK: %w", err)
@@ -158,10 +158,10 @@ func (c *Client) enroll(ctx context.Context, target string, credType CredentialT
 		return nil, err
 	}
 	ev, err := c.plugin.GenerateEvidence(platform.EvidenceRequest{
-		Challenge:   challenge,
-		BoundKey:    csk.Public(),
-		CSR:         csr,
-		BoundKeyUse: platform.BoundKeyUseSign,
+		FreshnessHandle: handle,
+		BoundKey:        csk.Public(),
+		CSR:             csr,
+		BoundKeyUse:     platform.BoundKeyUseSign,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("cai: generate evidence: %w", err)
