@@ -12,8 +12,11 @@ import (
 	"crypto/rand"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"encoding/json"
 	"encoding/pem"
 	"errors"
+	"fmt"
+	"io"
 	"os"
 	"strings"
 	"testing"
@@ -24,17 +27,75 @@ import (
 	"github.com/veraison/go-cose"
 )
 
-const (
-	defaultHost          = "localhost:9444"
-	defaultCN            = "twi-unified-model-client"
-	defaultCACert        = "../deploy/config/local/globalsign-est/certs/ca-certificates.pem"
-	defaultProviderKey   = "../deploy/config/local/mock-tee-provider/key.pem"
-	defaultTarget        = "RUP-workload-1"
-	retrieveTargetName   = "RUP-workload-2"
-	rejectedTarget       = "RUP-workload-unknown"
-	credentialTypeX509   = est.CredentialTypeX509
-	credentialTypeBearer = est.CredentialTypePSK
-)
+type testConfig struct {
+	Host               string `json:"host"`
+	CommonName         string `json:"common_name"`
+	CACertificate      string `json:"ca_certificate"`
+	ProviderPrivateKey string `json:"provider_private_key"`
+	Targets            struct {
+		Enroll   string `json:"enroll"`
+		Retrieve string `json:"retrieve"`
+		Rejected string `json:"rejected"`
+	} `json:"targets"`
+	CredentialTypes struct {
+		X509   string `json:"x509"`
+		Bearer string `json:"bearer"`
+	} `json:"credential_types"`
+}
+
+var cfg testConfig
+
+func TestMain(m *testing.M) {
+	path := envOr("EST_TEST_CONFIG", "est_attest.json")
+	loaded, err := loadTestConfig(path)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "load EST test configuration %s: %v\n", path, err)
+		os.Exit(1)
+	}
+	cfg = loaded
+	os.Exit(m.Run())
+}
+
+func loadTestConfig(path string) (testConfig, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return testConfig{}, err
+	}
+	defer file.Close()
+
+	decoder := json.NewDecoder(file)
+	decoder.DisallowUnknownFields()
+
+	var loaded testConfig
+	if err := decoder.Decode(&loaded); err != nil {
+		return testConfig{}, err
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		if err == nil {
+			return testConfig{}, fmt.Errorf("multiple JSON values")
+		}
+		return testConfig{}, err
+	}
+
+	required := map[string]string{
+		"host":                    loaded.Host,
+		"common_name":             loaded.CommonName,
+		"ca_certificate":          loaded.CACertificate,
+		"provider_private_key":    loaded.ProviderPrivateKey,
+		"targets.enroll":          loaded.Targets.Enroll,
+		"targets.retrieve":        loaded.Targets.Retrieve,
+		"targets.rejected":        loaded.Targets.Rejected,
+		"credential_types.x509":   loaded.CredentialTypes.X509,
+		"credential_types.bearer": loaded.CredentialTypes.Bearer,
+	}
+	for field, value := range required {
+		if value == "" {
+			return testConfig{}, fmt.Errorf("%s is required", field)
+		}
+	}
+
+	return loaded, nil
+}
 
 func envOr(key, fallback string) string {
 	if value := os.Getenv(key); value != "" {
@@ -46,7 +107,7 @@ func envOr(key, fallback string) string {
 func explicitAnchor(t *testing.T) *x509.CertPool {
 	t.Helper()
 
-	path := envOr("EST_CA_CERT", defaultCACert)
+	path := envOr("EST_CA_CERT", cfg.CACertificate)
 	pemBytes, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("read EST CA certificate %s: %v", path, err)
@@ -62,7 +123,7 @@ func explicitAnchor(t *testing.T) *x509.CertPool {
 
 func newClient(anchor *x509.CertPool, cert *x509.Certificate, key crypto.Signer) *est.Client {
 	client := &est.Client{
-		Host:                  envOr("EST_HOST", defaultHost),
+		Host:                  envOr("EST_HOST", cfg.Host),
 		AdditionalPathSegment: os.Getenv("EST_APS"),
 		ExplicitAnchor:        anchor,
 	}
@@ -84,7 +145,7 @@ func newCSR(t *testing.T) (*x509.CertificateRequest, *ecdsa.PrivateKey) {
 	}
 
 	template := &x509.CertificateRequest{
-		Subject: pkix.Name{CommonName: envOr("EST_CN", defaultCN)},
+		Subject: pkix.Name{CommonName: envOr("EST_CN", cfg.CommonName)},
 	}
 	if sans := os.Getenv("EST_SANS"); sans != "" {
 		template.DNSNames = strings.Split(sans, ",")
@@ -114,9 +175,9 @@ func verifyChain(t *testing.T, cert *x509.Certificate, anchor *x509.CertPool) {
 	}
 }
 
-func target() string { return envOr("EST_TARGET", defaultTarget) }
+func target() string { return envOr("EST_TARGET", cfg.Targets.Enroll) }
 
-func retrieveTarget() string { return envOr("EST_RETRIEVE_TARGET", retrieveTargetName) }
+func retrieveTarget() string { return envOr("EST_RETRIEVE_TARGET", cfg.Targets.Retrieve) }
 
 // newCEK generates the Content Encryption Key used in Attested Retrieval Mode.
 func newCEK(t *testing.T) (*ecdh.PrivateKey, []byte) {
@@ -133,7 +194,7 @@ func newCEK(t *testing.T) (*ecdh.PrivateKey, []byte) {
 func mockProviderKey(t *testing.T) *ecdsa.PrivateKey {
 	t.Helper()
 
-	path := envOr("EST_PROVIDER_KEY", defaultProviderKey)
+	path := envOr("EST_PROVIDER_KEY", cfg.ProviderPrivateKey)
 	b, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("read mock TEE provider key %s: %v", path, err)
@@ -263,11 +324,11 @@ func TestAttestedCredentialAcquisition(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 
-	wantCN := envOr("EST_CN", defaultCN)
+	wantCN := envOr("EST_CN", cfg.CommonName)
 	client := newClient(anchor, nil, nil)
 
 	t.Run("Initiate/EnrollMode", func(t *testing.T) {
-		resp, err := client.InitiateRemoteAttestation(ctx, target(), credentialTypeX509)
+		resp, err := client.InitiateRemoteAttestation(ctx, target(), cfg.CredentialTypes.X509)
 		if err != nil {
 			t.Fatalf("attest-initiate: %v", err)
 		}
@@ -285,7 +346,7 @@ func TestAttestedCredentialAcquisition(t *testing.T) {
 	})
 
 	t.Run("Initiate/RetrieveMode", func(t *testing.T) {
-		resp, err := client.InitiateRemoteAttestation(ctx, retrieveTarget(), credentialTypeBearer)
+		resp, err := client.InitiateRemoteAttestation(ctx, retrieveTarget(), cfg.CredentialTypes.Bearer)
 		if err != nil {
 			t.Fatalf("attest-initiate: %v", err)
 		}
@@ -300,12 +361,12 @@ func TestAttestedCredentialAcquisition(t *testing.T) {
 
 	// The EST server whitelists only the configured target.
 	t.Run("Initiate/RejectedTarget", func(t *testing.T) {
-		_, err := client.InitiateRemoteAttestation(ctx, rejectedTarget, credentialTypeX509)
+		_, err := client.InitiateRemoteAttestation(ctx, cfg.Targets.Rejected, cfg.CredentialTypes.X509)
 		assertStatus(t, err, 403)
 	})
 
 	t.Run("Enroll/PresentNonce", func(t *testing.T) {
-		init, err := client.InitiateRemoteAttestation(ctx, target(), credentialTypeX509)
+		init, err := client.InitiateRemoteAttestation(ctx, target(), cfg.CredentialTypes.X509)
 		if err != nil {
 			t.Fatalf("attest-initiate: %v", err)
 		}
@@ -314,7 +375,7 @@ func TestAttestedCredentialAcquisition(t *testing.T) {
 
 		cert, err := client.EnrollCredential(ctx, &est.AttestedEnrollmentRequest{
 			Target:         target(),
-			CredentialType: credentialTypeX509,
+			CredentialType: cfg.CredentialTypes.X509,
 			FreshnessKind:  init.FreshnessKind,
 			Handle:         init.Handle,
 			CSR:            csr.Raw,
@@ -340,7 +401,7 @@ func TestAttestedCredentialAcquisition(t *testing.T) {
 
 		cert, err := client.EnrollCredential(ctx, &est.AttestedEnrollmentRequest{
 			Target:         target(),
-			CredentialType: credentialTypeX509,
+			CredentialType: cfg.CredentialTypes.X509,
 			FreshnessKind:  est.FreshnessAbsentNone,
 			CSR:            csr.Raw,
 			Evidence:       newMockEvidence(t, est.FreshnessAbsentNone, nil),
@@ -355,7 +416,7 @@ func TestAttestedCredentialAcquisition(t *testing.T) {
 	})
 
 	t.Run("Enroll/ReplayedHandle", func(t *testing.T) {
-		init, err := client.InitiateRemoteAttestation(ctx, target(), credentialTypeX509)
+		init, err := client.InitiateRemoteAttestation(ctx, target(), cfg.CredentialTypes.X509)
 		if err != nil {
 			t.Fatalf("attest-initiate: %v", err)
 		}
@@ -364,7 +425,7 @@ func TestAttestedCredentialAcquisition(t *testing.T) {
 			csr, _ := newCSR(t)
 			_, err := client.EnrollCredential(ctx, &est.AttestedEnrollmentRequest{
 				Target:         target(),
-				CredentialType: credentialTypeX509,
+				CredentialType: cfg.CredentialTypes.X509,
 				FreshnessKind:  init.FreshnessKind,
 				Handle:         init.Handle,
 				CSR:            csr.Raw,
@@ -382,7 +443,7 @@ func TestAttestedCredentialAcquisition(t *testing.T) {
 	})
 
 	t.Run("Enroll/EvidenceFreshnessMismatch", func(t *testing.T) {
-		init, err := client.InitiateRemoteAttestation(ctx, target(), credentialTypeX509)
+		init, err := client.InitiateRemoteAttestation(ctx, target(), cfg.CredentialTypes.X509)
 		if err != nil {
 			t.Fatalf("attest-initiate: %v", err)
 		}
@@ -390,7 +451,7 @@ func TestAttestedCredentialAcquisition(t *testing.T) {
 		csr, _ := newCSR(t)
 		_, err = client.EnrollCredential(ctx, &est.AttestedEnrollmentRequest{
 			Target:         target(),
-			CredentialType: credentialTypeX509,
+			CredentialType: cfg.CredentialTypes.X509,
 			FreshnessKind:  init.FreshnessKind,
 			Handle:         init.Handle,
 			CSR:            csr.Raw,
@@ -403,7 +464,7 @@ func TestAttestedCredentialAcquisition(t *testing.T) {
 	// The Verifier rejects a PCR value changed after the mock TEE provider
 	// signed the evidence.
 	t.Run("Enroll/TamperedMeasurement", func(t *testing.T) {
-		init, err := client.InitiateRemoteAttestation(ctx, target(), credentialTypeX509)
+		init, err := client.InitiateRemoteAttestation(ctx, target(), cfg.CredentialTypes.X509)
 		if err != nil {
 			t.Fatalf("attest-initiate: %v", err)
 		}
@@ -420,7 +481,7 @@ func TestAttestedCredentialAcquisition(t *testing.T) {
 
 		_, err = client.EnrollCredential(ctx, &est.AttestedEnrollmentRequest{
 			Target:         target(),
-			CredentialType: credentialTypeX509,
+			CredentialType: cfg.CredentialTypes.X509,
 			FreshnessKind:  init.FreshnessKind,
 			Handle:         init.Handle,
 			CSR:            csr.Raw,
@@ -461,7 +522,7 @@ func TestAttestedCredentialAcquisition(t *testing.T) {
 
 	// The mechanism is fixed by the CAS, so the wrong second leg is rejected.
 	t.Run("Enroll/WrongMechanismForTarget", func(t *testing.T) {
-		init, err := client.InitiateRemoteAttestation(ctx, retrieveTarget(), credentialTypeX509)
+		init, err := client.InitiateRemoteAttestation(ctx, retrieveTarget(), cfg.CredentialTypes.X509)
 		if err != nil {
 			t.Fatalf("attest-initiate: %v", err)
 		}
@@ -470,7 +531,7 @@ func TestAttestedCredentialAcquisition(t *testing.T) {
 
 		_, err = client.EnrollCredential(ctx, &est.AttestedEnrollmentRequest{
 			Target:         retrieveTarget(),
-			CredentialType: credentialTypeX509,
+			CredentialType: cfg.CredentialTypes.X509,
 			FreshnessKind:  init.FreshnessKind,
 			Handle:         init.Handle,
 			CSR:            csr.Raw,
@@ -483,14 +544,14 @@ func TestAttestedCredentialAcquisition(t *testing.T) {
 	retrieve := func(t *testing.T, cekPub []byte) *est.EncryptedCredentialBundle {
 		t.Helper()
 
-		init, err := client.InitiateRemoteAttestation(ctx, retrieveTarget(), credentialTypeBearer)
+		init, err := client.InitiateRemoteAttestation(ctx, retrieveTarget(), cfg.CredentialTypes.Bearer)
 		if err != nil {
 			t.Fatalf("attest-initiate: %v", err)
 		}
 
 		bundle, err := client.RetrieveCredential(ctx, &est.AttestedRetrievalRequest{
 			Target:         retrieveTarget(),
-			CredentialType: credentialTypeBearer,
+			CredentialType: cfg.CredentialTypes.Bearer,
 			FreshnessKind:  init.FreshnessKind,
 			Handle:         init.Handle,
 			CEKPub:         cekPub,
@@ -592,8 +653,8 @@ func TestAttestedCredentialAcquisition(t *testing.T) {
 		_, cekPub := newCEK(t)
 
 		_, err := client.RetrieveCredential(ctx, &est.AttestedRetrievalRequest{
-			Target:         rejectedTarget,
-			CredentialType: credentialTypeBearer,
+			Target:         cfg.Targets.Rejected,
+			CredentialType: cfg.CredentialTypes.Bearer,
 			FreshnessKind:  est.FreshnessAbsentNone,
 			CEKPub:         cekPub,
 			Evidence:       newMockEvidence(t, est.FreshnessAbsentNone, nil),

@@ -1,0 +1,15 @@
+{
+  "host": "localhost:9444",
+  "common_name": "twi-unified-model-client",
+  "ca_certificate": "../deploy/config/local/globalsign-est/certs/ca-certificates.pem",
+  "provider_private_key": "../deploy/config/local/mock-tee-provider/key.pem",
+  "targets": {
+    "enroll": "RUP-workload-1",
+    "retrieve": "RUP-workload-2",
+    "rejected": "RUP-workload-unknown"
+  },
+  "credential_types": {
+    "x509": "x509",
+    "bearer": "psk"
+  }
+}

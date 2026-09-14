@@ -295,7 +295,7 @@ the type is carried and validated but not yet honoured in the payload.
 The CAAPI `InitiateCredentialAcquistionRequest` message name contains a typo in
 the proto. It is left as-is here since the generated bindings depend on it.
 
-### Error mapping 
+### Error mapping
 
 | Status | Condition |
 | --- | --- |
@@ -305,7 +305,7 @@ the proto. It is left as-is here since the generated bindings depend on it.
 | `415` | Content type is not `application/json` |
 | `501` | Backing CA does not implement `est.AttestationCA` |
 
-Error bodies carry no attestation detail. 
+Error bodies carry no attestation detail.
 
 ## Configuration
 
@@ -355,13 +355,23 @@ go test -v -count=1 ./...
 `-count=1` disables Go's test result cache, which matters because these tests
 talk to a live container.
 
+The test defaults are defined in [est_attest.json](est_attest.json). It contains the EST host,
+client Common Name, CA and mock-provider key paths, target names, and credential
+types. The test loads this file once before running and rejects unknown fields,
+missing required values, or additional JSON values. Paths in the file are
+resolved from the `est` module directory, matching the `go test` command above.
+
 ### Overrides
 
 | Environment variable | Default | Description |
 | --- | --- | --- |
-| `EST_HOST` | `localhost:9444` | Host and port of the EST server. |
-| `EST_CN` | `twi-unified-model-client` | Common Name placed in generated CSRs. |
-| `EST_CA_CERT` | `../deploy/config/local/globalsign-est/certs/ca-certificates.pem` | PEM CA certificate used as the TLS and certificate-verification anchor. |
+| `EST_TEST_CONFIG` | `est_attest.json` | Alternate JSON test configuration file. |
+| `EST_HOST` | configured value | Host and port of the EST server. |
+| `EST_CN` | configured value | Common Name placed in generated CSRs. |
+| `EST_CA_CERT` | configured value | PEM CA certificate used as the TLS and certificate-verification anchor. |
+| `EST_PROVIDER_KEY` | configured value | Mock TEE provider EC private key used to sign Evidence. |
+| `EST_TARGET` | configured value | Enrollment target name. |
+| `EST_RETRIEVE_TARGET` | configured value | Retrieval target name. |
 | `EST_APS` | empty | Additional EST path segment passed to the client library. |
 | `EST_SANS` | empty | Comma-separated DNS names placed in generated CSRs. |
 | `EST_BIT_SIZE` | empty | Value of the `Bit-Size` header sent for `ServerKeyGen`. |
