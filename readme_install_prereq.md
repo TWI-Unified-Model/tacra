@@ -1,6 +1,6 @@
 # Installation Prerequisites
 
-This document covers the required software and tools to build **twium** from source.
+This document covers the required software and tools to build **TACRA** from source.
 
 ## Go Compiler
 
@@ -91,7 +91,7 @@ protoc --version
 
 ## Build Instructions
 
-Once prerequisites are installed, follow these steps to build twium:
+Once prerequisites are installed, follow these steps to build TACRA:
 
 ### 1. Install Go Protoc Plugins (One-time Setup)
 
@@ -123,6 +123,6 @@ make clean
 
 ## Next Steps
 
-After completing prerequisites and building twium, see:
+After completing prerequisites and building TACRA, see:
 - [Docker Build and Deployment](readme_docker_build_deploy.md) - Deploy the full TWI stack
 - [README.md](README.md) - Main project overview

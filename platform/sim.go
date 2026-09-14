@@ -14,9 +14,9 @@ import (
 )
 
 const (
-	defaultIssuer = "twium-sim"
-	defaultSWName = "twium-sim"
-	defaultHW     = "twium-sim"
+	defaultIssuer = "tacra-sim"
+	defaultSWName = "tacra-sim"
+	defaultHW     = "tacra-sim"
 )
 
 // Simulated is a software Platform Plug-In for the PoC. It generates P-256
@@ -151,7 +151,7 @@ func (s *Simulated) GenerateEvidence(req EvidenceRequest) (*Evidence, error) {
 	if s == nil || s.ak == nil {
 		return nil, ErrNilPlugin
 	}
-	if err := validateChallenge(req.Challenge); err != nil {
+	if err := validateFreshnessHandle(req.FreshnessHandle); err != nil {
 		return nil, err
 	}
 	bound, err := ecdsaP256Public(req.BoundKey)
@@ -165,7 +165,7 @@ func (s *Simulated) GenerateEvidence(req EvidenceRequest) (*Evidence, error) {
 	}
 
 	nonce := eat.Nonce{}
-	if err := nonce.Add(req.Challenge); err != nil {
+	if err := nonce.Add(req.FreshnessHandle); err != nil {
 		return nil, fmt.Errorf("platform: nonce: %w", err)
 	}
 
@@ -241,10 +241,10 @@ func (s *Simulated) signEAT(claims []byte) ([]byte, error) {
 	return token, nil
 }
 
-func validateChallenge(ch []byte) error {
-	n := len(ch)
+func validateFreshnessHandle(h []byte) error {
+	n := len(h)
 	if n < eat.MinNonceSize || n > eat.MaxNonceSize {
-		return fmt.Errorf("%w: got %d", ErrInvalidChallenge, n)
+		return fmt.Errorf("%w: got %d", ErrInvalidFreshnessHandle, n)
 	}
 	return nil
 }

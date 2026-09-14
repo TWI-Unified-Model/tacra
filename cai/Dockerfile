@@ -1,4 +1,4 @@
-# Build from the twium/ directory:
+# Build from the tacra/ directory:
 #   docker build -f cai/Dockerfile .
 FROM golang:1.26-alpine AS builder
 

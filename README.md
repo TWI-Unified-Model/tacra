@@ -1,16 +1,16 @@
-# TWI Unified Model - Proof of Concept
+# TACRA - Proof of Concept
 
-TWI Unified Model Proof-of-Concept
+Trustworthy Acquisition of Credentials using Remote Attestation Proof-of-Concept
 
 ## Quick Start
 
-Get the TWI stack running in 3 steps:
+Get the TACRA stack running in 3 steps:
 
 ```bash
 # 1. Install prerequisites (Go 1.23+, protoc 25.3+)
 #    See: readme_install_prereq.md
 
-# 2. Build twium proto schemas
+# 2. Build TACRA proto schemas
 make install-tools
 make proto
 
@@ -24,7 +24,8 @@ export DEPLOY_CONFIG_DIR="$PWD/deploy/config/local"
 
 | Topic | Description | Link |
 |-------|-------------|------|
-| **Installation Prerequisites** | Install Go compiler, Protobuf compiler (protoc), and build tools required to compile twium schemas from source. **Start here** if setting up a new development environment. | [readme_install_prereq.md](readme_install_prereq.md) |
+| **Understand TACRA** | This PoC implements the Trustworthy Credential Acquisition using Remote Attestion (TACRA) architecture | [TACRA Informational Draft](https://github.com/TheBankster/rats-tacra/) |
+| **Installation Prerequisites** | Install Go compiler, Protobuf compiler (protoc), and build tools required to compile TACRA schemas from source. **Start here** if setting up a new development environment. | [readme_install_prereq.md](readme_install_prereq.md) |
 | **Docker Build & Deployment** | Build Docker images from source for all TWI stack components (globalsign-est, hashicorp-vault, spiffe-spire, step-ca, veraison-services) and deploy them locally or to remote hosts. Covers `components.sh` usage, configuration management, component-specific Dockerfiles, and the `init-local-est-config.sh` script for local development setup. | [readme_docker_build_deploy.md](readme_docker_build_deploy.md) |
 | **Configuration Structure** | Runtime configuration directory layout, certificate/key requirements, and component-specific config examples. | [deploy/config/README.md](deploy/config/README.md) |
 | **CA API Schema** | Protobuf message definitions and gRPC service contracts for the CA API. | [proto/caapi/v1/caapi.proto](proto/caapi/v1/caapi.proto) |
@@ -33,33 +34,46 @@ export DEPLOY_CONFIG_DIR="$PWD/deploy/config/local"
 ## Repository Structure
 
 ```
-twium/
-├── proto/                      # Protobuf schema definitions
-│   └── caapi/v1/
-│       ├── caapi.proto         # CA API service and messages
-│       ├── mint.mmd            # Mint operation flow diagram
-│       ├── retrieve.mmd        # Retrieve operation flow diagram
-│       └── initiate.mmd        # Initiate operation flow diagram
-├── gen/                        # Generated Go code (do not edit manually)
-│   └── go/
-│       └── caapi/v1/
-│           ├── caapi.pb.go     # Protobuf Go bindings
-│           └── caapi_grpc.pb.go # gRPC Go bindings
-├── deploy/                     # Deployment orchestration
+.
+├── cai                         # Credential Acquisition Interface (CAI) implementation
+│   └── cmd/sidecar/            # CAI Sidecar implementation
+├── client/                     # PoC Client
+├── deploy/
 │   ├── components.sh           # Main deployment dispatcher script
-│   ├── init-local-est-config.sh # Local EST config generator
+│   ├── init-local-est-config.sh             # Local EST config generator
+│   ├── init-local-hashicorp-vault-config.sh # Local HashiCorp Vault config generator
+│   ├── init-local-spiffe-spire-config.sh    # Local SPIFFE/SPIRE config generator
+│   ├── init-local-step-ca-config.sh         # Local step-ca config generator
 │   └── config/
-│       ├── README.md           # Configuration documentation
-│       └── local/              # Gitignored local dev configs
+│       └── README.md           # Configuration documentation
+├── est/                        # EST integration tests
+├── gen/go/
+│   ├── caapi/v1/
+│   │   ├── caapi.pb.go         # CAAPI Protobuf Go bindings
+│   │   └── caapi_grpc.pb.go    # CAAPI gRPC Go bindings
+│   └── cai/v1/
+│       ├── cai.pb.go           # CAI Protobuf Go bindings
+│       └── cai_grpc.pb.go      # CAI gRPC Go bindings
+├── platform/                   # Platform plug-in
+├── proto/
+│   │                           # Protobuf services and message definitions
+│   ├── caapi/v1/caapi.proto    # Credential Acquisition API v1 (CAAPI)
+│   ├── cai/v1/cai.proto        # Credential Acquisition Interface v1 (CAI)
+│   │                           # Mermaid sequence diagrams
+│   ├── acquire.mmd             # CAI: AcquireCredential flow
+│   ├── enroll.mmd              # CAAPI: EnrollCredential flow
+│   ├── initiate.mmd            # CAAPI: InitiateAcquisition flow
+│   └── retrieve.mmd            # CAAPI: RetrieveCredential flow
 ├── Makefile                    # Build automation
 ├── README.md                   # This file
+├── readme_docker_build_deploy.md # Docker deployment guide
 ├── readme_install_prereq.md    # Installation prerequisites
-└── readme_docker_build_deploy.md # Docker deployment guide
+└── server/                     # PoC Server
 ```
 
 ## Component Integration
 
-Twium integrates with these upstream projects (vendored in the workspace):
+TACRA integrates with these upstream projects (vendored in the workspace):
 
 | Component | Role | Repository |
 |-----------|------|------------|

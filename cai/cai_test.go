@@ -10,8 +10,8 @@ import (
 	"errors"
 	"testing"
 
-	caapiv1 "github.com/TWI-Unified-Model/twium/gen/go/caapi/v1"
-	"github.com/TWI-Unified-Model/twium/platform"
+	caapiv1 "github.com/TWI-Unified-Model/tacra/gen/go/caapi/v1"
+	"github.com/TWI-Unified-Model/tacra/platform"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -59,16 +59,17 @@ func newTestCAI(t *testing.T, fake *fakeCAAPI) (*Client, *platform.Simulated) {
 
 func TestAcquireCredentialRetrieve(t *testing.T) {
 	secret := []byte("pre-shared-api-key")
-	challenge := bytes.Repeat([]byte{0x0a}, 32)
+	handle := bytes.Repeat([]byte{0x0a}, 32)
 
 	fake := &fakeCAAPI{
 		init: func(_ context.Context, in *caapiv1.InitiateCredentialAcquistionRequest) (*caapiv1.InitiateCredentialAcquisitionResponse, error) {
-			if in.GetTarget() != "https://api.example" || in.GetCredentialType() != caapiv1.CredentialType_BT_CREDENTIAL_TYPE_API_KEY {
+			if in.GetTarget() != "https://api.example" || in.GetCredentialType() != caapiv1.CredentialType_CREDENTIAL_TYPE_API_KEY {
 				t.Fatalf("init args: %+v", in)
 			}
 			return &caapiv1.InitiateCredentialAcquisitionResponse{
-				Mechanism: caapiv1.CredentialAcquisitionMechanism_OPERATION_RETRIEVE,
-				Challenge: challenge,
+				Mode:            caapiv1.CredentialAcquisitionMode_ACQUISITION_RETRIEVE,
+				FreshnessKind:   caapiv1.FreshnessKind_FRESHNESS_KIND_PRESENT_NONCE,
+				FreshnessHandle: handle,
 			}, nil
 		},
 		retrieve: func(_ context.Context, in *caapiv1.RetrieveCredentialRequest) (*caapiv1.RetrieveCredentialResponse, error) {
@@ -79,7 +80,7 @@ func TestAcquireCredentialRetrieve(t *testing.T) {
 			if claims.BoundKeyUse != platform.BoundKeyUseEncrypt {
 				t.Fatalf("bound key use %d", claims.BoundKeyUse)
 			}
-			if !bytes.Equal(claims.Nonce.GetI(0), challenge) {
+			if !bytes.Equal(claims.Nonce.GetI(0), handle) {
 				t.Fatal("nonce mismatch")
 			}
 			pub, err := claims.Cnf.BoundPublicKey()
@@ -99,8 +100,8 @@ func TestAcquireCredentialRetrieve(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cred.Mechanism != MechanismRetrieve {
-		t.Fatalf("mechanism %s", cred.Mechanism)
+	if cred.Mode != ModeRetrieve {
+		t.Fatalf("mode %s", cred.Mode)
 	}
 	if !bytes.Equal(cred.Document, secret) {
 		t.Fatalf("document %q", cred.Document)
@@ -111,15 +112,16 @@ func TestAcquireCredentialRetrieve(t *testing.T) {
 }
 
 func TestAcquireCredentialEnroll(t *testing.T) {
-	challenge := bytes.Repeat([]byte{0x0b}, 16)
+	handle := bytes.Repeat([]byte{0x0b}, 16)
 	minted := []byte("dummy-x509-der")
 	var gotCSR []byte
 
 	fake := &fakeCAAPI{
 		init: func(_ context.Context, _ *caapiv1.InitiateCredentialAcquistionRequest) (*caapiv1.InitiateCredentialAcquisitionResponse, error) {
 			return &caapiv1.InitiateCredentialAcquisitionResponse{
-				Mechanism: caapiv1.CredentialAcquisitionMechanism_OPERATION_ENROLL,
-				Challenge: challenge,
+				Mode:            caapiv1.CredentialAcquisitionMode_ACQUISITION_ENROLL,
+				FreshnessKind:   caapiv1.FreshnessKind_FRESHNESS_KIND_PRESENT_NONCE,
+				FreshnessHandle: handle,
 			}, nil
 		},
 		enroll: func(_ context.Context, in *caapiv1.EnrollCredentialRequest) (*caapiv1.EnrollCredentialResponse, error) {
@@ -164,8 +166,8 @@ func TestAcquireCredentialEnroll(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cred.Mechanism != MechanismEnroll {
-		t.Fatalf("mechanism %s", cred.Mechanism)
+	if cred.Mode != ModeEnroll {
+		t.Fatalf("mode %s", cred.Mode)
 	}
 	if !bytes.Equal(cred.Document, minted) {
 		t.Fatal("minted credential mismatch")
@@ -219,18 +221,19 @@ func TestAcquireCredentialCASError(t *testing.T) {
 	}
 }
 
-func TestAcquireCredentialBadChallenge(t *testing.T) {
+func TestAcquireCredentialBadFreshnessHandle(t *testing.T) {
 	fake := &fakeCAAPI{
 		init: func(context.Context, *caapiv1.InitiateCredentialAcquistionRequest) (*caapiv1.InitiateCredentialAcquisitionResponse, error) {
 			return &caapiv1.InitiateCredentialAcquisitionResponse{
-				Mechanism: caapiv1.CredentialAcquisitionMechanism_OPERATION_RETRIEVE,
-				Challenge: []byte("short"),
+				Mode:            caapiv1.CredentialAcquisitionMode_ACQUISITION_RETRIEVE,
+				FreshnessKind:   caapiv1.FreshnessKind_FRESHNESS_KIND_PRESENT_NONCE,
+				FreshnessHandle: []byte("short"),
 			}, nil
 		},
 	}
 	c, _ := newTestCAI(t, fake)
 	_, err := c.AcquireCredential(context.Background(), "t", CredentialTypeJWT)
-	if !errors.Is(err, ErrInvalidChallenge) {
+	if !errors.Is(err, ErrInvalidFreshnessHandle) {
 		t.Fatalf("got %v", err)
 	}
 }

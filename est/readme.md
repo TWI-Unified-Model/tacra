@@ -152,25 +152,23 @@ The profile URI is
 application/eat+cwt; eat_profile="https://twi.confidentialcomputing.io/tacra-est-mock/1.0.0"
 ```
 
-The payload uses standard EAT/CWT labels for `iss`, `sub`, `iat`, `nonce`,
-`ueid`, `hwmodel`, `oemboot`, `dbgstat`, `eat_profile`, `bootcount`, `bootseed`
-and `swname`. Private profile label `-70003` carries the PCR map and `-70004`
-carries `freshness_kind`. For `present-nonce`, EAT `nonce` contains the exact
-Handle from `attest-initiate`; for `absent-none`, `nonce` is absent.
+The `est` module is also included in [`../go.work`](../go.work), so it can be
+used as part of the TACRA workspace.
 
-Target, credential type, CSR, CEK public key, binding, profile request and
-endorsements are never EAT claims. They remain method parameters in the EST
-request envelope.
+## Starting the EST server
 
-## Attested Retrieval Mode
+From the workspace root, build and deploy the EST component with:
 
-The Attester generates a Content Encryption Key (ECDH P-256). `CEKpub` is a
-field of `AttestedRetrievalRequest`, not part of Evidence. The signed mock TEE
-Evidence has the same TEE and Freshness-only shape used for enrollment. The
-mock Secret Vault maps Attestation Results onto a credential group:
+```bash
+./tacra/deploy/components.sh build --components globalsign-est
+./tacra/deploy/components.sh deploy --components globalsign-est
+```
+
+The deployment script starts a container named `twi-globalsign-est` using the
+local configuration under:
 
 ```text
-group_id = SHA-256(attestation_subject || profile || policy_version)
+tacra/deploy/config/local/globalsign-est
 ```
 
 The subject is taken from Attestation Results rather than raw Evidence, so it
@@ -334,7 +332,7 @@ the EST server mount receives only
 attestation resources return `501 Not Implemented`.
 
 It is emitted by [../deploy/init-local-est-config.sh](../deploy/init-local-est-config.sh)
-into `twium/deploy/config/local/globalsign-est/estserver.json`. If the section
+into `tacra/deploy/config/local/globalsign-est/estserver.json`. If the section
 is absent, the two default targets above are configured.
 
 ## Running the tests
@@ -343,14 +341,14 @@ The tests run against the deployed container, so a change to `globalsign-est`
 requires a rebuild before it takes effect:
 
 ```bash
-./twium/deploy/components.sh build  --components globalsign-est
-./twium/deploy/components.sh deploy --components globalsign-est
+./tacra/deploy/components.sh build  --components globalsign-est
+./tacra/deploy/components.sh deploy --components globalsign-est
 ```
 
 Then:
 
 ```bash
-cd twium/est
+cd tacra/est
 go test -v -count=1 ./...
 ```
 
@@ -366,42 +364,44 @@ talk to a live container.
 | `EST_CA_CERT` | `../deploy/config/local/globalsign-est/certs/ca-certificates.pem` | PEM CA certificate used as the TLS and certificate-verification anchor. |
 | `EST_APS` | empty | Additional EST path segment passed to the client library. |
 | `EST_SANS` | empty | Comma-separated DNS names placed in generated CSRs. |
-| `EST_TARGET` | `RUP-workload-1` | Enrollment target configured by the mock CAS. |
-| `EST_RETRIEVE_TARGET` | `RUP-workload-2` | Retrieval target configured by the mock CAS. |
+| `EST_BIT_SIZE` | empty | Value of the `Bit-Size` header sent for `ServerKeyGen`. |
 
-Pointing either target variable at a target that is not configured causes the
-positive cases to fail with `403`.
+Example:
 
-### Coverage
+```bash
+EST_CN=my-workload \
+EST_SANS=localhost,my-workload \
+EST_BIT_SIZE=3072 \
+go test -v -count=1 ./...
+```
 
-| Subtest | Asserts |
-| --- | --- |
-| `Initiate/EnrollMode` | `present-nonce`, non-empty Handle, `mechanism=enroll`, `csr-hash` binding |
-| `Initiate/RetrieveMode` | `mechanism=retrieve`, `cek-thumbprint` binding, advertised CEK suite |
-| `Initiate/RejectedTarget` | Non-whitelisted target rejected with `403` |
-| `Initiate/MechanismIndependentOfCredentialType` | Four credential types across both targets always yield the target's mechanism |
-| `TestMockTEEEvidence` | Signed TEE Evidence verifies, excludes request fields, and rejects a tampered PCR |
-| `Enroll/PresentNonce` | Certificate issued, CN preserved, chains to the local EST CA |
-| `Enroll/AbsentNone` | Leg two succeeds with no prior server contact |
-| `Enroll/ReplayedHandle` | Second use of a Handle rejected with `409` |
-| `Enroll/EvidenceFreshnessMismatch` | Correctly signed Evidence carrying a different Handle rejected with `403` |
-| `Enroll/TamperedMeasurement` | Evidence with a modified PCR rejected with `403` |
-| `Enroll/WrongMechanismForTarget` | Enrolling against a retrieve target rejected with `403` |
-| `Retrieve/PresentNonce` | Bundle decrypts with `CEKpri`; cert chains; key parses |
-| `Retrieve/ReplicaStability` | Two Attesters, same subject, same `group_id` and credential |
-| `Retrieve/WrongCEK` | A different CEK private key cannot open the bundle |
-| `Retrieve/RejectedTarget` | Retrieval for a non-whitelisted target rejected with `403` |
+The test does not use the server `/healthcheck` endpoint and therefore does
+not require its basic-auth password.
 
-## Known gaps
+## Troubleshooting
 
-Background Check mode is not implemented; only Passport is. Evidence is a
-non-production CBOR COSE Sign1 EAT signed with a locally generated P-256 mock
-provider key and appraised against fixed PCR values; it has no endorsements or
-real TEE trust chain. `present-epoch`,
-`absent-epoch` and `absent-timestamp` are absent, so the epoch-moved retry path
-is untested. The Handle store is in-memory and per-process, so it does not
-survive a container restart or scale horizontally. Request envelopes still use
-`application/json`; Evidence itself is advertised as the profile-specific
-`application/eat+cwt` media type. Request bodies remain capped at 64 KB by the
-existing EST middleware, which is ample for mock Evidence but may not suit real
-attestation quotes.
+If the test reports a connection error, confirm that the container is running
+and that host port `9444` is published:
+
+```bash
+docker ps --filter name=twi-globalsign-est
+docker logs twi-globalsign-est
+```
+
+Without local EST configuration or a running `twi-globalsign-est` container,
+`go test` skips `TestESTOperations` instead of failing. Set `EST_CA_CERT` to an
+explicit path only when the file should already exist; a missing explicit path
+is still a failure.
+
+If the local CA files are missing or expired, regenerate the local EST
+configuration from the workspace root:
+
+```bash
+./tacra/deploy/init-local-est-config.sh
+```
+
+Then recreate the EST container so it uses the regenerated certificates:
+
+```bash
+./tacra/deploy/components.sh deploy --components globalsign-est
+```

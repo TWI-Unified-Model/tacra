@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"net/url"
 
-	"github.com/TWI-Unified-Model/twium/platform"
+	"github.com/TWI-Unified-Model/tacra/platform"
 )
 
 func createCSR(csk *platform.KeyPair, target string) ([]byte, error) {

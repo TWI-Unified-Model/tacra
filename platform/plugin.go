@@ -26,7 +26,7 @@ type Plugin interface {
 	GenerateCSK() (*KeyPair, error)
 
 	// GenerateEvidence produces RATS Evidence as a CBOR-encoded tagged
-	// COSE_Sign1 EAT covering the verifier challenge and the bound key
+	// COSE_Sign1 EAT covering the freshness handle and the bound key
 	// (CEKpub or CSKpub). CSR, when present, is included as a profile
 	// claim so Evidence and CSR are bound together.
 	GenerateEvidence(req EvidenceRequest) (*Evidence, error)
@@ -88,9 +88,10 @@ const (
 
 // EvidenceRequest is the input to Plugin.GenerateEvidence.
 type EvidenceRequest struct {
-	// Challenge is the Verifier nonce from Initiate-Credential-Acquisition.
-	// RFC 9711 requires 8–64 bytes.
-	Challenge []byte
+	// FreshnessHandle is the nonce or epoch marker from
+	// Initiate-Credential-Acquisition. RFC 9711 requires 8–64 bytes when
+	// used as an EAT nonce.
+	FreshnessHandle []byte
 
 	// BoundKey is CEKpub (Retrieval) or CSKpub (Enrollment). It is placed
 	// in the EAT cnf claim so the Verifier can confirm possession.
@@ -118,10 +119,10 @@ type Evidence struct {
 }
 
 var (
-	ErrInvalidChallenge = errors.New("platform: challenge must be 8-64 bytes")
-	ErrMissingBoundKey  = errors.New("platform: bound public key is required")
-	ErrUnsupportedKey   = errors.New("platform: bound key must be a P-256 ECDSA public key")
-	ErrNilPlugin        = errors.New("platform: nil plugin")
+	ErrInvalidFreshnessHandle = errors.New("platform: freshness handle must be 8-64 bytes")
+	ErrMissingBoundKey        = errors.New("platform: bound public key is required")
+	ErrUnsupportedKey         = errors.New("platform: bound key must be a P-256 ECDSA public key")
+	ErrNilPlugin              = errors.New("platform: nil plugin")
 )
 
 func ecdsaP256Public(pub crypto.PublicKey) (*ecdsa.PublicKey, error) {

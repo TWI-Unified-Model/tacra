@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/TWI-Unified-Model/twium/cai"
-	caapiv1 "github.com/TWI-Unified-Model/twium/gen/go/caapi/v1"
-	"github.com/TWI-Unified-Model/twium/platform"
+	"github.com/TWI-Unified-Model/tacra/cai"
+	caapiv1 "github.com/TWI-Unified-Model/tacra/gen/go/caapi/v1"
+	"github.com/TWI-Unified-Model/tacra/platform"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )

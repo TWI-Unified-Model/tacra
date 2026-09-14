@@ -1,0 +1,40 @@
+%% Acquire-Credential API
+sequenceDiagram
+    participant A as Attester
+    participant CAI as CAI Implementation
+    participant PL as Platform Plug-In
+    participant CAS as CAS via<br/>CAAPI
+
+    A->>CAI: Acquire-Credential<br/>(Target, Credential Type, Credenital Hint)
+    note over CAI, CAS: Credential Acquisition Initiation Flow
+    CAI->>CAS: Initiate-Credential-Acquisition<br/>(Target, Credential Type)
+    CAS->>CAS: Invoke the CAS Server
+    alt Invalid Credential Type or other Error Condition
+        CAS-->>A: Error: Invalid Credential Type,<br/>Invalid Target,<br/>Unavailable Server, etc.
+    else Success
+        CAS-->>CAI: CAAPI Context:<br/>[Credential Acquisition Mode,<br/>Freshness Kind, Freshness Handle,<br/>Cipher Suites, etc.]
+    end
+    alt Credential Acquisition Mode is Enroll
+        note over CAI, CAS: Credential Enrollment Flow
+        CAI->>PL: Generate Asymmetric Credential Signing Key CSK
+        PL-->>CAI: Generated CSKpub, CSKpri
+        CAI->>CAI: Generate CSR using CSKpri
+        note over CAI, PL: Evidence can contain CSR<br/>or vice versa: CSR can contain Evidence<br/>How this is decided is TBD
+        CAI->>PL: Generate Evidence<br/>(CSKpub, CSR, Freshness Handle, Credential Hint)
+        PL-->>CAI: Generated Evidence
+        CAI->>CAS: Enroll-Credential<br/>(Evidence incl., CSKpub, CSR, Credential Hint)
+        CAS->>CAS: Invoke the CAS Server's<br/>Enroll() function
+        CAS-->>CAI: Enrolled (newly minted) Credential
+    else Credential Acquisition Mode is Retrieve
+        note over CAI, CAS: Credential Retrieval Flow
+        CAI->>PL: Generate Asymmetric Credential Encryption Key CEK
+        PL-->>CAI: Generated CEKpub, CEKpri
+        CAI->>PL: Generate Evidence<br/>(CEKpub, Freshness Handle, Credential Hint)
+        PL-->>CAI: Generated Evidence
+        CAI->>CAS: Retrieve-Credential<br/>(Evidence incl. CEKpub, Credential Hint)
+        CAS->>CAS: Invoke the CAS Server's<br/>Retrieve() function
+        CAS-->>CAI: Retrieved (pre-existing) Credential<br/>encrypted to CEKpub
+        CAI-->>CAI: Unwrap the returned credential<br/>using CEKpri
+    end
+    CAI-->>A: Credential
+

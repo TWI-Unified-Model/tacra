@@ -1,14 +1,14 @@
-module github.com/TWI-Unified-Model/twium/cai
+module github.com/TWI-Unified-Model/tacra/cai
 
 go 1.26.5
 
-replace github.com/TWI-Unified-Model/twium/platform => ../platform
+replace github.com/TWI-Unified-Model/tacra/platform => ../platform
 
-replace github.com/TWI-Unified-Model/twium/gen/go => ../gen/go
+replace github.com/TWI-Unified-Model/tacra/gen/go => ../gen/go
 
 require (
-	github.com/TWI-Unified-Model/twium/gen/go v0.0.0-00010101000000-000000000000
-	github.com/TWI-Unified-Model/twium/platform v0.0.0-00010101000000-000000000000
+	github.com/TWI-Unified-Model/tacra/gen/go v0.0.0-00010101000000-000000000000
+	github.com/TWI-Unified-Model/tacra/platform v0.0.0-00010101000000-000000000000
 	github.com/fxamacker/cbor/v2 v2.9.3
 	github.com/veraison/eat v0.0.0-20251105185612-2c0e43e22ea9
 	golang.org/x/crypto v0.56.0

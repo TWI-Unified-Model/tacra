@@ -7,15 +7,15 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/TWI-Unified-Model/twium/cai"
-	caapiv1 "github.com/TWI-Unified-Model/twium/gen/go/caapi/v1"
-	"github.com/TWI-Unified-Model/twium/platform"
+	"github.com/TWI-Unified-Model/tacra/cai"
+	caapiv1 "github.com/TWI-Unified-Model/tacra/gen/go/caapi/v1"
+	"github.com/TWI-Unified-Model/tacra/platform"
 	"github.com/golang-jwt/jwt/v5"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
 
-const jwtAudience = "twium-server"
+const jwtAudience = "tacra-server"
 
 type caapiServer struct {
 	caapiv1.UnimplementedCredentialAcquisitionServiceServer
@@ -35,17 +35,18 @@ func (s *caapiServer) InitiateRemoteAttestation(_ context.Context, in *caapiv1.I
 	if in.GetTarget() == "" {
 		return nil, status.Error(codes.InvalidArgument, "Invalid Target")
 	}
-	mech, err := mechanismFor(in.GetCredentialType())
+	mode, err := modeFor(in.GetCredentialType())
 	if err != nil {
 		return nil, err
 	}
-	challenge := make([]byte, 32)
-	if _, err := rand.Read(challenge); err != nil {
-		return nil, status.Errorf(codes.Internal, "challenge: %v", err)
+	handle := make([]byte, 32)
+	if _, err := rand.Read(handle); err != nil {
+		return nil, status.Errorf(codes.Internal, "freshness handle: %v", err)
 	}
 	return &caapiv1.InitiateCredentialAcquisitionResponse{
-		Mechanism: mech,
-		Challenge: challenge,
+		Mode:            mode,
+		FreshnessKind:   caapiv1.FreshnessKind_FRESHNESS_KIND_PRESENT_NONCE,
+		FreshnessHandle: handle,
 	}, nil
 }
 
@@ -102,7 +103,7 @@ func (s *caapiServer) RetrieveCredential(_ context.Context, in *caapiv1.Retrieve
 func (s *caapiServer) issueJWT(subject string) (string, error) {
 	now := time.Now()
 	tok := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-		"iss": "twium-cas",
+		"iss": "tacra-cas",
 		"sub": subject,
 		"aud": jwtAudience,
 		"iat": now.Unix(),
@@ -117,16 +118,16 @@ func (s *caapiServer) verifyJWT(raw string) error {
 			return nil, fmt.Errorf("unexpected signing method %v", t.Header["alg"])
 		}
 		return s.jwtKey, nil
-	}, jwt.WithAudience(jwtAudience), jwt.WithIssuer("twium-cas"), jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}))
+	}, jwt.WithAudience(jwtAudience), jwt.WithIssuer("tacra-cas"), jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}))
 	return err
 }
 
-func mechanismFor(t caapiv1.CredentialType) (caapiv1.CredentialAcquisitionMechanism, error) {
+func modeFor(t caapiv1.CredentialType) (caapiv1.CredentialAcquisitionMode, error) {
 	switch t {
-	case caapiv1.CredentialType_POP_CREDENTIAL_TYPE_X509, caapiv1.CredentialType_POP_CREDENTIAL_TYPE_WIC:
-		return caapiv1.CredentialAcquisitionMechanism_OPERATION_ENROLL, nil
-	case caapiv1.CredentialType_BT_CREDENTIAL_TYPE_JWT, caapiv1.CredentialType_BT_CREDENTIAL_TYPE_PSK, caapiv1.CredentialType_BT_CREDENTIAL_TYPE_API_KEY:
-		return caapiv1.CredentialAcquisitionMechanism_OPERATION_RETRIEVE, nil
+	case caapiv1.CredentialType_CREDENTIAL_TYPE_X509, caapiv1.CredentialType_CREDENTIAL_TYPE_WIC:
+		return caapiv1.CredentialAcquisitionMode_ACQUISITION_ENROLL, nil
+	case caapiv1.CredentialType_CREDENTIAL_TYPE_JWT, caapiv1.CredentialType_CREDENTIAL_TYPE_PSK, caapiv1.CredentialType_CREDENTIAL_TYPE_API_KEY:
+		return caapiv1.CredentialAcquisitionMode_ACQUISITION_RETRIEVE, nil
 	case caapiv1.CredentialType_CREDENTIAL_TYPE_UNSPECIFIED:
 		return 0, status.Error(codes.InvalidArgument, "Invalid Credential Type")
 	default:

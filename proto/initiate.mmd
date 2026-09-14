@@ -1,5 +1,5 @@
 %% Initiating Credential Acquisition
-%% by requesting a challenge from the Verifier
+%% by requesting a freshness handle from the Verifier
 %% The "Workload" here may be the Attester's Credential Acquisition Interface
 sequenceDiagram
     participant W as Workload
@@ -12,7 +12,7 @@ sequenceDiagram
 
     note over W, CAA_C: CAAPI Local Call
     activate W
-    note over CAA_C, CAS_C: CAAPI gRPC Call
+    note over CAA_C, CAS_C: CAAPI External Call
     activate CAA_C
     W->>CAS_C: Initiate Credential Acquisition<br/>(Target, Credential Type)
     deactivate CAA_C
@@ -23,17 +23,17 @@ sequenceDiagram
         CAS_C-->>W: Return error: "Unsupported Credential Types" or "Invalid Target"
     else Requested Credential Type Is Supported<br/>and Target is Valid
         note over CAS_C, CAS_S: Invoke CAS Server<br/>over CAS Protocol
-        CAS_C->>CAS_S: Request Challenge<br/>(Target)
+        CAS_C->>CAS_S: Request Freshness<br/>(Target)
         deactivate CAS_C
         activate CAS_S
         CAS_S->>CAS_S: Determine Credential<br/>Acquisition Mode<br/>based on Target
         note over CAS_S, V: Invoke Verifier
-        CAS_S->>V: Request Challenge
+        CAS_S->>V: Request Freshness Handle
         deactivate CAS_S
         activate V
-        V->>V: Compute Challenge
-        V-->>CAS_S: Return Challenge
+        V->>V: Compute Freshness Handle
+        V-->>CAS_S: Return Freshness Handle
         deactivate V
-        CAS_S-->>CAS_C: Return Challenge and<br/>Credential Acquisition Mode
-        CAS_C-->>W: Return Challenge and Credential Acquisition Mode
+        CAS_S-->>CAS_C: Return Freshness Kind,<br/>Freshness Handle, and<br/>Credential Acquisition Mode
+        CAS_C-->>W: Return Freshness Kind, Freshness Handle,<br/>and Credential Acquisition Mode
     end

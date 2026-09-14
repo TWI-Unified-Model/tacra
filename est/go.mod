@@ -1,4 +1,4 @@
-module github.com/TWI-Unified-Model/twium/est
+module github.com/TWI-Unified-Model/tacra/est
 
 go 1.26.5
 

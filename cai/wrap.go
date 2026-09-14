@@ -17,7 +17,7 @@ import (
 
 const (
 	wrapVersion = 1
-	wrapInfo    = "twium/cai/cek-wrap/v1"
+	wrapInfo    = "tacra/cai/cek-wrap/v1"
 	wrapNonce   = 12
 	wrapKeyLen  = 32
 )
