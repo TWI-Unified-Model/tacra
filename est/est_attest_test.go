@@ -297,20 +297,20 @@ func TestMockTEEEvidence(t *testing.T) {
 }
 
 // assertStatus asserts that err carries the expected HTTP status code.
-func assertStatus(t *testing.T, err error, want int) {
+func assertStatus(t *testing.T, err error, expect int) {
 	t.Helper()
 
 	if err == nil {
-		t.Fatalf("expected error with status %d, got nil", want)
+		t.Fatalf("expected error with status %d, got nil", expect)
 	}
 
 	var estErr est.Error
 	if !errors.As(err, &estErr) {
-		t.Fatalf("expected est.Error with status %d, got %T: %v", want, err, err)
+		t.Fatalf("expected est.Error with status %d, got %T: %v", expect, err, err)
 	}
 
-	if got := estErr.StatusCode(); got != want {
-		t.Errorf("status = %d, want %d (%v)", got, want, err)
+	if got := estErr.StatusCode(); got != expect {
+		t.Errorf("status = %d, expect %d (%v)", got, expect, err)
 	}
 }
 
@@ -324,7 +324,7 @@ func TestAttestedCredentialAcquisition(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 
-	wantCN := envOr("EST_CN", cfg.CommonName)
+	expectCN := envOr("EST_CN", cfg.CommonName)
 	client := newClient(anchor, nil, nil)
 
 	t.Run("Initiate/EnrollMode", func(t *testing.T) {
@@ -333,13 +333,13 @@ func TestAttestedCredentialAcquisition(t *testing.T) {
 			t.Fatalf("attest-initiate: %v", err)
 		}
 		if resp.FreshnessKind != est.FreshnessPresentNonce {
-			t.Errorf("freshness_kind = %q, want %q", resp.FreshnessKind, est.FreshnessPresentNonce)
+			t.Errorf("freshness_kind = %q, expect %q", resp.FreshnessKind, est.FreshnessPresentNonce)
 		}
 		if len(resp.Handle) == 0 {
 			t.Error("present-nonce response must carry a handle")
 		}
 		if resp.Mechanism != est.MechanismEnroll {
-			t.Errorf("mode = %q, want %q", resp.Mechanism, est.MechanismEnroll)
+			t.Errorf("mode = %q, expect %q", resp.Mechanism, est.MechanismEnroll)
 		}
 		t.Logf("initiate: kind=%s mode=%s handleLen=%d expiresIn=%d bindings=%v",
 			resp.FreshnessKind, resp.Mechanism, len(resp.Handle), resp.ExpiresIn, resp.RequiredBindings)
@@ -351,7 +351,7 @@ func TestAttestedCredentialAcquisition(t *testing.T) {
 			t.Fatalf("attest-initiate: %v", err)
 		}
 		if resp.Mechanism != est.MechanismRetrieve {
-			t.Errorf("mode = %q, want %q", resp.Mechanism, est.MechanismRetrieve)
+			t.Errorf("mode = %q, expect %q", resp.Mechanism, est.MechanismRetrieve)
 		}
 		if len(resp.AcceptableCEK) == 0 {
 			t.Error("retrieve mode must advertise acceptable CEK suites")
@@ -386,8 +386,8 @@ func TestAttestedCredentialAcquisition(t *testing.T) {
 			t.Fatalf("attest-enroll: %v", err)
 		}
 
-		if got := cert.Subject.CommonName; got != wantCN {
-			t.Errorf("enrolled CN = %q, want %q", got, wantCN)
+		if got := cert.Subject.CommonName; got != expectCN {
+			t.Errorf("enrolled CN = %q, expect %q", got, expectCN)
 		}
 		verifyChain(t, cert, anchor)
 
@@ -505,7 +505,7 @@ func TestAttestedCredentialAcquisition(t *testing.T) {
 				t.Fatalf("attest-initiate %s on enroll target: %v", ct, err)
 			}
 			if enrollResp.Mechanism != est.MechanismEnroll {
-				t.Errorf("credential type %q on enroll target gave mechanism %q, want %q",
+				t.Errorf("credential type %q on enroll target gave mechanism %q, expect %q",
 					ct, enrollResp.Mechanism, est.MechanismEnroll)
 			}
 
@@ -514,7 +514,7 @@ func TestAttestedCredentialAcquisition(t *testing.T) {
 				t.Fatalf("attest-initiate %s on retrieve target: %v", ct, err)
 			}
 			if retrieveResp.Mechanism != est.MechanismRetrieve {
-				t.Errorf("credential type %q on retrieve target gave mechanism %q, want %q",
+				t.Errorf("credential type %q on retrieve target gave mechanism %q, expect %q",
 					ct, retrieveResp.Mechanism, est.MechanismRetrieve)
 			}
 		}
@@ -570,7 +570,7 @@ func TestAttestedCredentialAcquisition(t *testing.T) {
 
 		sealed := retrieve(t, cekPub)
 		if sealed.Enc != est.EncECDHP256 {
-			t.Errorf("enc = %q, want %q", sealed.Enc, est.EncECDHP256)
+			t.Errorf("enc = %q, expect %q", sealed.Enc, est.EncECDHP256)
 		}
 		if len(sealed.Ciphertext) == 0 {
 			t.Fatal("bundle carries no ciphertext")
@@ -582,7 +582,7 @@ func TestAttestedCredentialAcquisition(t *testing.T) {
 			t.Fatalf("open bundle: %v", err)
 		}
 		if bundle.GroupID != sealed.GroupID {
-			t.Errorf("inner group_id = %q, want %q", bundle.GroupID, sealed.GroupID)
+			t.Errorf("inner group_id = %q, expect %q", bundle.GroupID, sealed.GroupID)
 		}
 
 		var certDER, keyDER []byte
