@@ -28,8 +28,9 @@ export DEPLOY_CONFIG_DIR="$PWD/deploy/config/local"
 | **Installation Prerequisites** | Install Go compiler, Protobuf compiler (protoc), and build tools required to compile TACRA schemas from source. **Start here** if setting up a new development environment. | [readme_install_prereq.md](readme_install_prereq.md) |
 | **Docker Build & Deployment** | Build Docker images from source for all TWI stack components (globalsign-est, hashicorp-vault, spiffe-spire, step-ca, veraison-services) and deploy them locally or to remote hosts. Covers `components.sh` usage, configuration management, component-specific Dockerfiles, and the `init-local-est-config.sh` script for local development setup. | [readme_docker_build_deploy.md](readme_docker_build_deploy.md) |
 | **Configuration Structure** | Runtime configuration directory layout, certificate/key requirements, and component-specific config examples. | [deploy/config/README.md](deploy/config/README.md) |
-| **CA API Schema** | Protobuf message definitions and gRPC service contracts for the CA API. | [proto/caapi/v1/caapi.proto](proto/caapi/v1/caapi.proto) |
-| **Sequence Diagrams** | Visual flow diagrams showing mint, retrieve, and initiate operations across the stack. | [proto/caapi/v1/*.mmd](proto/caapi/v1/) |
+| **Sequence Diagrams** | Visual flow diagrams showing acquire, initiate, retrieve, and enroll operations across the stack. | [proto/*.mmd](proto/*.mmd) |
+| **CAI Schema** | Protobuf message definitions and gRPC service contracts for CAI. | [proto/cai/v1/cai.proto](proto/cai/v1/cai.proto) |
+| **CAAPI Schema** | Protobuf message definitions and gRPC service contracts for CAAPI. | [proto/caapi/v1/caapi.proto](proto/caapi/v1/caapi.proto) |
 
 ## Repository Structure
 
