@@ -304,7 +304,10 @@ export DEPLOY_CONFIG_DIR="/path/to/config"
 │       ├── ca-key.pem
 │       ├── server-certificates.pem
 │       ├── server-key.pem
-│       └── client-ca.pem
+│       ├── client-ca.pem
+│       └── mock-tee-provider-public-key.pem
+├── mock-tee-provider/
+│   └── key.pem                 # Attester tests; not mounted into EST
 ├── hashicorp-vault/
 │   └── config/
 │       └── vault.hcl
@@ -329,6 +332,7 @@ The `init-local-est-config.sh` script generates a **complete local development c
 - Mock CA certificate and private key (30-day validity)
 - EST server TLS certificate and private key
 - Client CA certificate for mTLS
+- Mock TEE provider key pair (public key in `certs/`, private key in `../mock-tee-provider/`)
 - `estserver.json` configuration file with random health-check password
 
 ### Usage
@@ -341,19 +345,23 @@ export DEPLOY_CONFIG_DIR="$PWD/tacra/deploy/config/local"
 ### What It Creates
 
 ```
-tacra/deploy/config/local/globalsign-est/
-├── estserver.json                    # EST server configuration
-└── certs/
-    ├── ca-certificates.pem           # Mock CA certificate
-    ├── ca-key.pem                    # Mock CA private key
-    ├── server-certificates.pem       # EST server TLS certificate
-    ├── server-key.pem                # EST server TLS private key
-    └── client-ca.pem                 # Client CA for mTLS
+tacra/deploy/config/local/
+├── globalsign-est/
+│   ├── estserver.json                      # EST server configuration
+│   └── certs/
+│       ├── ca-certificates.pem             # Mock CA certificate
+│       ├── ca-key.pem                      # Mock CA private key
+│       ├── server-certificates.pem         # EST server TLS certificate
+│       ├── server-key.pem                  # EST server TLS private key
+│       ├── client-ca.pem                   # Client CA for mTLS
+│       └── mock-tee-provider-public-key.pem
+└── mock-tee-provider/
+    └── key.pem                             # Provider private key (not mounted)
 ```
 
 ### Safety Features
 
-- **Idempotent:** Refuses to overwrite existing configuration
+- **Idempotent:** Does not overwrite complete configuration. Adds a missing mock TEE provider key if the rest of the EST tree is already present. Remove the directory to regenerate.
 - **Local-only:** All artifacts are generated with 30-day validity
 - **Password Generation:** Creates a random health-check password
 - **Gitignored:** `config/local/` is excluded via `.gitignore`

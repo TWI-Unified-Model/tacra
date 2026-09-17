@@ -17,6 +17,9 @@ tree or in an ignored local directory. The expected layout is:
       server-certificates.pem
       server-key.pem
       client-ca.pem
+      mock-tee-provider-public-key.pem
+  mock-tee-provider/
+    key.pem                    # Attester tests; not mounted into EST
   hashicorp-vault/
     config/
       vault.hcl
@@ -46,14 +49,22 @@ also run a generator explicitly:
 ```
 
 The EST generator creates a 30-day local CA, EST TLS certificate, client-CA
-bundle, and health-check password under `config/local/globalsign-est/`. The
-Vault generator creates a local file-storage and HTTP listener configuration
-under `config/local/hashicorp-vault/`. The SPIRE generator creates an
+bundle, mock TEE provider key pair, and health-check password under
+`config/local/globalsign-est/` (provider private key in
+`config/local/mock-tee-provider/`). The Vault generator creates a local
+file-storage and HTTP listener configuration under
+`config/local/hashicorp-vault/`. The SPIRE generator creates an
 evaluation-only SPIRE server configuration with SQLite, a disk key manager, and
 join-token node attestation under `config/local/spiffe-spire/`. The step-ca
 generator creates local CA certificates, keys, Badger database state, and a
-password under `config/local/step-ca/`. Each generator refuses to overwrite
-existing or incomplete configuration.
+password under `config/local/step-ca/`. Generators do not overwrite complete
+configuration. The EST generator will add a missing mock TEE provider key to an
+otherwise complete local EST tree; any other incomplete tree must be removed
+before regenerating.
+
+EST and Vault bind-mount those trees into non-root container users (`est`,
+`vault`). Generated directories are `0755` and mounted files are readable so
+Linux bind mounts work; `0700` host-only trees are not.
 
 The GlobalSign `estserver` command uses `internal/mockca` and upstream labels
 it as non-production. Its container wrapper is therefore for local testing and
