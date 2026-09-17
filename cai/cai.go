@@ -50,6 +50,16 @@ type Credential struct {
 	PrivateKey *ecdsa.PrivateKey
 }
 
+// AcquisitionRequest is the CAS-chosen context for one enroll or retrieve
+// exchange. Further fields (cipher suites, etc.) will be added here.
+type AcquisitionRequest struct {
+	Target string
+	Type   CredentialType
+	Hint   string
+	Kind   FreshnessKind
+	Handle []byte
+}
+
 // Client is the CAI implementation: one AcquireCredential call that drives
 // CAAPI and the platform plug-in.
 type Client struct {
@@ -110,25 +120,31 @@ func (c *Client) AcquireCredential(ctx context.Context, target string, credType 
 		return nil, err
 	}
 
-	kind := initResp.GetFreshnessKind()
+	req := AcquisitionRequest{
+		Target: target,
+		Type:   credType,
+		Hint:   credHint,
+		Kind:   initResp.GetFreshnessKind(),
+		Handle: handle,
+	}
 	switch initResp.GetMode() {
 	case ModeRetrieve:
-		return c.retrieve(ctx, target, credType, credHint, kind, handle)
+		return c.retrieve(ctx, req)
 	case ModeEnroll:
-		return c.enroll(ctx, target, credType, credHint, kind, handle)
+		return c.enroll(ctx, req)
 	default:
 		return nil, fmt.Errorf("%w: %s", ErrUnsupportedMode, initResp.GetMode())
 	}
 }
 
-func (c *Client) retrieve(ctx context.Context, target string, credType CredentialType, credHint string, kind FreshnessKind, handle []byte) (*Credential, error) {
+func (c *Client) retrieve(ctx context.Context, req AcquisitionRequest) (*Credential, error) {
 	cek, err := c.plugin.GenerateCEK()
 	if err != nil {
 		return nil, fmt.Errorf("cai: generate CEK: %w", err)
 	}
 	ev, err := c.plugin.GenerateEvidence(platform.EvidenceRequest{
-		FreshnessKind:   platform.FreshnessKind(kind),
-		FreshnessHandle: handle,
+		FreshnessKind:   platform.FreshnessKind(req.Kind),
+		FreshnessHandle: req.Handle,
 		BoundKey:        cek.Public(),
 		BoundKeyUse:     platform.BoundKeyUseEncrypt,
 	})
@@ -136,9 +152,9 @@ func (c *Client) retrieve(ctx context.Context, target string, credType Credentia
 		return nil, fmt.Errorf("cai: generate evidence: %w", err)
 	}
 	resp, err := c.caapi.RetrieveCredential(ctx, &caapiv1.RetrieveCredentialRequest{
-		Target:         target,
-		CredentialType: credType,
-		CredentialHint: optionalHint(credHint),
+		Target:         req.Target,
+		CredentialType: req.Type,
+		CredentialHint: optionalHint(req.Hint),
 		Evidence:       ev.Token,
 	})
 	if err != nil {
@@ -152,23 +168,23 @@ func (c *Client) retrieve(ctx context.Context, target string, credType Credentia
 		return nil, err
 	}
 	return &Credential{
-		Type:     credType,
+		Type:     req.Type,
 		Document: doc,
 	}, nil
 }
 
-func (c *Client) enroll(ctx context.Context, target string, credType CredentialType, credHint string, kind FreshnessKind, handle []byte) (*Credential, error) {
+func (c *Client) enroll(ctx context.Context, req AcquisitionRequest) (*Credential, error) {
 	csk, err := c.plugin.GenerateCSK()
 	if err != nil {
 		return nil, fmt.Errorf("cai: generate CSK: %w", err)
 	}
-	csr, err := createCSR(csk, target)
+	csr, err := createCSR(csk, req.Target)
 	if err != nil {
 		return nil, err
 	}
 	ev, err := c.plugin.GenerateEvidence(platform.EvidenceRequest{
-		FreshnessKind:   platform.FreshnessKind(kind),
-		FreshnessHandle: handle,
+		FreshnessKind:   platform.FreshnessKind(req.Kind),
+		FreshnessHandle: req.Handle,
 		BoundKey:        csk.Public(),
 		CSR:             csr,
 		BoundKeyUse:     platform.BoundKeyUseSign,
@@ -177,9 +193,9 @@ func (c *Client) enroll(ctx context.Context, target string, credType CredentialT
 		return nil, fmt.Errorf("cai: generate evidence: %w", err)
 	}
 	resp, err := c.caapi.EnrollCredential(ctx, &caapiv1.EnrollCredentialRequest{
-		Target:         target,
-		CredentialType: credType,
-		CredentialHint: optionalHint(credHint),
+		Target:         req.Target,
+		CredentialType: req.Type,
+		CredentialHint: optionalHint(req.Hint),
 		Evidence:       ev.Token,
 		Csr:            csr,
 	})
@@ -190,7 +206,7 @@ func (c *Client) enroll(ctx context.Context, target string, credType CredentialT
 		return nil, ErrEmptyCredential
 	}
 	return &Credential{
-		Type:       credType,
+		Type:       req.Type,
 		Document:   resp.GetPlaintextCredential(),
 		PrivateKey: csk.Private,
 	}, nil
