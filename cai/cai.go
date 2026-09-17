@@ -110,17 +110,18 @@ func (c *Client) AcquireCredential(ctx context.Context, target string, credType 
 		return nil, err
 	}
 
+	kind := initResp.GetFreshnessKind()
 	switch initResp.GetMode() {
 	case ModeRetrieve:
-		return c.retrieve(ctx, target, credType, credHint, handle)
+		return c.retrieve(ctx, target, credType, credHint, kind, handle)
 	case ModeEnroll:
-		return c.enroll(ctx, target, credType, credHint, handle)
+		return c.enroll(ctx, target, credType, credHint, kind, handle)
 	default:
 		return nil, fmt.Errorf("%w: %s", ErrUnsupportedMode, initResp.GetMode())
 	}
 }
 
-func (c *Client) retrieve(ctx context.Context, target string, credType CredentialType, credHint string, handle []byte) (*Credential, error) {
+func (c *Client) retrieve(ctx context.Context, target string, credType CredentialType, credHint string, kind FreshnessKind, handle []byte) (*Credential, error) {
 	cek, err := c.plugin.GenerateCEK()
 	if err != nil {
 		return nil, fmt.Errorf("cai: generate CEK: %w", err)
@@ -155,7 +156,7 @@ func (c *Client) retrieve(ctx context.Context, target string, credType Credentia
 	}, nil
 }
 
-func (c *Client) enroll(ctx context.Context, target string, credType CredentialType, credHint string, handle []byte) (*Credential, error) {
+func (c *Client) enroll(ctx context.Context, target string, credType CredentialType, credHint string, kind FreshnessKind, handle []byte) (*Credential, error) {
 	csk, err := c.plugin.GenerateCSK()
 	if err != nil {
 		return nil, fmt.Errorf("cai: generate CSK: %w", err)
