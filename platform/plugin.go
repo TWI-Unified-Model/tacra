@@ -91,8 +91,26 @@ const (
 	BoundKeyUseSign        BoundKeyUse = 2 // CSK, Enrollment
 )
 
+// FreshnessKind classifies Evidence freshness for one credential-acquisition
+// exchange (draft-novak-rats-tacra). Values match caapi.v1.FreshnessKind.
+type FreshnessKind int32
+
+const (
+	FreshnessKindUnspecified     FreshnessKind = 0
+	FreshnessKindAbsentNone      FreshnessKind = 1
+	FreshnessKindAbsentTimestamp FreshnessKind = 2
+	FreshnessKindAbsentEpoch     FreshnessKind = 3
+	FreshnessKindPresentNonce    FreshnessKind = 4
+	FreshnessKindPresentEpoch    FreshnessKind = 5
+)
+
 // EvidenceRequest is the input to Plugin.GenerateEvidence.
 type EvidenceRequest struct {
+	// FreshnessKind selects how freshness is established. present-* kinds
+	// bind FreshnessHandle as eat_nonce; absent-* kinds do not take a
+	// Handle from Initiate-Credential-Acquisition.
+	FreshnessKind FreshnessKind
+
 	// FreshnessHandle is the nonce or epoch marker bound as eat_nonce.
 	// Empty for absent-* freshness kinds (no Handle from
 	// Initiate-Credential-Acquisition). RFC 9711 requires 8–64 bytes when

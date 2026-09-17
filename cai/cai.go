@@ -127,6 +127,7 @@ func (c *Client) retrieve(ctx context.Context, target string, credType Credentia
 		return nil, fmt.Errorf("cai: generate CEK: %w", err)
 	}
 	ev, err := c.plugin.GenerateEvidence(platform.EvidenceRequest{
+		FreshnessKind:   platform.FreshnessKind(kind),
 		FreshnessHandle: handle,
 		BoundKey:        cek.Public(),
 		BoundKeyUse:     platform.BoundKeyUseEncrypt,
@@ -166,6 +167,7 @@ func (c *Client) enroll(ctx context.Context, target string, credType CredentialT
 		return nil, err
 	}
 	ev, err := c.plugin.GenerateEvidence(platform.EvidenceRequest{
+		FreshnessKind:   platform.FreshnessKind(kind),
 		FreshnessHandle: handle,
 		BoundKey:        csk.Public(),
 		CSR:             csr,
