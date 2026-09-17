@@ -11,11 +11,12 @@ import (
 	"google.golang.org/grpc"
 )
 
-// CredentialType and Mode are the CAAPI enums, re-exported so the
-// Attester can depend on cai alone.
+// CredentialType, Mode, and FreshnessKind are the CAAPI enums, re-exported
+// so the Attester can depend on cai alone.
 type (
 	CredentialType = caapiv1.CredentialType
 	Mode           = caapiv1.CredentialAcquisitionMode
+	FreshnessKind  = caapiv1.FreshnessKind
 )
 
 const (
@@ -30,6 +31,13 @@ const (
 	ModeUnspecified Mode = caapiv1.CredentialAcquisitionMode_ACQUISITION_UNSPECIFIED
 	ModeEnroll      Mode = caapiv1.CredentialAcquisitionMode_ACQUISITION_ENROLL
 	ModeRetrieve    Mode = caapiv1.CredentialAcquisitionMode_ACQUISITION_RETRIEVE
+
+	FreshnessUnspecified     FreshnessKind = caapiv1.FreshnessKind_FRESHNESS_KIND_UNSPECIFIED
+	FreshnessAbsentNone      FreshnessKind = caapiv1.FreshnessKind_FRESHNESS_KIND_ABSENT_NONE
+	FreshnessAbsentTimestamp FreshnessKind = caapiv1.FreshnessKind_FRESHNESS_KIND_ABSENT_TIMESTAMP
+	FreshnessAbsentEpoch     FreshnessKind = caapiv1.FreshnessKind_FRESHNESS_KIND_ABSENT_EPOCH
+	FreshnessPresentNonce    FreshnessKind = caapiv1.FreshnessKind_FRESHNESS_KIND_PRESENT_NONCE
+	FreshnessPresentEpoch    FreshnessKind = caapiv1.FreshnessKind_FRESHNESS_KIND_PRESENT_EPOCH
 )
 
 // Credential is the document returned to the Attester.
@@ -97,9 +105,9 @@ func (c *Client) AcquireCredential(ctx context.Context, target string, credType 
 		return nil, rpcError("InitiateRemoteAttestation", err)
 	}
 
-	handle := initResp.GetFreshnessHandle()
-	if n := len(handle); n < eat.MinNonceSize || n > eat.MaxNonceSize {
-		return nil, fmt.Errorf("%w: got %d", ErrInvalidFreshnessHandle, n)
+	handle, err := c.freshnessHandle(initResp)
+	if err != nil {
+		return nil, err
 	}
 
 	switch initResp.GetMode() {
@@ -190,4 +198,47 @@ func optionalHint(s string) *string {
 		return nil
 	}
 	return &s
+}
+
+// freshnessHandle applies draft-novak-rats-tacra Freshness Kind rules.
+// present-* kinds require a Handle that is embedded in Evidence.
+// absent-* kinds return no Handle: absent-none and absent-timestamp omit
+// eat_nonce (iat is the timestamp); absent-epoch uses a locally held epoch.
+func (c *Client) freshnessHandle(resp *caapiv1.InitiateCredentialAcquisitionResponse) ([]byte, error) {
+	kind := resp.GetFreshnessKind()
+	handle := resp.GetFreshnessHandle()
+	switch kind {
+	case FreshnessPresentNonce, FreshnessPresentEpoch:
+		if err := validatePresentHandle(handle); err != nil {
+			return nil, err
+		}
+		return handle, nil
+	case FreshnessAbsentNone, FreshnessAbsentTimestamp:
+		if len(handle) != 0 {
+			return nil, fmt.Errorf("%w: %s", ErrUnexpectedFreshnessHandle, kind)
+		}
+		return nil, nil
+	case FreshnessAbsentEpoch:
+		if len(handle) != 0 {
+			return nil, fmt.Errorf("%w: %s", ErrUnexpectedFreshnessHandle, kind)
+		}
+		epoch := c.plugin.LocalEpoch()
+		if len(epoch) == 0 {
+			return nil, ErrNoLocalEpoch
+		}
+		if err := validatePresentHandle(epoch); err != nil {
+			return nil, err
+		}
+		return epoch, nil
+	default:
+		return nil, fmt.Errorf("%w: %s", ErrUnsupportedFreshnessKind, kind)
+	}
+}
+
+func validatePresentHandle(h []byte) error {
+	n := len(h)
+	if n < eat.MinNonceSize || n > eat.MaxNonceSize {
+		return fmt.Errorf("%w: got %d", ErrInvalidFreshnessHandle, n)
+	}
+	return nil
 }

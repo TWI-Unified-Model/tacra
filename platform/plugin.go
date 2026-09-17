@@ -26,10 +26,15 @@ type Plugin interface {
 	GenerateCSK() (*KeyPair, error)
 
 	// GenerateEvidence produces RATS Evidence as a CBOR-encoded tagged
-	// COSE_Sign1 EAT covering the freshness handle and the bound key
-	// (CEKpub or CSKpub). CSR, when present, is included as a profile
-	// claim so Evidence and CSR are bound together.
+	// COSE_Sign1 EAT covering the bound key (CEKpub or CSKpub) and, when
+	// FreshnessHandle is set, that handle as eat_nonce. CSR, when present,
+	// is included as a profile claim so Evidence and CSR are bound together.
 	GenerateEvidence(req EvidenceRequest) (*Evidence, error)
+
+	// LocalEpoch is an epoch identifier already held by the Attester.
+	// Used when freshness kind is absent-epoch. Empty if the platform
+	// does not keep an epoch.
+	LocalEpoch() []byte
 
 	// AttestationPublicKey is the AK that signs Evidence. Provision it to
 	// the Verifier as a CoRIM trust anchor.
@@ -88,9 +93,10 @@ const (
 
 // EvidenceRequest is the input to Plugin.GenerateEvidence.
 type EvidenceRequest struct {
-	// FreshnessHandle is the nonce or epoch marker from
-	// Initiate-Credential-Acquisition. RFC 9711 requires 8–64 bytes when
-	// used as an EAT nonce.
+	// FreshnessHandle is the nonce or epoch marker bound as eat_nonce.
+	// Empty for absent-* freshness kinds (no Handle from
+	// Initiate-Credential-Acquisition). RFC 9711 requires 8–64 bytes when
+	// the claim is present.
 	FreshnessHandle []byte
 
 	// BoundKey is CEKpub (Retrieval) or CSKpub (Enrollment). It is placed

@@ -127,6 +127,15 @@ func (s *Simulated) GenerateCEK() (*KeyPair, error) { return generateP256() }
 // GenerateCSK implements Plugin.
 func (s *Simulated) GenerateCSK() (*KeyPair, error) { return generateP256() }
 
+// LocalEpoch implements Plugin. The simulated platform uses the boot seed
+// as a locally held epoch identifier.
+func (s *Simulated) LocalEpoch() []byte {
+	if s == nil || len(s.bootSeed) == 0 {
+		return nil
+	}
+	return append([]byte(nil), s.bootSeed...)
+}
+
 // AttestationPublicKey implements Plugin.
 func (s *Simulated) AttestationPublicKey() *ecdsa.PublicKey {
 	if s == nil || s.ak == nil {
@@ -164,9 +173,13 @@ func (s *Simulated) GenerateEvidence(req EvidenceRequest) (*Evidence, error) {
 		return nil, err
 	}
 
-	nonce := eat.Nonce{}
-	if err := nonce.Add(req.FreshnessHandle); err != nil {
-		return nil, fmt.Errorf("platform: nonce: %w", err)
+	var nonce *eat.Nonce
+	if len(req.FreshnessHandle) > 0 {
+		n := eat.Nonce{}
+		if err := n.Add(req.FreshnessHandle); err != nil {
+			return nil, fmt.Errorf("platform: nonce: %w", err)
+		}
+		nonce = &n
 	}
 
 	profile, err := eat.NewProfile(ProfileURI)
@@ -189,7 +202,7 @@ func (s *Simulated) GenerateEvidence(req EvidenceRequest) (*Evidence, error) {
 		Subject:       hex.EncodeToString(s.ueid),
 		IssuedAt:      time.Now().Unix(),
 		Cnf:           &Confirmation{COSEKey: coseKey},
-		Nonce:         &nonce,
+		Nonce:         nonce,
 		UEID:          s.ueid,
 		HardwareModel: s.hwModel,
 		OemBoot:       &oemBoot,
@@ -242,6 +255,9 @@ func (s *Simulated) signEAT(claims []byte) ([]byte, error) {
 }
 
 func validateFreshnessHandle(h []byte) error {
+	if len(h) == 0 {
+		return nil
+	}
 	n := len(h)
 	if n < eat.MinNonceSize || n > eat.MaxNonceSize {
 		return fmt.Errorf("%w: got %d", ErrInvalidFreshnessHandle, n)

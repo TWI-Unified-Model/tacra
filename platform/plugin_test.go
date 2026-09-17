@@ -110,8 +110,6 @@ func TestEvidenceRejectsBadFreshnessHandle(t *testing.T) {
 	}
 
 	cases := [][]byte{
-		nil,
-		{},
 		[]byte("short"),
 		bytes.Repeat([]byte{0x01}, 7),
 		bytes.Repeat([]byte{0x01}, 65),
@@ -121,6 +119,31 @@ func TestEvidenceRejectsBadFreshnessHandle(t *testing.T) {
 		if !errors.Is(err, ErrInvalidFreshnessHandle) {
 			t.Errorf("freshness handle len %d: got %v, want ErrInvalidFreshnessHandle", len(ch), err)
 		}
+	}
+}
+
+func TestEvidenceOmitsNonceWhenHandleAbsent(t *testing.T) {
+	p, err := NewSimulated()
+	if err != nil {
+		t.Fatal(err)
+	}
+	cek, err := p.GenerateCEK()
+	if err != nil {
+		t.Fatal(err)
+	}
+	ev, err := p.GenerateEvidence(EvidenceRequest{BoundKey: cek.Public()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	claims, err := ev.Verify(p.AttestationPublicKey())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if claims.Nonce != nil {
+		t.Fatal("absent handle must omit eat_nonce")
+	}
+	if claims.IssuedAt == 0 {
+		t.Fatal("iat")
 	}
 }
 

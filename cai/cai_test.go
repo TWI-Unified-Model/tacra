@@ -221,20 +221,96 @@ func TestAcquireCredentialCASError(t *testing.T) {
 	}
 }
 
-func TestAcquireCredentialBadFreshnessHandle(t *testing.T) {
-	fake := &fakeCAAPI{
-		init: func(context.Context, *caapiv1.InitiateCredentialAcquistionRequest) (*caapiv1.InitiateCredentialAcquisitionResponse, error) {
-			return &caapiv1.InitiateCredentialAcquisitionResponse{
-				Mode:            caapiv1.CredentialAcquisitionMode_ACQUISITION_RETRIEVE,
-				FreshnessKind:   caapiv1.FreshnessKind_FRESHNESS_KIND_PRESENT_NONCE,
-				FreshnessHandle: []byte("short"),
-			}, nil
-		},
+func TestAcquireCredentialFreshness(t *testing.T) {
+	secret := []byte("pre-shared-api-key")
+	handle := bytes.Repeat([]byte{0x0a}, 32)
+
+	tests := []struct {
+		name    string
+		kind    FreshnessKind
+		handle  []byte
+		wantErr error
+		nonce   string // "handle", "local", or "" for omitted
+	}{
+		{name: "present-nonce", kind: FreshnessPresentNonce, handle: handle, nonce: "handle"},
+		{name: "present-epoch", kind: FreshnessPresentEpoch, handle: handle, nonce: "handle"},
+		{name: "absent-none", kind: FreshnessAbsentNone},
+		{name: "absent-timestamp", kind: FreshnessAbsentTimestamp},
+		{name: "absent-epoch", kind: FreshnessAbsentEpoch, nonce: "local"},
+		{name: "unspecified", kind: FreshnessUnspecified, wantErr: ErrUnsupportedFreshnessKind},
+		{name: "absent-none with handle", kind: FreshnessAbsentNone, handle: handle, wantErr: ErrUnexpectedFreshnessHandle},
+		{name: "absent-timestamp with handle", kind: FreshnessAbsentTimestamp, handle: handle, wantErr: ErrUnexpectedFreshnessHandle},
+		{name: "absent-epoch with handle", kind: FreshnessAbsentEpoch, handle: handle, wantErr: ErrUnexpectedFreshnessHandle},
+		{name: "present-nonce missing handle", kind: FreshnessPresentNonce, wantErr: ErrInvalidFreshnessHandle},
+		{name: "present-nonce short handle", kind: FreshnessPresentNonce, handle: []byte("short"), wantErr: ErrInvalidFreshnessHandle},
+		{name: "present-epoch missing handle", kind: FreshnessPresentEpoch, wantErr: ErrInvalidFreshnessHandle},
 	}
-	c, _ := newTestCAI(t, fake)
-	_, err := c.AcquireCredential(context.Background(), "t", CredentialTypeJWT, "")
-	if !errors.Is(err, ErrInvalidFreshnessHandle) {
-		t.Fatalf("got %v", err)
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p, err := platform.NewSimulated()
+			if err != nil {
+				t.Fatal(err)
+			}
+			fake := &fakeCAAPI{
+				init: func(context.Context, *caapiv1.InitiateCredentialAcquistionRequest) (*caapiv1.InitiateCredentialAcquisitionResponse, error) {
+					return &caapiv1.InitiateCredentialAcquisitionResponse{
+						Mode:            caapiv1.CredentialAcquisitionMode_ACQUISITION_RETRIEVE,
+						FreshnessKind:   tt.kind,
+						FreshnessHandle: tt.handle,
+					}, nil
+				},
+				retrieve: func(_ context.Context, in *caapiv1.RetrieveCredentialRequest) (*caapiv1.RetrieveCredentialResponse, error) {
+					claims, err := platform.ParseEvidence(in.GetEvidence())
+					if err != nil {
+						t.Fatal(err)
+					}
+					switch tt.nonce {
+					case "":
+						if claims.Nonce != nil {
+							t.Fatal("eat_nonce must be omitted")
+						}
+						if tt.kind == FreshnessAbsentTimestamp && claims.IssuedAt == 0 {
+							t.Fatal("absent-timestamp requires iat")
+						}
+					case "handle":
+						if claims.Nonce == nil || !bytes.Equal(claims.Nonce.GetI(0), handle) {
+							t.Fatal("eat_nonce != freshness handle")
+						}
+					case "local":
+						if claims.Nonce == nil || !bytes.Equal(claims.Nonce.GetI(0), p.LocalEpoch()) {
+							t.Fatal("eat_nonce != local epoch")
+						}
+					}
+					pub, err := claims.Cnf.BoundPublicKey()
+					if err != nil {
+						t.Fatal(err)
+					}
+					wrapped, err := WrapCredential(pub, secret)
+					if err != nil {
+						t.Fatal(err)
+					}
+					return &caapiv1.RetrieveCredentialResponse{WrappedCredential: wrapped}, nil
+				},
+			}
+			c, err := New(p, fake)
+			if err != nil {
+				t.Fatal(err)
+			}
+			cred, err := c.AcquireCredential(context.Background(), "https://api.example", CredentialTypeAPIKey, "")
+			if tt.wantErr != nil {
+				if !errors.Is(err, tt.wantErr) {
+					t.Fatalf("got %v, want %v", err, tt.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !bytes.Equal(cred.Document, secret) {
+				t.Fatalf("document %q", cred.Document)
+			}
+		})
 	}
 }
 
