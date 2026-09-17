@@ -93,9 +93,9 @@ est_config_is_complete() {
 
 ensure_local_est_config() {
     local component_dir="$1"
-    est_config_is_complete "${component_dir}" && return
-    [[ "${CONFIG_DIR}" == "${SCRIPT_DIR}/config/local" ]] || return
-    [[ ! -e "${component_dir}/estserver.json" ]] || return
+    est_config_is_complete "${component_dir}" && return 0
+    # A bare `return` after a failed [[ ]] is status 1 and trips set -e.
+    [[ "${CONFIG_DIR}" == "${SCRIPT_DIR}/config/local" ]] || return 0
     printf 'Generating local EST development configuration in %s\n' "${component_dir}"
     DEPLOY_CONFIG_DIR="${CONFIG_DIR}" run "${SCRIPT_DIR}/init-local-est-config.sh"
 }
@@ -111,9 +111,9 @@ step_ca_config_is_complete() {
 
 ensure_local_step_ca_config() {
     local component_dir="$1"
-    step_ca_config_is_complete "${component_dir}" && return
-    [[ "${CONFIG_DIR}" == "${SCRIPT_DIR}/config/local" ]] || return
-    [[ ! -e "${component_dir}" || -z "$(find "${component_dir}" -mindepth 1 -print -quit)" ]] || return
+    step_ca_config_is_complete "${component_dir}" && return 0
+    [[ "${CONFIG_DIR}" == "${SCRIPT_DIR}/config/local" ]] || return 0
+    [[ ! -e "${component_dir}" || -z "$(find "${component_dir}" -mindepth 1 -print -quit)" ]] || return 0
     printf 'Generating local step-ca development configuration in %s\n' "${component_dir}"
     DEPLOY_CONFIG_DIR="${CONFIG_DIR}" run "${SCRIPT_DIR}/init-local-step-ca-config.sh"
 }
@@ -124,9 +124,9 @@ vault_config_is_complete() {
 
 ensure_local_vault_config() {
     local component_dir="$1"
-    vault_config_is_complete "${component_dir}" && return
-    [[ "${CONFIG_DIR}" == "${SCRIPT_DIR}/config/local" ]] || return
-    [[ ! -e "${component_dir}" || -z "$(find "${component_dir}" -mindepth 1 -print -quit)" ]] || return
+    vault_config_is_complete "${component_dir}" && return 0
+    [[ "${CONFIG_DIR}" == "${SCRIPT_DIR}/config/local" ]] || return 0
+    [[ ! -e "${component_dir}" || -z "$(find "${component_dir}" -mindepth 1 -print -quit)" ]] || return 0
     printf 'Generating local Vault development configuration in %s\n' "${component_dir}"
     DEPLOY_CONFIG_DIR="${CONFIG_DIR}" run "${SCRIPT_DIR}/init-local-hashicorp-vault-config.sh"
 }
@@ -137,9 +137,9 @@ spire_server_config_is_complete() {
 
 ensure_local_spire_config() {
     local component_dir="$1"
-    spire_server_config_is_complete "${component_dir}" && return
-    [[ "${CONFIG_DIR}" == "${SCRIPT_DIR}/config/local" ]] || return
-    [[ ! -e "${component_dir}" || -z "$(find "${component_dir}" -mindepth 1 -print -quit)" ]] || return
+    spire_server_config_is_complete "${component_dir}" && return 0
+    [[ "${CONFIG_DIR}" == "${SCRIPT_DIR}/config/local" ]] || return 0
+    [[ ! -e "${component_dir}" || -z "$(find "${component_dir}" -mindepth 1 -print -quit)" ]] || return 0
     printf 'Generating local SPIRE server configuration in %s\n' "${component_dir}"
     DEPLOY_CONFIG_DIR="${CONFIG_DIR}" run "${SCRIPT_DIR}/init-local-spiffe-spire-config.sh"
 }

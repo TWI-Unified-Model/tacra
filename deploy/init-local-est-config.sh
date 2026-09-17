@@ -6,8 +6,49 @@ readonly CONFIG_DIR="${DEPLOY_CONFIG_DIR:-${SCRIPT_DIR}/config/local}/globalsign
 readonly CERT_DIR="${CONFIG_DIR}/certs"
 readonly PROVIDER_DIR="$(dirname -- "${CONFIG_DIR}")/mock-tee-provider"
 
-if [[ -e "${CONFIG_DIR}/estserver.json" ]]; then
+est_config_is_complete() {
+    [[ -f "${CONFIG_DIR}/estserver.json" ]] &&
+        [[ -f "${CERT_DIR}/ca-certificates.pem" ]] &&
+        [[ -f "${CERT_DIR}/ca-key.pem" ]] &&
+        [[ -f "${CERT_DIR}/client-ca.pem" ]] &&
+        [[ -f "${CERT_DIR}/server-certificates.pem" ]] &&
+        [[ -f "${CERT_DIR}/server-key.pem" ]] &&
+        [[ -f "${CERT_DIR}/mock-tee-provider-public-key.pem" ]]
+}
+
+write_mock_tee_provider() {
+    mkdir -p "${CERT_DIR}" "${PROVIDER_DIR}"
+    if [[ ! -f "${PROVIDER_DIR}/key.pem" ]]; then
+        openssl ecparam -name prime256v1 -genkey -noout -out "${PROVIDER_DIR}/key.pem"
+    fi
+    openssl ec -in "${PROVIDER_DIR}/key.pem" -pubout \
+        -out "${CERT_DIR}/mock-tee-provider-public-key.pem"
+    chmod 600 "${PROVIDER_DIR}/key.pem"
+    chmod 644 "${CERT_DIR}/mock-tee-provider-public-key.pem"
+}
+
+if est_config_is_complete; then
     printf 'Local EST configuration already exists: %s\n' "${CONFIG_DIR}/estserver.json" >&2
+    exit 0
+fi
+
+if [[ -e "${CONFIG_DIR}/estserver.json" ]]; then
+    for required in ca-certificates.pem ca-key.pem client-ca.pem server-certificates.pem server-key.pem; do
+        if [[ ! -f "${CERT_DIR}/${required}" ]]; then
+            printf 'ERROR: local EST configuration is incomplete (%s is missing). Remove %s and rerun to regenerate.\n' \
+                "${required}" "${CONFIG_DIR}" >&2
+            exit 1
+        fi
+    done
+    command -v openssl >/dev/null 2>&1 || {
+        printf 'ERROR: openssl is required to create the mock TEE provider key.\n' >&2
+        exit 1
+    }
+    umask 077
+    write_mock_tee_provider
+    chmod 755 "${CONFIG_DIR}" "${CERT_DIR}"
+    chmod 644 "${CONFIG_DIR}/estserver.json" "${CERT_DIR}"/*.pem
+    printf 'Added mock TEE provider key to existing local EST configuration in %s\n' "${CONFIG_DIR}"
     exit 0
 fi
 
@@ -43,11 +84,7 @@ openssl x509 -req -sha256 -days 30 \
 rm -f "${CERT_DIR}/server.csr" "${CERT_DIR}/server.ext" "${CERT_DIR}/ca-certificates.srl"
 
 cp "${CERT_DIR}/ca-certificates.pem" "${CERT_DIR}/client-ca.pem"
-
-openssl ecparam -name prime256v1 -genkey -noout \
-  -out "${PROVIDER_DIR}/key.pem"
-openssl ec -in "${PROVIDER_DIR}/key.pem" -pubout \
-  -out "${CERT_DIR}/mock-tee-provider-public-key.pem"
+write_mock_tee_provider
 
 healthcheck_password="$(openssl rand -hex 24)"
 
@@ -77,8 +114,9 @@ cat > "${CONFIG_DIR}/estserver.json" <<EOF
 }
 EOF
 
-chmod 600 "${CERT_DIR}"/*-key.pem "${PROVIDER_DIR}/key.pem" "${CONFIG_DIR}/estserver.json"
-chmod 644 "${CERT_DIR}"/*-certificates.pem "${CERT_DIR}/client-ca.pem" \
-  "${CERT_DIR}/mock-tee-provider-public-key.pem"
+# Bind-mounted into USER est; umask 077 would make the tree unreadable.
+chmod 755 "${CONFIG_DIR}" "${CERT_DIR}"
+chmod 644 "${CONFIG_DIR}/estserver.json" "${CERT_DIR}"/*.pem
+chmod 600 "${PROVIDER_DIR}/key.pem"
 
 printf 'Created local EST configuration in %s\n' "${CONFIG_DIR}"

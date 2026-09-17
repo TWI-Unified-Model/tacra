@@ -33,6 +33,8 @@ listener "tcp" {
 api_addr = "http://twi-hashicorp-vault:8200"
 cluster_addr = "http://twi-hashicorp-vault:8201"
 EOF
-chmod 600 "${CONFIG_FILE}"
+# Bind-mounted into USER vault; umask 077 would make the tree unreadable.
+chmod 755 "$(dirname -- "${CONFIG_DIR}")" "${CONFIG_DIR}"
+chmod 644 "${CONFIG_FILE}"
 
 printf 'Created local Vault configuration in %s\n' "${CONFIG_DIR}"
