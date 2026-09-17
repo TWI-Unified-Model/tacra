@@ -241,13 +241,38 @@ stop_component() {
     esac
 }
 
+# docker ps prints nothing when no container matches; always emit a line.
+status_ps() {
+    local label="$1" format="$2" output line
+    shift 2
+    if [[ "${DRY_RUN}" == true ]]; then
+        run docker ps -a "$@" --format "${label}: ${format}"
+        return
+    fi
+    output="$(docker ps -a "$@" --format "${format}")"
+    if [[ -z "${output}" ]]; then
+        printf '%s: not running\n' "${label}"
+        return
+    fi
+    while IFS= read -r line; do
+        printf '%s: %s\n' "${label}" "${line}"
+    done <<< "${output}"
+}
+
 status_component() {
     case "$1" in
-        globalsign-est) run docker ps --filter name=^/twi-globalsign-est$ --format 'globalsign-est: {{.Status}}' ;;
-        hashicorp-vault) run docker ps --filter name=^/twi-hashicorp-vault$ --format 'hashicorp-vault: {{.Status}}' ;;
-        spiffe-spire) run docker ps --filter label=twi.component=spiffe-spire --format 'spiffe-spire: {{.Names}} {{.Status}}' ;;
-        step-ca) run docker ps --filter name=^/twi-step-ca$ --format 'step-ca: {{.Status}}' ;;
-        veraison-services) [[ -z "${DOCKER_HOST_VALUE}" ]] || fail "veraison-services deployment supports only the local Docker daemon"; run "${WORKSPACE_ROOT}/veraison-services/deployments/docker/veraison" status ;;
+        globalsign-est) status_ps globalsign-est '{{.Status}}' --filter name=^/twi-globalsign-est$ ;;
+        hashicorp-vault) status_ps hashicorp-vault '{{.Status}}' --filter name=^/twi-hashicorp-vault$ ;;
+        spiffe-spire) status_ps spiffe-spire '{{.Names}} {{.Status}}' --filter label=twi.component=spiffe-spire ;;
+        step-ca) status_ps step-ca '{{.Status}}' --filter name=^/twi-step-ca$ ;;
+        veraison-services)
+            [[ -z "${DOCKER_HOST_VALUE}" ]] || fail "veraison-services deployment supports only the local Docker daemon"
+            if [[ "${DRY_RUN}" == true ]]; then
+                run "${WORKSPACE_ROOT}/veraison-services/deployments/docker/veraison" status
+            else
+                "${WORKSPACE_ROOT}/veraison-services/deployments/docker/veraison" status
+            fi
+            ;;
     esac
 }
 
