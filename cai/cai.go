@@ -78,7 +78,7 @@ func Dial(addr string, plugin platform.Plugin, opts ...grpc.DialOption) (*Client
 
 // AcquireCredential obtains a credential for target of the requested type.
 // The CAS selects Enrollment or Retrieval; the Attester does not.
-func (c *Client) AcquireCredential(ctx context.Context, target string, credType CredentialType) (*Credential, error) {
+func (c *Client) AcquireCredential(ctx context.Context, target string, credType CredentialType, credHint string) (*Credential, error) {
 	if c == nil {
 		return nil, ErrNilClient
 	}
@@ -104,15 +104,15 @@ func (c *Client) AcquireCredential(ctx context.Context, target string, credType 
 
 	switch initResp.GetMode() {
 	case ModeRetrieve:
-		return c.retrieve(ctx, target, credType, handle)
+		return c.retrieve(ctx, target, credType, credHint, handle)
 	case ModeEnroll:
-		return c.enroll(ctx, target, credType, handle)
+		return c.enroll(ctx, target, credType, credHint, handle)
 	default:
 		return nil, fmt.Errorf("%w: %s", ErrUnsupportedMode, initResp.GetMode())
 	}
 }
 
-func (c *Client) retrieve(ctx context.Context, target string, credType CredentialType, handle []byte) (*Credential, error) {
+func (c *Client) retrieve(ctx context.Context, target string, credType CredentialType, credHint string, handle []byte) (*Credential, error) {
 	cek, err := c.plugin.GenerateCEK()
 	if err != nil {
 		return nil, fmt.Errorf("cai: generate CEK: %w", err)
@@ -128,6 +128,7 @@ func (c *Client) retrieve(ctx context.Context, target string, credType Credentia
 	resp, err := c.caapi.RetrieveCredential(ctx, &caapiv1.RetrieveCredentialRequest{
 		Target:         target,
 		CredentialType: credType,
+		CredentialHint: optionalHint(credHint),
 		Evidence:       ev.Token,
 	})
 	if err != nil {
@@ -146,7 +147,7 @@ func (c *Client) retrieve(ctx context.Context, target string, credType Credentia
 	}, nil
 }
 
-func (c *Client) enroll(ctx context.Context, target string, credType CredentialType, handle []byte) (*Credential, error) {
+func (c *Client) enroll(ctx context.Context, target string, credType CredentialType, credHint string, handle []byte) (*Credential, error) {
 	csk, err := c.plugin.GenerateCSK()
 	if err != nil {
 		return nil, fmt.Errorf("cai: generate CSK: %w", err)
@@ -167,6 +168,7 @@ func (c *Client) enroll(ctx context.Context, target string, credType CredentialT
 	resp, err := c.caapi.EnrollCredential(ctx, &caapiv1.EnrollCredentialRequest{
 		Target:         target,
 		CredentialType: credType,
+		CredentialHint: optionalHint(credHint),
 		Evidence:       ev.Token,
 		Csr:            csr,
 	})
@@ -181,4 +183,11 @@ func (c *Client) enroll(ctx context.Context, target string, credType CredentialT
 		Document:   resp.GetPlaintextCredential(),
 		PrivateKey: csk.Private,
 	}, nil
+}
+
+func optionalHint(s string) *string {
+	if s == "" {
+		return nil
+	}
+	return &s
 }

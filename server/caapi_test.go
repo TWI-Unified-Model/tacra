@@ -55,7 +55,7 @@ func TestAcquireX509AndJWT(t *testing.T) {
 	defer cancel()
 	target := "https://localhost:8443"
 
-	x509Cred, err := c.AcquireCredential(ctx, target, cai.CredentialTypeX509)
+	x509Cred, err := c.AcquireCredential(ctx, target, cai.CredentialTypeX509, "")
 	if err != nil {
 		t.Fatalf("X509: %v", err)
 	}
@@ -78,7 +78,7 @@ func TestAcquireX509AndJWT(t *testing.T) {
 		t.Fatal("expected CA cert after leaf")
 	}
 
-	jwtCred, err := c.AcquireCredential(ctx, target, cai.CredentialTypeJWT)
+	jwtCred, err := c.AcquireCredential(ctx, target, cai.CredentialTypeJWT, "")
 	if err != nil {
 		t.Fatalf("JWT: %v", err)
 	}

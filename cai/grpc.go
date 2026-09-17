@@ -23,7 +23,7 @@ func (g *GRPC) AcquireCredential(ctx context.Context, in *caiv1.AcquireCredentia
 	if g == nil || g.inner == nil {
 		return nil, status.Error(codes.Internal, ErrNilClient.Error())
 	}
-	cred, err := g.inner.AcquireCredential(ctx, in.GetTarget(), in.GetCredentialType())
+	cred, err := g.inner.AcquireCredential(ctx, in.GetTarget(), in.GetCredentialType(), in.GetCredentialHint())
 	if err != nil {
 		return nil, status.Errorf(codes.Unknown, "%v", err)
 	}

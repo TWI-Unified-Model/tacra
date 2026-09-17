@@ -73,6 +73,9 @@ func TestAcquireCredentialRetrieve(t *testing.T) {
 			}, nil
 		},
 		retrieve: func(_ context.Context, in *caapiv1.RetrieveCredentialRequest) (*caapiv1.RetrieveCredentialResponse, error) {
+			if in.GetCredentialHint() != "hint-retrieve" {
+				t.Fatalf("hint %q", in.GetCredentialHint())
+			}
 			claims, err := platform.ParseEvidence(in.GetEvidence())
 			if err != nil {
 				t.Fatal(err)
@@ -96,7 +99,7 @@ func TestAcquireCredentialRetrieve(t *testing.T) {
 	}
 
 	c, _ := newTestCAI(t, fake)
-	cred, err := c.AcquireCredential(context.Background(), "https://api.example", CredentialTypeAPIKey)
+	cred, err := c.AcquireCredential(context.Background(), "https://api.example", CredentialTypeAPIKey, "hint-retrieve")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -122,6 +125,9 @@ func TestAcquireCredentialEnroll(t *testing.T) {
 			}, nil
 		},
 		enroll: func(_ context.Context, in *caapiv1.EnrollCredentialRequest) (*caapiv1.EnrollCredentialResponse, error) {
+			if in.GetCredentialHint() != "hint-enroll" {
+				t.Fatalf("hint %q", in.GetCredentialHint())
+			}
 			if len(in.GetCsr()) == 0 || len(in.GetEvidence()) == 0 {
 				t.Fatal("missing csr or evidence")
 			}
@@ -159,7 +165,7 @@ func TestAcquireCredentialEnroll(t *testing.T) {
 	}
 
 	c, _ := newTestCAI(t, fake)
-	cred, err := c.AcquireCredential(context.Background(), "https://ca.example", CredentialTypeX509)
+	cred, err := c.AcquireCredential(context.Background(), "https://ca.example", CredentialTypeX509, "hint-enroll")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -183,10 +189,10 @@ func TestAcquireCredentialEnroll(t *testing.T) {
 
 func TestAcquireCredentialValidation(t *testing.T) {
 	c, _ := newTestCAI(t, &fakeCAAPI{})
-	if _, err := c.AcquireCredential(context.Background(), "", CredentialTypeJWT); !errors.Is(err, ErrInvalidTarget) {
+	if _, err := c.AcquireCredential(context.Background(), "", CredentialTypeJWT, ""); !errors.Is(err, ErrInvalidTarget) {
 		t.Fatalf("empty target: %v", err)
 	}
-	if _, err := c.AcquireCredential(context.Background(), "t", CredentialTypeUnspecified); !errors.Is(err, ErrInvalidCredentialType) {
+	if _, err := c.AcquireCredential(context.Background(), "t", CredentialTypeUnspecified, ""); !errors.Is(err, ErrInvalidCredentialType) {
 		t.Fatalf("unspecified type: %v", err)
 	}
 	if _, err := New(nil, &fakeCAAPI{}); !errors.Is(err, ErrNilPlugin) {
@@ -205,7 +211,7 @@ func TestAcquireCredentialCASError(t *testing.T) {
 		},
 	}
 	c, _ := newTestCAI(t, fake)
-	_, err := c.AcquireCredential(context.Background(), "bad", CredentialTypeJWT)
+	_, err := c.AcquireCredential(context.Background(), "bad", CredentialTypeJWT, "")
 	var ce *Error
 	if !errors.As(err, &ce) {
 		t.Fatalf("want *cai.Error, got %T %v", err, err)
@@ -226,7 +232,7 @@ func TestAcquireCredentialBadFreshnessHandle(t *testing.T) {
 		},
 	}
 	c, _ := newTestCAI(t, fake)
-	_, err := c.AcquireCredential(context.Background(), "t", CredentialTypeJWT)
+	_, err := c.AcquireCredential(context.Background(), "t", CredentialTypeJWT, "")
 	if !errors.Is(err, ErrInvalidFreshnessHandle) {
 		t.Fatalf("got %v", err)
 	}
