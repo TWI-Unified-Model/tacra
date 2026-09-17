@@ -29,7 +29,6 @@ func (g *GRPC) AcquireCredential(ctx context.Context, in *caiv1.AcquireCredentia
 	}
 	resp := &caiv1.AcquireCredentialResponse{
 		Type:     cred.Type,
-		Mode:     cred.Mode,
 		Document: cred.Document,
 	}
 	if cred.PrivateKey != nil {

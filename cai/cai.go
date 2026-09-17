@@ -35,7 +35,6 @@ const (
 // Credential is the document returned to the Attester.
 type Credential struct {
 	Type CredentialType
-	Mode Mode
 	// Document is the credential bytes (certificate, JWT, API key, …).
 	Document []byte
 	// PrivateKey is the CSK for Enrollment of proof-of-possession
@@ -143,7 +142,6 @@ func (c *Client) retrieve(ctx context.Context, target string, credType Credentia
 	}
 	return &Credential{
 		Type:     credType,
-		Mode:     ModeRetrieve,
 		Document: doc,
 	}, nil
 }
@@ -180,7 +178,6 @@ func (c *Client) enroll(ctx context.Context, target string, credType CredentialT
 	}
 	return &Credential{
 		Type:       credType,
-		Mode:       ModeEnroll,
 		Document:   resp.GetPlaintextCredential(),
 		PrivateKey: csk.Private,
 	}, nil

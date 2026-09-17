@@ -100,9 +100,6 @@ func TestAcquireCredentialRetrieve(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cred.Mode != ModeRetrieve {
-		t.Fatalf("mode %s", cred.Mode)
-	}
 	if !bytes.Equal(cred.Document, secret) {
 		t.Fatalf("document %q", cred.Document)
 	}
@@ -165,9 +162,6 @@ func TestAcquireCredentialEnroll(t *testing.T) {
 	cred, err := c.AcquireCredential(context.Background(), "https://ca.example", CredentialTypeX509)
 	if err != nil {
 		t.Fatal(err)
-	}
-	if cred.Mode != ModeEnroll {
-		t.Fatalf("mode %s", cred.Mode)
 	}
 	if !bytes.Equal(cred.Document, minted) {
 		t.Fatal("minted credential mismatch")

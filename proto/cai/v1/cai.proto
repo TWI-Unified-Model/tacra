@@ -23,12 +23,10 @@ message AcquireCredentialRequest {
 message AcquireCredentialResponse {
     caapi.v1.CredentialType type = 1;
 
-    caapi.v1.CredentialAcquisitionMode mode = 2;
-
     // Credential document: PEM certificate bundle, JWT, API key, etc.
-    bytes document = 3;
+    bytes document = 2;
 
     // PKCS#8 encoding of the CSK private key after Enrollment.
     // Empty for Retrieval.
-    bytes private_key_pkcs8 = 4;
+    bytes private_key_pkcs8 = 3;
 }
