@@ -84,14 +84,13 @@ func (x *AcquireCredentialRequest) GetCredentialHint() string {
 }
 
 type AcquireCredentialResponse struct {
-	state protoimpl.MessageState       `protogen:"open.v1"`
-	Type  v1.CredentialType            `protobuf:"varint,1,opt,name=type,proto3,enum=caapi.v1.CredentialType" json:"type,omitempty"`
-	Mode  v1.CredentialAcquisitionMode `protobuf:"varint,2,opt,name=mode,proto3,enum=caapi.v1.CredentialAcquisitionMode" json:"mode,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Type  v1.CredentialType      `protobuf:"varint,1,opt,name=type,proto3,enum=caapi.v1.CredentialType" json:"type,omitempty"`
 	// Credential document: PEM certificate bundle, JWT, API key, etc.
-	Document []byte `protobuf:"bytes,3,opt,name=document,proto3" json:"document,omitempty"`
+	Document []byte `protobuf:"bytes,2,opt,name=document,proto3" json:"document,omitempty"`
 	// PKCS#8 encoding of the CSK private key after Enrollment.
 	// Empty for Retrieval.
-	PrivateKeyPkcs8 []byte `protobuf:"bytes,4,opt,name=private_key_pkcs8,json=privateKeyPkcs8,proto3" json:"private_key_pkcs8,omitempty"`
+	PrivateKeyPkcs8 []byte `protobuf:"bytes,3,opt,name=private_key_pkcs8,json=privateKeyPkcs8,proto3" json:"private_key_pkcs8,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
@@ -133,13 +132,6 @@ func (x *AcquireCredentialResponse) GetType() v1.CredentialType {
 	return v1.CredentialType(0)
 }
 
-func (x *AcquireCredentialResponse) GetMode() v1.CredentialAcquisitionMode {
-	if x != nil {
-		return x.Mode
-	}
-	return v1.CredentialAcquisitionMode(0)
-}
-
 func (x *AcquireCredentialResponse) GetDocument() []byte {
 	if x != nil {
 		return x.Document
@@ -163,12 +155,11 @@ const file_cai_v1_cai_proto_rawDesc = "" +
 	"\x06target\x18\x01 \x01(\tR\x06target\x12A\n" +
 	"\x0fcredential_type\x18\x02 \x01(\x0e2\x18.caapi.v1.CredentialTypeR\x0ecredentialType\x12,\n" +
 	"\x0fcredential_hint\x18\x03 \x01(\tH\x00R\x0ecredentialHint\x88\x01\x01B\x12\n" +
-	"\x10_credential_hint\"\xca\x01\n" +
+	"\x10_credential_hint\"\x91\x01\n" +
 	"\x19AcquireCredentialResponse\x12,\n" +
-	"\x04type\x18\x01 \x01(\x0e2\x18.caapi.v1.CredentialTypeR\x04type\x127\n" +
-	"\x04mode\x18\x02 \x01(\x0e2#.caapi.v1.CredentialAcquisitionModeR\x04mode\x12\x1a\n" +
-	"\bdocument\x18\x03 \x01(\fR\bdocument\x12*\n" +
-	"\x11private_key_pkcs8\x18\x04 \x01(\fR\x0fprivateKeyPkcs82z\n" +
+	"\x04type\x18\x01 \x01(\x0e2\x18.caapi.v1.CredentialTypeR\x04type\x12\x1a\n" +
+	"\bdocument\x18\x02 \x01(\fR\bdocument\x12*\n" +
+	"\x11private_key_pkcs8\x18\x03 \x01(\fR\x0fprivateKeyPkcs82z\n" +
 	"\x1eCredentialAcquisitionInterface\x12X\n" +
 	"\x11AcquireCredential\x12 .cai.v1.AcquireCredentialRequest\x1a!.cai.v1.AcquireCredentialResponseB8Z6github.com/TWI-Unified-Model/tacra/gen/go/cai/v1;caiv1b\x06proto3"
 
@@ -189,19 +180,17 @@ var file_cai_v1_cai_proto_goTypes = []any{
 	(*AcquireCredentialRequest)(nil),  // 0: cai.v1.AcquireCredentialRequest
 	(*AcquireCredentialResponse)(nil), // 1: cai.v1.AcquireCredentialResponse
 	(v1.CredentialType)(0),            // 2: caapi.v1.CredentialType
-	(v1.CredentialAcquisitionMode)(0), // 3: caapi.v1.CredentialAcquisitionMode
 }
 var file_cai_v1_cai_proto_depIdxs = []int32{
 	2, // 0: cai.v1.AcquireCredentialRequest.credential_type:type_name -> caapi.v1.CredentialType
 	2, // 1: cai.v1.AcquireCredentialResponse.type:type_name -> caapi.v1.CredentialType
-	3, // 2: cai.v1.AcquireCredentialResponse.mode:type_name -> caapi.v1.CredentialAcquisitionMode
-	0, // 3: cai.v1.CredentialAcquisitionInterface.AcquireCredential:input_type -> cai.v1.AcquireCredentialRequest
-	1, // 4: cai.v1.CredentialAcquisitionInterface.AcquireCredential:output_type -> cai.v1.AcquireCredentialResponse
-	4, // [4:5] is the sub-list for method output_type
-	3, // [3:4] is the sub-list for method input_type
-	3, // [3:3] is the sub-list for extension type_name
-	3, // [3:3] is the sub-list for extension extendee
-	0, // [0:3] is the sub-list for field type_name
+	0, // 2: cai.v1.CredentialAcquisitionInterface.AcquireCredential:input_type -> cai.v1.AcquireCredentialRequest
+	1, // 3: cai.v1.CredentialAcquisitionInterface.AcquireCredential:output_type -> cai.v1.AcquireCredentialResponse
+	3, // [3:4] is the sub-list for method output_type
+	2, // [2:3] is the sub-list for method input_type
+	2, // [2:2] is the sub-list for extension type_name
+	2, // [2:2] is the sub-list for extension extendee
+	0, // [0:2] is the sub-list for field type_name
 }
 
 func init() { file_cai_v1_cai_proto_init() }
