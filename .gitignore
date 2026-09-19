@@ -3,3 +3,5 @@ client/go.sum
 go.sum
 go.work.sum
 .env
+cai/cmd/sidecar/sidecar
+client/http-client
