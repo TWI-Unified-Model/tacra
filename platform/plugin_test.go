@@ -2,6 +2,7 @@ package platform
 
 import (
 	"bytes"
+	"crypto"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
@@ -23,8 +24,9 @@ func TestSimulatedRetrieveEvidence(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cek.Public().Curve != elliptic.P256() {
-		t.Fatalf("CEK curve %s, want P-256", cek.Public().Curve.Params().Name)
+	ec, ok := cek.Public().(*ecdsa.PublicKey)
+	if !ok || ec.Curve != elliptic.P256() {
+		t.Fatalf("CEK %T, want P-256 ECDSA", cek.Public())
 	}
 
 	handle := bytes.Repeat([]byte{0x11}, 32)
@@ -66,7 +68,7 @@ func TestSimulatedEnrollEvidence(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	csk, err := p.GenerateCSK()
+	csk, err := p.GenerateCSK(SigningAlgorithmECDSAP256)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -159,13 +161,13 @@ func TestEvidenceRejectsBadKey(t *testing.T) {
 		t.Fatalf("nil key: %v", err)
 	}
 
-	rsaKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	rsaKey, err := rsa.GenerateKey(rand.Reader, 1024)
 	if err != nil {
 		t.Fatal(err)
 	}
 	_, err = p.GenerateEvidence(EvidenceRequest{FreshnessHandle: ch, BoundKey: &rsaKey.PublicKey})
 	if !errors.Is(err, ErrUnsupportedKey) {
-		t.Fatalf("rsa key: %v", err)
+		t.Fatalf("short RSA key: %v", err)
 	}
 
 	p384, err := ecdsa.GenerateKey(elliptic.P384(), rand.Reader)
@@ -176,6 +178,34 @@ func TestEvidenceRejectsBadKey(t *testing.T) {
 	if !errors.Is(err, ErrUnsupportedKey) {
 		t.Fatalf("p384 key: %v", err)
 	}
+}
+
+func TestEvidenceRSABoundKey(t *testing.T) {
+	p, err := NewSimulated()
+	if err != nil {
+		t.Fatal(err)
+	}
+	csk, err := p.GenerateCSK(SigningAlgorithmRSA2048)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := csk.Public().(*rsa.PublicKey); !ok {
+		t.Fatalf("CSK %T, want RSA", csk.Public())
+	}
+	handle := bytes.Repeat([]byte{0x66}, 8)
+	ev, err := p.GenerateEvidence(EvidenceRequest{
+		FreshnessHandle: handle,
+		BoundKey:        csk.Public(),
+		BoundKeyUse:     BoundKeyUseSign,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	claims, err := ev.Verify(p.AttestationPublicKey())
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertBoundKey(t, claims, csk.Public())
 }
 
 func TestTamperedEvidenceFailsVerify(t *testing.T) {
@@ -230,7 +260,7 @@ func TestKeyPairEncodings(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	kp, err := p.GenerateCSK()
+	kp, err := p.GenerateCSK(SigningAlgorithmECDSAP256)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -246,7 +276,7 @@ func TestKeyPairEncodings(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if signer.Public().(*ecdsa.PublicKey).X.Cmp(kp.Public().X) != 0 {
+	if !publicKeysEqual(signer.Public(), kp.Public()) {
 		t.Fatal("signer public key mismatch")
 	}
 	if _, err := p.AttestationPublicPKIX(); err != nil {
@@ -298,15 +328,21 @@ func assertNonce(t *testing.T, c *Claims, want []byte) {
 	}
 }
 
-func assertBoundKey(t *testing.T, c *Claims, want *ecdsa.PublicKey) {
+func assertBoundKey(t *testing.T, c *Claims, want crypto.PublicKey) {
 	t.Helper()
 	got, err := c.Cnf.BoundPublicKey()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.X.Cmp(want.X) != 0 || got.Y.Cmp(want.Y) != 0 {
+	if !publicKeysEqual(got, want) {
 		t.Fatal("cnf public key mismatch")
 	}
+}
+
+func publicKeysEqual(a, b crypto.PublicKey) bool {
+	type equaler interface{ Equal(crypto.PublicKey) bool }
+	eq, ok := a.(equaler)
+	return ok && eq.Equal(b)
 }
 
 func assertStandardEAT(t *testing.T, c *Claims) {

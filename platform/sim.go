@@ -99,7 +99,11 @@ func NewSimulated(opts ...SimOption) (*Simulated, error) {
 		if err != nil {
 			return nil, err
 		}
-		s.ak = kp.Private
+		priv, ok := kp.Private.(*ecdsa.PrivateKey)
+		if !ok {
+			return nil, fmt.Errorf("platform: attestation key is %T, want P-256 ECDSA", kp.Private)
+		}
+		s.ak = priv
 	}
 	if len(s.ueid) == 0 {
 		ueid, err := generateUEID()
@@ -125,7 +129,16 @@ func (s *Simulated) Name() string { return "simulated" }
 func (s *Simulated) GenerateCEK() (*KeyPair, error) { return generateP256() }
 
 // GenerateCSK implements Plugin.
-func (s *Simulated) GenerateCSK() (*KeyPair, error) { return generateP256() }
+func (s *Simulated) GenerateCSK(alg SigningAlgorithm) (*KeyPair, error) {
+	switch alg {
+	case SigningAlgorithmUnspecified, SigningAlgorithmECDSAP256:
+		return generateP256()
+	case SigningAlgorithmRSA2048:
+		return generateRSA2048()
+	default:
+		return nil, fmt.Errorf("%w: %d", ErrUnsupportedSigningAlgorithm, alg)
+	}
+}
 
 // LocalEpoch implements Plugin. The simulated platform uses the boot seed
 // as a locally held epoch identifier.
@@ -163,12 +176,7 @@ func (s *Simulated) GenerateEvidence(req EvidenceRequest) (*Evidence, error) {
 	if err := validateFreshnessHandle(req.FreshnessHandle); err != nil {
 		return nil, err
 	}
-	bound, err := ecdsaP256Public(req.BoundKey)
-	if err != nil {
-		return nil, err
-	}
-
-	coseKey, err := encodeCOSEKey(bound)
+	coseKey, err := encodeCOSEKey(req.BoundKey)
 	if err != nil {
 		return nil, err
 	}

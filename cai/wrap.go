@@ -1,6 +1,7 @@
 package cai
 
 import (
+	"crypto"
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/ecdh"
@@ -34,11 +35,12 @@ type wrappedV1 struct {
 
 // WrapCredential encrypts plaintext to pub (CEKpub) using ephemeral P-256 ECDH,
 // HKDF-SHA256, and AES-256-GCM. The result is the CAAPI wrapped_credential blob.
-func WrapCredential(pub *ecdsa.PublicKey, plaintext []byte) ([]byte, error) {
+// CEK wrapping is ECDH, independent of the CSK signing algorithm.
+func WrapCredential(pub crypto.PublicKey, plaintext []byte) ([]byte, error) {
 	if pub == nil {
 		return nil, fmt.Errorf("cai: wrap: nil CEK public key")
 	}
-	peer, err := pub.ECDH()
+	peer, err := publicToECDH(pub)
 	if err != nil {
 		return nil, fmt.Errorf("cai: wrap: %w", err)
 	}
@@ -84,7 +86,7 @@ func WrapCredential(pub *ecdsa.PublicKey, plaintext []byte) ([]byte, error) {
 }
 
 // UnwrapCredential decrypts a wrapped_credential blob with CEKpri.
-func UnwrapCredential(priv *ecdsa.PrivateKey, wrapped []byte) ([]byte, error) {
+func UnwrapCredential(priv crypto.PrivateKey, wrapped []byte) ([]byte, error) {
 	if priv == nil {
 		return nil, fmt.Errorf("%w: nil CEK private key", ErrUnwrap)
 	}
@@ -109,7 +111,7 @@ func UnwrapCredential(priv *ecdsa.PrivateKey, wrapped []byte) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrUnwrap, err)
 	}
-	cekECDH, err := priv.ECDH()
+	cekECDH, err := privateToECDH(priv)
 	if err != nil {
 		return nil, fmt.Errorf("%w: CEK: %v", ErrUnwrap, err)
 	}
@@ -136,14 +138,25 @@ func UnwrapCredential(priv *ecdsa.PrivateKey, wrapped []byte) ([]byte, error) {
 	return plain, nil
 }
 
-func publicToECDH(pub any) (*ecdh.PublicKey, error) {
+func publicToECDH(pub crypto.PublicKey) (*ecdh.PublicKey, error) {
 	switch k := pub.(type) {
 	case *ecdh.PublicKey:
 		return k, nil
 	case *ecdsa.PublicKey:
 		return k.ECDH()
 	default:
-		return nil, fmt.Errorf("ephemeral key type %T", pub)
+		return nil, fmt.Errorf("key type %T", pub)
+	}
+}
+
+func privateToECDH(priv crypto.PrivateKey) (*ecdh.PrivateKey, error) {
+	switch k := priv.(type) {
+	case *ecdh.PrivateKey:
+		return k, nil
+	case *ecdsa.PrivateKey:
+		return k.ECDH()
+	default:
+		return nil, fmt.Errorf("key type %T", priv)
 	}
 }
 

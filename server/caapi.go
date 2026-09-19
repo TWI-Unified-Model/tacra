@@ -43,11 +43,16 @@ func (s *caapiServer) InitiateRemoteAttestation(_ context.Context, in *caapiv1.I
 	if _, err := rand.Read(handle); err != nil {
 		return nil, status.Errorf(codes.Internal, "freshness handle: %v", err)
 	}
-	return &caapiv1.InitiateCredentialAcquisitionResponse{
+	resp := &caapiv1.InitiateCredentialAcquisitionResponse{
 		Mode:            mode,
 		FreshnessKind:   caapiv1.FreshnessKind_FRESHNESS_KIND_PRESENT_NONCE,
 		FreshnessHandle: handle,
-	}, nil
+	}
+	if mode == caapiv1.CredentialAcquisitionMode_ACQUISITION_ENROLL {
+		alg := caapiv1.SigningAlgorithm_SIGNING_ALGORITHM_ECDSA_P256
+		resp.SigningAlgorithm = &alg
+	}
+	return resp, nil
 }
 
 func (s *caapiServer) EnrollCredential(_ context.Context, in *caapiv1.EnrollCredentialRequest) (*caapiv1.EnrollCredentialResponse, error) {

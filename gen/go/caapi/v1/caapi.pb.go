@@ -137,6 +137,58 @@ func (FreshnessKind) EnumDescriptor() ([]byte, []int) {
 	return file_caapi_v1_caapi_proto_rawDescGZIP(), []int{1}
 }
 
+// SigningAlgorithm is the CSK algorithm the Attester must generate for
+// Enrollment. Present on InitiateCredentialAcquisitionResponse when mode
+// is enroll; absent for retrieve.
+type SigningAlgorithm int32
+
+const (
+	SigningAlgorithm_SIGNING_ALGORITHM_UNSPECIFIED SigningAlgorithm = 0
+	SigningAlgorithm_SIGNING_ALGORITHM_ECDSA_P256  SigningAlgorithm = 1
+	SigningAlgorithm_SIGNING_ALGORITHM_RSA_2048    SigningAlgorithm = 2
+)
+
+// Enum value maps for SigningAlgorithm.
+var (
+	SigningAlgorithm_name = map[int32]string{
+		0: "SIGNING_ALGORITHM_UNSPECIFIED",
+		1: "SIGNING_ALGORITHM_ECDSA_P256",
+		2: "SIGNING_ALGORITHM_RSA_2048",
+	}
+	SigningAlgorithm_value = map[string]int32{
+		"SIGNING_ALGORITHM_UNSPECIFIED": 0,
+		"SIGNING_ALGORITHM_ECDSA_P256":  1,
+		"SIGNING_ALGORITHM_RSA_2048":    2,
+	}
+)
+
+func (x SigningAlgorithm) Enum() *SigningAlgorithm {
+	p := new(SigningAlgorithm)
+	*p = x
+	return p
+}
+
+func (x SigningAlgorithm) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (SigningAlgorithm) Descriptor() protoreflect.EnumDescriptor {
+	return file_caapi_v1_caapi_proto_enumTypes[2].Descriptor()
+}
+
+func (SigningAlgorithm) Type() protoreflect.EnumType {
+	return &file_caapi_v1_caapi_proto_enumTypes[2]
+}
+
+func (x SigningAlgorithm) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use SigningAlgorithm.Descriptor instead.
+func (SigningAlgorithm) EnumDescriptor() ([]byte, []int) {
+	return file_caapi_v1_caapi_proto_rawDescGZIP(), []int{2}
+}
+
 type CredentialType int32
 
 const (
@@ -184,11 +236,11 @@ func (x CredentialType) String() string {
 }
 
 func (CredentialType) Descriptor() protoreflect.EnumDescriptor {
-	return file_caapi_v1_caapi_proto_enumTypes[2].Descriptor()
+	return file_caapi_v1_caapi_proto_enumTypes[3].Descriptor()
 }
 
 func (CredentialType) Type() protoreflect.EnumType {
-	return &file_caapi_v1_caapi_proto_enumTypes[2]
+	return &file_caapi_v1_caapi_proto_enumTypes[3]
 }
 
 func (x CredentialType) Number() protoreflect.EnumNumber {
@@ -197,7 +249,7 @@ func (x CredentialType) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use CredentialType.Descriptor instead.
 func (CredentialType) EnumDescriptor() ([]byte, []int) {
-	return file_caapi_v1_caapi_proto_rawDescGZIP(), []int{2}
+	return file_caapi_v1_caapi_proto_rawDescGZIP(), []int{3}
 }
 
 type InitiateCredentialAcquistionRequest struct {
@@ -264,8 +316,10 @@ type InitiateCredentialAcquisitionResponse struct {
 	// Freshness Handle (attestation nonce or epoch marker). Present when
 	// freshness_kind is present-nonce or present-epoch.
 	FreshnessHandle []byte `protobuf:"bytes,3,opt,name=freshness_handle,json=freshnessHandle,proto3,oneof" json:"freshness_handle,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// CSK algorithm for Enrollment. Present when mode is enroll.
+	SigningAlgorithm *SigningAlgorithm `protobuf:"varint,4,opt,name=signing_algorithm,json=signingAlgorithm,proto3,enum=caapi.v1.SigningAlgorithm,oneof" json:"signing_algorithm,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *InitiateCredentialAcquisitionResponse) Reset() {
@@ -317,6 +371,13 @@ func (x *InitiateCredentialAcquisitionResponse) GetFreshnessHandle() []byte {
 		return x.FreshnessHandle
 	}
 	return nil
+}
+
+func (x *InitiateCredentialAcquisitionResponse) GetSigningAlgorithm() SigningAlgorithm {
+	if x != nil && x.SigningAlgorithm != nil {
+		return *x.SigningAlgorithm
+	}
+	return SigningAlgorithm_SIGNING_ALGORITHM_UNSPECIFIED
 }
 
 type EnrollCredentialRequest struct {
@@ -564,12 +625,14 @@ const file_caapi_v1_caapi_proto_rawDesc = "" +
 	"\x14caapi/v1/caapi.proto\x12\bcaapi.v1\"\x80\x01\n" +
 	"#InitiateCredentialAcquistionRequest\x12\x16\n" +
 	"\x06target\x18\x01 \x01(\tR\x06target\x12A\n" +
-	"\x0fcredential_type\x18\x02 \x01(\x0e2\x18.caapi.v1.CredentialTypeR\x0ecredentialType\"\xe5\x01\n" +
+	"\x0fcredential_type\x18\x02 \x01(\x0e2\x18.caapi.v1.CredentialTypeR\x0ecredentialType\"\xc9\x02\n" +
 	"%InitiateCredentialAcquisitionResponse\x127\n" +
 	"\x04mode\x18\x01 \x01(\x0e2#.caapi.v1.CredentialAcquisitionModeR\x04mode\x12>\n" +
 	"\x0efreshness_kind\x18\x02 \x01(\x0e2\x17.caapi.v1.FreshnessKindR\rfreshnessKind\x12.\n" +
-	"\x10freshness_handle\x18\x03 \x01(\fH\x00R\x0ffreshnessHandle\x88\x01\x01B\x13\n" +
-	"\x11_freshness_handle\"\xe4\x01\n" +
+	"\x10freshness_handle\x18\x03 \x01(\fH\x00R\x0ffreshnessHandle\x88\x01\x01\x12L\n" +
+	"\x11signing_algorithm\x18\x04 \x01(\x0e2\x1a.caapi.v1.SigningAlgorithmH\x01R\x10signingAlgorithm\x88\x01\x01B\x13\n" +
+	"\x11_freshness_handleB\x14\n" +
+	"\x12_signing_algorithm\"\xe4\x01\n" +
 	"\x17EnrollCredentialRequest\x12\x16\n" +
 	"\x06target\x18\x01 \x01(\tR\x06target\x12A\n" +
 	"\x0fcredential_type\x18\x02 \x01(\x0e2\x18.caapi.v1.CredentialTypeR\x0ecredentialType\x12,\n" +
@@ -597,7 +660,11 @@ const file_caapi_v1_caapi_proto_rawDesc = "" +
 	"\x1fFRESHNESS_KIND_ABSENT_TIMESTAMP\x10\x02\x12\x1f\n" +
 	"\x1bFRESHNESS_KIND_ABSENT_EPOCH\x10\x03\x12 \n" +
 	"\x1cFRESHNESS_KIND_PRESENT_NONCE\x10\x04\x12 \n" +
-	"\x1cFRESHNESS_KIND_PRESENT_EPOCH\x10\x05*\xcf\x01\n" +
+	"\x1cFRESHNESS_KIND_PRESENT_EPOCH\x10\x05*w\n" +
+	"\x10SigningAlgorithm\x12!\n" +
+	"\x1dSIGNING_ALGORITHM_UNSPECIFIED\x10\x00\x12 \n" +
+	"\x1cSIGNING_ALGORITHM_ECDSA_P256\x10\x01\x12\x1e\n" +
+	"\x1aSIGNING_ALGORITHM_RSA_2048\x10\x02*\xcf\x01\n" +
 	"\x0eCredentialType\x12\x1f\n" +
 	"\x1bCREDENTIAL_TYPE_UNSPECIFIED\x10\x00\x12\x17\n" +
 	"\x13CREDENTIAL_TYPE_JWT\x10\x01\x12\x17\n" +
@@ -623,36 +690,38 @@ func file_caapi_v1_caapi_proto_rawDescGZIP() []byte {
 	return file_caapi_v1_caapi_proto_rawDescData
 }
 
-var file_caapi_v1_caapi_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
+var file_caapi_v1_caapi_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
 var file_caapi_v1_caapi_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
 var file_caapi_v1_caapi_proto_goTypes = []any{
 	(CredentialAcquisitionMode)(0),                // 0: caapi.v1.CredentialAcquisitionMode
 	(FreshnessKind)(0),                            // 1: caapi.v1.FreshnessKind
-	(CredentialType)(0),                           // 2: caapi.v1.CredentialType
-	(*InitiateCredentialAcquistionRequest)(nil),   // 3: caapi.v1.InitiateCredentialAcquistionRequest
-	(*InitiateCredentialAcquisitionResponse)(nil), // 4: caapi.v1.InitiateCredentialAcquisitionResponse
-	(*EnrollCredentialRequest)(nil),               // 5: caapi.v1.EnrollCredentialRequest
-	(*EnrollCredentialResponse)(nil),              // 6: caapi.v1.EnrollCredentialResponse
-	(*RetrieveCredentialRequest)(nil),             // 7: caapi.v1.RetrieveCredentialRequest
-	(*RetrieveCredentialResponse)(nil),            // 8: caapi.v1.RetrieveCredentialResponse
+	(SigningAlgorithm)(0),                         // 2: caapi.v1.SigningAlgorithm
+	(CredentialType)(0),                           // 3: caapi.v1.CredentialType
+	(*InitiateCredentialAcquistionRequest)(nil),   // 4: caapi.v1.InitiateCredentialAcquistionRequest
+	(*InitiateCredentialAcquisitionResponse)(nil), // 5: caapi.v1.InitiateCredentialAcquisitionResponse
+	(*EnrollCredentialRequest)(nil),               // 6: caapi.v1.EnrollCredentialRequest
+	(*EnrollCredentialResponse)(nil),              // 7: caapi.v1.EnrollCredentialResponse
+	(*RetrieveCredentialRequest)(nil),             // 8: caapi.v1.RetrieveCredentialRequest
+	(*RetrieveCredentialResponse)(nil),            // 9: caapi.v1.RetrieveCredentialResponse
 }
 var file_caapi_v1_caapi_proto_depIdxs = []int32{
-	2, // 0: caapi.v1.InitiateCredentialAcquistionRequest.credential_type:type_name -> caapi.v1.CredentialType
+	3, // 0: caapi.v1.InitiateCredentialAcquistionRequest.credential_type:type_name -> caapi.v1.CredentialType
 	0, // 1: caapi.v1.InitiateCredentialAcquisitionResponse.mode:type_name -> caapi.v1.CredentialAcquisitionMode
 	1, // 2: caapi.v1.InitiateCredentialAcquisitionResponse.freshness_kind:type_name -> caapi.v1.FreshnessKind
-	2, // 3: caapi.v1.EnrollCredentialRequest.credential_type:type_name -> caapi.v1.CredentialType
-	2, // 4: caapi.v1.RetrieveCredentialRequest.credential_type:type_name -> caapi.v1.CredentialType
-	3, // 5: caapi.v1.CredentialAcquisitionService.InitiateRemoteAttestation:input_type -> caapi.v1.InitiateCredentialAcquistionRequest
-	5, // 6: caapi.v1.CredentialAcquisitionService.EnrollCredential:input_type -> caapi.v1.EnrollCredentialRequest
-	7, // 7: caapi.v1.CredentialAcquisitionService.RetrieveCredential:input_type -> caapi.v1.RetrieveCredentialRequest
-	4, // 8: caapi.v1.CredentialAcquisitionService.InitiateRemoteAttestation:output_type -> caapi.v1.InitiateCredentialAcquisitionResponse
-	6, // 9: caapi.v1.CredentialAcquisitionService.EnrollCredential:output_type -> caapi.v1.EnrollCredentialResponse
-	8, // 10: caapi.v1.CredentialAcquisitionService.RetrieveCredential:output_type -> caapi.v1.RetrieveCredentialResponse
-	8, // [8:11] is the sub-list for method output_type
-	5, // [5:8] is the sub-list for method input_type
-	5, // [5:5] is the sub-list for extension type_name
-	5, // [5:5] is the sub-list for extension extendee
-	0, // [0:5] is the sub-list for field type_name
+	2, // 3: caapi.v1.InitiateCredentialAcquisitionResponse.signing_algorithm:type_name -> caapi.v1.SigningAlgorithm
+	3, // 4: caapi.v1.EnrollCredentialRequest.credential_type:type_name -> caapi.v1.CredentialType
+	3, // 5: caapi.v1.RetrieveCredentialRequest.credential_type:type_name -> caapi.v1.CredentialType
+	4, // 6: caapi.v1.CredentialAcquisitionService.InitiateRemoteAttestation:input_type -> caapi.v1.InitiateCredentialAcquistionRequest
+	6, // 7: caapi.v1.CredentialAcquisitionService.EnrollCredential:input_type -> caapi.v1.EnrollCredentialRequest
+	8, // 8: caapi.v1.CredentialAcquisitionService.RetrieveCredential:input_type -> caapi.v1.RetrieveCredentialRequest
+	5, // 9: caapi.v1.CredentialAcquisitionService.InitiateRemoteAttestation:output_type -> caapi.v1.InitiateCredentialAcquisitionResponse
+	7, // 10: caapi.v1.CredentialAcquisitionService.EnrollCredential:output_type -> caapi.v1.EnrollCredentialResponse
+	9, // 11: caapi.v1.CredentialAcquisitionService.RetrieveCredential:output_type -> caapi.v1.RetrieveCredentialResponse
+	9, // [9:12] is the sub-list for method output_type
+	6, // [6:9] is the sub-list for method input_type
+	6, // [6:6] is the sub-list for extension type_name
+	6, // [6:6] is the sub-list for extension extendee
+	0, // [0:6] is the sub-list for field type_name
 }
 
 func init() { file_caapi_v1_caapi_proto_init() }
@@ -668,7 +737,7 @@ func file_caapi_v1_caapi_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_caapi_v1_caapi_proto_rawDesc), len(file_caapi_v1_caapi_proto_rawDesc)),
-			NumEnums:      3,
+			NumEnums:      4,
 			NumMessages:   6,
 			NumExtensions: 0,
 			NumServices:   1,

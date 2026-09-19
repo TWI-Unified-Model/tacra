@@ -1,8 +1,12 @@
 package platform
 
 import (
+	"crypto"
 	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rsa"
 	"fmt"
+	"math/big"
 
 	"github.com/fxamacker/cbor/v2"
 	"github.com/veraison/eat"
@@ -50,34 +54,79 @@ type Confirmation struct {
 	COSEKey cbor.RawMessage `cbor:"1,keyasint"`
 }
 
-// BoundPublicKey decodes the cnf COSE_Key to a Go public key.
-func (c *Confirmation) BoundPublicKey() (*ecdsa.PublicKey, error) {
+// BoundPublicKey decodes the cnf COSE_Key to a Go public key
+// (*ecdsa.PublicKey or *rsa.PublicKey).
+func (c *Confirmation) BoundPublicKey() (crypto.PublicKey, error) {
 	if c == nil || len(c.COSEKey) == 0 {
 		return nil, fmt.Errorf("platform: missing cnf COSE_Key")
 	}
 	var key cose.Key
-	if err := key.UnmarshalCBOR(c.COSEKey); err != nil {
-		return nil, fmt.Errorf("platform: decode cnf COSE_Key: %w", err)
+	if err := key.UnmarshalCBOR(c.COSEKey); err == nil {
+		if pub, err := key.PublicKey(); err == nil {
+			return pub, nil
+		}
 	}
-	pub, err := key.PublicKey()
-	if err != nil {
-		return nil, fmt.Errorf("platform: cnf COSE_Key to public key: %w", err)
-	}
-	ec, ok := pub.(*ecdsa.PublicKey)
-	if !ok {
-		return nil, fmt.Errorf("platform: cnf COSE_Key is %T, want *ecdsa.PublicKey", pub)
-	}
-	return ec, nil
+	return parseRSACOSEKey(c.COSEKey)
 }
 
-func encodeCOSEKey(pub *ecdsa.PublicKey) (cbor.RawMessage, error) {
-	key, err := cose.NewKeyFromPublic(pub)
-	if err != nil {
-		return nil, fmt.Errorf("platform: COSE_Key from public key: %w", err)
+// coseRSAKey is RFC 8230: kty=3, n=-1, e=-2.
+type coseRSAKey struct {
+	Kty int    `cbor:"1,keyasint"`
+	N   []byte `cbor:"-1,keyasint"`
+	E   []byte `cbor:"-2,keyasint"`
+}
+
+func parseRSACOSEKey(raw []byte) (*rsa.PublicKey, error) {
+	var k coseRSAKey
+	if err := decMode.Unmarshal(raw, &k); err != nil {
+		return nil, fmt.Errorf("platform: cnf COSE_Key: %w", err)
 	}
-	b, err := key.MarshalCBOR()
-	if err != nil {
-		return nil, fmt.Errorf("platform: marshal COSE_Key: %w", err)
+	if k.Kty != 3 || len(k.N) == 0 || len(k.E) == 0 {
+		return nil, fmt.Errorf("platform: cnf COSE_Key is not ECDSA or RSA")
 	}
-	return b, nil
+	e := new(big.Int).SetBytes(k.E)
+	if !e.IsInt64() {
+		return nil, fmt.Errorf("platform: RSA exponent overflow")
+	}
+	return &rsa.PublicKey{N: new(big.Int).SetBytes(k.N), E: int(e.Int64())}, nil
+}
+
+func encodeCOSEKey(pub crypto.PublicKey) (cbor.RawMessage, error) {
+	if pub == nil {
+		return nil, ErrMissingBoundKey
+	}
+	switch k := pub.(type) {
+	case *ecdsa.PublicKey:
+		if k.Curve != elliptic.P256() {
+			return nil, fmt.Errorf("%w: curve %s", ErrUnsupportedKey, k.Curve.Params().Name)
+		}
+		key, err := cose.NewKeyFromPublic(k)
+		if err != nil {
+			return nil, fmt.Errorf("platform: COSE_Key from public key: %w", err)
+		}
+		b, err := key.MarshalCBOR()
+		if err != nil {
+			return nil, fmt.Errorf("platform: marshal COSE_Key: %w", err)
+		}
+		return b, nil
+	case *rsa.PublicKey:
+		if k.N == nil || k.N.BitLen() < 2048 {
+			bits := 0
+			if k.N != nil {
+				bits = k.N.BitLen()
+			}
+			return nil, fmt.Errorf("%w: RSA %d bits", ErrUnsupportedKey, bits)
+		}
+		b, err := encMode.Marshal(coseRSAKey{
+			Kty: 3,
+			N:   k.N.Bytes(),
+			E:   big.NewInt(int64(k.E)).Bytes(),
+		})
+		if err != nil {
+			return nil, fmt.Errorf("platform: marshal RSA COSE_Key: %w", err)
+		}
+		return b, nil
+	default:
+		return nil, fmt.Errorf("%w: %T", ErrUnsupportedKey, pub)
+	}
 }

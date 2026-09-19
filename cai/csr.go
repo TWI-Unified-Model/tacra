@@ -11,8 +11,9 @@ import (
 )
 
 func createCSR(csk *platform.KeyPair, target string) ([]byte, error) {
-	if csk == nil || csk.Private == nil {
-		return nil, fmt.Errorf("cai: CSR: nil CSK")
+	signer, err := csk.Signer()
+	if err != nil {
+		return nil, fmt.Errorf("cai: CSR: %w", err)
 	}
 	tmpl := &x509.CertificateRequest{
 		Subject: pkix.Name{CommonName: truncateCN(target)},
@@ -20,7 +21,7 @@ func createCSR(csk *platform.KeyPair, target string) ([]byte, error) {
 	if u, err := url.Parse(target); err == nil && u.Scheme != "" && u.Host != "" {
 		tmpl.URIs = []*url.URL{u}
 	}
-	der, err := x509.CreateCertificateRequest(rand.Reader, tmpl, csk.Private)
+	der, err := x509.CreateCertificateRequest(rand.Reader, tmpl, signer)
 	if err != nil {
 		return nil, fmt.Errorf("cai: CSR: %w", err)
 	}

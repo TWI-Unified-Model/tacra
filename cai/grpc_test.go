@@ -23,11 +23,15 @@ func TestGRPCAcquireCredential(t *testing.T) {
 			if in.GetCredentialType() == caapiv1.CredentialType_CREDENTIAL_TYPE_X509 {
 				mode = caapiv1.CredentialAcquisitionMode_ACQUISITION_ENROLL
 			}
-			return &caapiv1.InitiateCredentialAcquisitionResponse{
+			resp := &caapiv1.InitiateCredentialAcquisitionResponse{
 				Mode:            mode,
 				FreshnessKind:   caapiv1.FreshnessKind_FRESHNESS_KIND_PRESENT_NONCE,
 				FreshnessHandle: handle,
-			}, nil
+			}
+			if mode == caapiv1.CredentialAcquisitionMode_ACQUISITION_ENROLL {
+				resp.SigningAlgorithm = new(SigningAlgorithmECDSAP256)
+			}
+			return resp, nil
 		},
 		enroll: func(_ context.Context, in *caapiv1.EnrollCredentialRequest) (*caapiv1.EnrollCredentialResponse, error) {
 			return &caapiv1.EnrollCredentialResponse{PlaintextCredential: []byte("dummy-cert")}, nil

@@ -3,9 +3,11 @@ package cai
 import (
 	"bytes"
 	"context"
+	"crypto"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/rsa"
 	"crypto/x509"
 	"errors"
 	"testing"
@@ -119,9 +121,10 @@ func TestAcquireCredentialEnroll(t *testing.T) {
 	fake := &fakeCAAPI{
 		init: func(_ context.Context, _ *caapiv1.InitiateCredentialAcquistionRequest) (*caapiv1.InitiateCredentialAcquisitionResponse, error) {
 			return &caapiv1.InitiateCredentialAcquisitionResponse{
-				Mode:            caapiv1.CredentialAcquisitionMode_ACQUISITION_ENROLL,
-				FreshnessKind:   caapiv1.FreshnessKind_FRESHNESS_KIND_PRESENT_NONCE,
-				FreshnessHandle: handle,
+				Mode:             caapiv1.CredentialAcquisitionMode_ACQUISITION_ENROLL,
+				FreshnessKind:    caapiv1.FreshnessKind_FRESHNESS_KIND_PRESENT_NONCE,
+				FreshnessHandle:  handle,
+				SigningAlgorithm: new(SigningAlgorithmECDSAP256),
 			}, nil
 		},
 		enroll: func(_ context.Context, in *caapiv1.EnrollCredentialRequest) (*caapiv1.EnrollCredentialResponse, error) {
@@ -153,13 +156,7 @@ func TestAcquireCredentialEnroll(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			csrPub, ok := csr.PublicKey.(*ecdsa.PublicKey)
-			if !ok {
-				t.Fatalf("CSR key %T", csr.PublicKey)
-			}
-			if csrPub.X.Cmp(pub.X) != 0 || csrPub.Y.Cmp(pub.Y) != 0 {
-				t.Fatal("CSR public key != evidence cnf")
-			}
+			assertSamePublic(t, csr.PublicKey, pub)
 			return &caapiv1.EnrollCredentialResponse{PlaintextCredential: minted}, nil
 		},
 	}
@@ -175,7 +172,11 @@ func TestAcquireCredentialEnroll(t *testing.T) {
 	if cred.PrivateKey == nil {
 		t.Fatal("enroll must return CSK")
 	}
-	if cred.PrivateKey.Curve != elliptic.P256() {
+	priv, ok := cred.PrivateKey.(*ecdsa.PrivateKey)
+	if !ok {
+		t.Fatalf("CSK %T, want *ecdsa.PrivateKey", cred.PrivateKey)
+	}
+	if priv.Curve != elliptic.P256() {
 		t.Fatal("CSK must be P-256")
 	}
 	csr, err := x509.ParseCertificateRequest(gotCSR)
@@ -184,6 +185,99 @@ func TestAcquireCredentialEnroll(t *testing.T) {
 	}
 	if err := csr.CheckSignature(); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestAcquireCredentialEnrollRSA(t *testing.T) {
+	handle := bytes.Repeat([]byte{0x0b}, 16)
+	minted := []byte("dummy-x509-der")
+
+	fake := &fakeCAAPI{
+		init: func(_ context.Context, _ *caapiv1.InitiateCredentialAcquistionRequest) (*caapiv1.InitiateCredentialAcquisitionResponse, error) {
+			return &caapiv1.InitiateCredentialAcquisitionResponse{
+				Mode:             caapiv1.CredentialAcquisitionMode_ACQUISITION_ENROLL,
+				FreshnessKind:    caapiv1.FreshnessKind_FRESHNESS_KIND_PRESENT_NONCE,
+				FreshnessHandle:  handle,
+				SigningAlgorithm: new(SigningAlgorithmRSA2048),
+			}, nil
+		},
+		enroll: func(_ context.Context, in *caapiv1.EnrollCredentialRequest) (*caapiv1.EnrollCredentialResponse, error) {
+			csr, err := x509.ParseCertificateRequest(in.GetCsr())
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, ok := csr.PublicKey.(*rsa.PublicKey); !ok {
+				t.Fatalf("CSR key %T, want *rsa.PublicKey", csr.PublicKey)
+			}
+			claims, err := platform.ParseEvidence(in.GetEvidence())
+			if err != nil {
+				t.Fatal(err)
+			}
+			pub, err := claims.Cnf.BoundPublicKey()
+			if err != nil {
+				t.Fatal(err)
+			}
+			assertSamePublic(t, csr.PublicKey, pub)
+			return &caapiv1.EnrollCredentialResponse{PlaintextCredential: minted}, nil
+		},
+	}
+
+	c, _ := newTestCAI(t, fake)
+	cred, err := c.AcquireCredential(context.Background(), "https://ca.example", CredentialTypeX509, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	priv, ok := cred.PrivateKey.(*rsa.PrivateKey)
+	if !ok {
+		t.Fatalf("CSK %T, want *rsa.PrivateKey", cred.PrivateKey)
+	}
+	if priv.N.BitLen() != 2048 {
+		t.Fatalf("RSA bits %d", priv.N.BitLen())
+	}
+}
+
+func TestAcquireCredentialSigningAlgorithm(t *testing.T) {
+	handle := bytes.Repeat([]byte{0x0a}, 32)
+	c, _ := newTestCAI(t, &fakeCAAPI{
+		init: func(context.Context, *caapiv1.InitiateCredentialAcquistionRequest) (*caapiv1.InitiateCredentialAcquisitionResponse, error) {
+			return &caapiv1.InitiateCredentialAcquisitionResponse{
+				Mode:            caapiv1.CredentialAcquisitionMode_ACQUISITION_ENROLL,
+				FreshnessKind:   caapiv1.FreshnessKind_FRESHNESS_KIND_PRESENT_NONCE,
+				FreshnessHandle: handle,
+			}, nil
+		},
+	})
+	if _, err := c.AcquireCredential(context.Background(), "https://ca.example", CredentialTypeX509, ""); !errors.Is(err, ErrMissingSigningAlgorithm) {
+		t.Fatalf("enroll without algorithm: %v", err)
+	}
+
+	c, _ = newTestCAI(t, &fakeCAAPI{
+		init: func(context.Context, *caapiv1.InitiateCredentialAcquistionRequest) (*caapiv1.InitiateCredentialAcquisitionResponse, error) {
+			return &caapiv1.InitiateCredentialAcquisitionResponse{
+				Mode:             caapiv1.CredentialAcquisitionMode_ACQUISITION_RETRIEVE,
+				FreshnessKind:    caapiv1.FreshnessKind_FRESHNESS_KIND_PRESENT_NONCE,
+				FreshnessHandle:  handle,
+				SigningAlgorithm: new(SigningAlgorithmECDSAP256),
+			}, nil
+		},
+	})
+	if _, err := c.AcquireCredential(context.Background(), "https://api.example", CredentialTypeAPIKey, ""); !errors.Is(err, ErrUnexpectedSigningAlgorithm) {
+		t.Fatalf("retrieve with algorithm: %v", err)
+	}
+}
+
+func assertSamePublic(t *testing.T, a, b crypto.PublicKey) {
+	t.Helper()
+	ad, err := x509.MarshalPKIXPublicKey(a)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bd, err := x509.MarshalPKIXPublicKey(b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(ad, bd) {
+		t.Fatal("public keys differ")
 	}
 }
 

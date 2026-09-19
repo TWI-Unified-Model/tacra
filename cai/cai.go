@@ -2,7 +2,7 @@ package cai
 
 import (
 	"context"
-	"crypto/ecdsa"
+	"crypto"
 	"fmt"
 
 	caapiv1 "github.com/TWI-Unified-Model/tacra/gen/go/caapi/v1"
@@ -11,12 +11,13 @@ import (
 	"google.golang.org/grpc"
 )
 
-// CredentialType, Mode, and FreshnessKind are the CAAPI enums, re-exported
-// so the Attester can depend on cai alone.
+// CredentialType, Mode, FreshnessKind, and SigningAlgorithm are the CAAPI
+// enums, re-exported so the Attester can depend on cai alone.
 type (
-	CredentialType = caapiv1.CredentialType
-	Mode           = caapiv1.CredentialAcquisitionMode
-	FreshnessKind  = caapiv1.FreshnessKind
+	CredentialType   = caapiv1.CredentialType
+	Mode             = caapiv1.CredentialAcquisitionMode
+	FreshnessKind    = caapiv1.FreshnessKind
+	SigningAlgorithm = caapiv1.SigningAlgorithm
 )
 
 const (
@@ -38,6 +39,10 @@ const (
 	FreshnessAbsentEpoch     FreshnessKind = caapiv1.FreshnessKind_FRESHNESS_KIND_ABSENT_EPOCH
 	FreshnessPresentNonce    FreshnessKind = caapiv1.FreshnessKind_FRESHNESS_KIND_PRESENT_NONCE
 	FreshnessPresentEpoch    FreshnessKind = caapiv1.FreshnessKind_FRESHNESS_KIND_PRESENT_EPOCH
+
+	SigningAlgorithmUnspecified SigningAlgorithm = caapiv1.SigningAlgorithm_SIGNING_ALGORITHM_UNSPECIFIED
+	SigningAlgorithmECDSAP256   SigningAlgorithm = caapiv1.SigningAlgorithm_SIGNING_ALGORITHM_ECDSA_P256
+	SigningAlgorithmRSA2048     SigningAlgorithm = caapiv1.SigningAlgorithm_SIGNING_ALGORITHM_RSA_2048
 )
 
 // Credential is the document returned to the Attester.
@@ -46,18 +51,21 @@ type Credential struct {
 	// Document is the credential bytes (certificate, JWT, API key, …).
 	Document []byte
 	// PrivateKey is the CSK for Enrollment of proof-of-possession
-	// credentials. Nil for Retrieval.
-	PrivateKey *ecdsa.PrivateKey
+	// credentials. Nil for Retrieval. *ecdsa.PrivateKey or
+	// *rsa.PrivateKey (both are crypto.Signer). The algorithm is a
+	// property of the key, not a sibling field.
+	PrivateKey crypto.Signer
 }
 
 // AcquisitionRequest is the CAS-chosen context for one enroll or retrieve
 // exchange. Further fields (cipher suites, etc.) will be added here.
 type AcquisitionRequest struct {
-	Target string
-	Type   CredentialType
-	Hint   string
-	Kind   FreshnessKind
-	Handle []byte
+	Target           string
+	Type             CredentialType
+	Hint             string
+	Kind             FreshnessKind
+	Handle           []byte
+	SigningAlgorithm SigningAlgorithm
 }
 
 // Client is the CAI implementation: one AcquireCredential call that drives
@@ -121,16 +129,23 @@ func (c *Client) AcquireCredential(ctx context.Context, target string, credType 
 	}
 
 	req := AcquisitionRequest{
-		Target: target,
-		Type:   credType,
-		Hint:   credHint,
-		Kind:   initResp.GetFreshnessKind(),
-		Handle: handle,
+		Target:           target,
+		Type:             credType,
+		Hint:             credHint,
+		Kind:             initResp.GetFreshnessKind(),
+		Handle:           handle,
+		SigningAlgorithm: initResp.GetSigningAlgorithm(),
 	}
 	switch initResp.GetMode() {
 	case ModeRetrieve:
+		if req.SigningAlgorithm != SigningAlgorithmUnspecified {
+			return nil, fmt.Errorf("%w: %s", ErrUnexpectedSigningAlgorithm, req.SigningAlgorithm)
+		}
 		return c.retrieve(ctx, req)
 	case ModeEnroll:
+		if req.SigningAlgorithm == SigningAlgorithmUnspecified {
+			return nil, ErrMissingSigningAlgorithm
+		}
 		return c.enroll(ctx, req)
 	default:
 		return nil, fmt.Errorf("%w: %s", ErrUnsupportedMode, initResp.GetMode())
@@ -174,9 +189,13 @@ func (c *Client) retrieve(ctx context.Context, req AcquisitionRequest) (*Credent
 }
 
 func (c *Client) enroll(ctx context.Context, req AcquisitionRequest) (*Credential, error) {
-	csk, err := c.plugin.GenerateCSK()
+	csk, err := c.plugin.GenerateCSK(platform.SigningAlgorithm(req.SigningAlgorithm))
 	if err != nil {
 		return nil, fmt.Errorf("cai: generate CSK: %w", err)
+	}
+	signer, err := csk.Signer()
+	if err != nil {
+		return nil, fmt.Errorf("cai: CSK: %w", err)
 	}
 	csr, err := createCSR(csk, req.Target)
 	if err != nil {
@@ -208,7 +227,7 @@ func (c *Client) enroll(ctx context.Context, req AcquisitionRequest) (*Credentia
 	return &Credential{
 		Type:       req.Type,
 		Document:   resp.GetPlaintextCredential(),
-		PrivateKey: csk.Private,
+		PrivateKey: signer,
 	}, nil
 }
 
