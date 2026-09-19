@@ -2,20 +2,28 @@ package main
 
 import (
 	"context"
+	"crypto"
+	"crypto/aes"
+	"crypto/cipher"
+	"crypto/ecdh"
+	"crypto/ecdsa"
+	"crypto/rand"
 	"crypto/x509"
+	"crypto/x509/pkix"
 	"encoding/pem"
+	"fmt"
 	"net"
 	"testing"
 	"time"
 
-	"github.com/TWI-Unified-Model/tacra/cai"
 	caapiv1 "github.com/TWI-Unified-Model/tacra/gen/go/caapi/v1"
 	"github.com/TWI-Unified-Model/tacra/platform"
+	"github.com/fxamacker/cbor/v2"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
 
-func TestAcquireX509AndJWT(t *testing.T) {
+func TestCAAPIEnrollAndRetrieve(t *testing.T) {
 	iss, err := newIssuer()
 	if err != nil {
 		t.Fatal(err)
@@ -41,12 +49,9 @@ func TestAcquireX509AndJWT(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = conn.Close() })
+	cli := caapiv1.NewCredentialAcquisitionServiceClient(conn)
 
 	plugin, err := platform.NewSimulated()
-	if err != nil {
-		t.Fatal(err)
-	}
-	c, err := cai.New(plugin, caapiv1.NewCredentialAcquisitionServiceClient(conn))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -55,14 +60,41 @@ func TestAcquireX509AndJWT(t *testing.T) {
 	defer cancel()
 	target := "https://localhost:8443"
 
-	x509Cred, err := c.AcquireCredential(ctx, target, cai.CredentialTypeX509, "")
+	initEnroll, err := cli.InitiateRemoteAttestation(ctx, &caapiv1.InitiateCredentialAcquistionRequest{
+		Target:         target,
+		CredentialType: caapiv1.CredentialType_CREDENTIAL_TYPE_X509,
+	})
 	if err != nil {
-		t.Fatalf("X509: %v", err)
+		t.Fatalf("initiate enroll: %v", err)
 	}
-	if x509Cred.PrivateKey == nil {
-		t.Fatal("missing CSK")
+	if initEnroll.GetMode() != caapiv1.CredentialAcquisitionMode_ACQUISITION_ENROLL {
+		t.Fatalf("mode %s", initEnroll.GetMode())
 	}
-	block, rest := pem.Decode(x509Cred.Document)
+	csk, err := plugin.GenerateCSK(platform.SigningAlgorithm(initEnroll.GetSigningAlgorithm()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	csr := mustCSR(t, csk, target)
+	enrollEv, err := plugin.GenerateEvidence(platform.EvidenceRequest{
+		FreshnessKind:   platform.FreshnessKind(initEnroll.GetFreshnessKind()),
+		FreshnessHandle: initEnroll.GetFreshnessHandle(),
+		BoundKey:        csk.Public(),
+		CSR:             csr,
+		BoundKeyUse:     platform.BoundKeyUseSign,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	enroll, err := cli.EnrollCredential(ctx, &caapiv1.EnrollCredentialRequest{
+		Target:         target,
+		CredentialType: caapiv1.CredentialType_CREDENTIAL_TYPE_X509,
+		Evidence:       enrollEv.Token,
+		Csr:            csr,
+	})
+	if err != nil {
+		t.Fatalf("enroll: %v", err)
+	}
+	block, rest := pem.Decode(enroll.GetPlaintextCredential())
 	if block == nil {
 		t.Fatal("expected PEM cert")
 	}
@@ -73,16 +105,108 @@ func TestAcquireX509AndJWT(t *testing.T) {
 	if leaf.PublicKey == nil {
 		t.Fatal("leaf has no public key")
 	}
-	caBlock, _ := pem.Decode(rest)
-	if caBlock == nil {
+	if caBlock, _ := pem.Decode(rest); caBlock == nil {
 		t.Fatal("expected CA cert after leaf")
 	}
 
-	jwtCred, err := c.AcquireCredential(ctx, target, cai.CredentialTypeJWT, "")
+	initRetr, err := cli.InitiateRemoteAttestation(ctx, &caapiv1.InitiateCredentialAcquistionRequest{
+		Target:         target,
+		CredentialType: caapiv1.CredentialType_CREDENTIAL_TYPE_JWT,
+	})
 	if err != nil {
-		t.Fatalf("JWT: %v", err)
+		t.Fatalf("initiate retrieve: %v", err)
 	}
-	if err := cas.verifyJWT(string(jwtCred.Document)); err != nil {
+	if initRetr.GetMode() != caapiv1.CredentialAcquisitionMode_ACQUISITION_RETRIEVE {
+		t.Fatalf("mode %s", initRetr.GetMode())
+	}
+	cek, err := plugin.GenerateCEK()
+	if err != nil {
+		t.Fatal(err)
+	}
+	retrEv, err := plugin.GenerateEvidence(platform.EvidenceRequest{
+		FreshnessKind:   platform.FreshnessKind(initRetr.GetFreshnessKind()),
+		FreshnessHandle: initRetr.GetFreshnessHandle(),
+		BoundKey:        cek.Public(),
+		BoundKeyUse:     platform.BoundKeyUseEncrypt,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	retr, err := cli.RetrieveCredential(ctx, &caapiv1.RetrieveCredentialRequest{
+		Target:         target,
+		CredentialType: caapiv1.CredentialType_CREDENTIAL_TYPE_JWT,
+		Evidence:       retrEv.Token,
+	})
+	if err != nil {
+		t.Fatalf("retrieve: %v", err)
+	}
+	tok, err := unwrapCredential(cek.Private, retr.GetWrappedCredential())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := cas.verifyJWT(string(tok)); err != nil {
 		t.Fatalf("verify JWT: %v", err)
+	}
+}
+
+func mustCSR(t *testing.T, csk *platform.KeyPair, target string) []byte {
+	t.Helper()
+	signer, err := csk.Signer()
+	if err != nil {
+		t.Fatal(err)
+	}
+	der, err := x509.CreateCertificateRequest(rand.Reader, &x509.CertificateRequest{
+		Subject: pkix.Name{CommonName: target},
+	}, signer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return der
+}
+
+func unwrapCredential(priv crypto.PrivateKey, wrapped []byte) ([]byte, error) {
+	var w wrappedV1
+	if err := cbor.Unmarshal(wrapped, &w); err != nil {
+		return nil, err
+	}
+	ephAny, err := x509.ParsePKIXPublicKey(w.Ephemeral)
+	if err != nil {
+		return nil, err
+	}
+	ephECDH, err := publicToECDH(ephAny)
+	if err != nil {
+		return nil, err
+	}
+	cekECDH, err := privateToECDH(priv)
+	if err != nil {
+		return nil, err
+	}
+	secret, err := cekECDH.ECDH(ephECDH)
+	if err != nil {
+		return nil, err
+	}
+	key, err := deriveWrapKey(secret)
+	if err != nil {
+		return nil, err
+	}
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return nil, err
+	}
+	aead, err := cipher.NewGCM(block)
+	if err != nil {
+		return nil, err
+	}
+	return aead.Open(nil, w.Nonce, w.Ciphertext, nil)
+}
+
+func privateToECDH(priv crypto.PrivateKey) (*ecdh.PrivateKey, error) {
+	switch k := priv.(type) {
+	case *ecdh.PrivateKey:
+		return k, nil
+	case *ecdsa.PrivateKey:
+		return k.ECDH()
+	default:
+		return nil, fmt.Errorf("key type %T", priv)
 	}
 }

@@ -2,14 +2,11 @@ module http-server
 
 go 1.26.5
 
-replace github.com/TWI-Unified-Model/tacra/cai => ../cai
-
 replace github.com/TWI-Unified-Model/tacra/platform => ../platform
 
 replace github.com/TWI-Unified-Model/tacra/gen/go => ../gen/go
 
 require (
-	github.com/TWI-Unified-Model/tacra/cai v0.0.0-00010101000000-000000000000
 	github.com/TWI-Unified-Model/tacra/gen/go v0.0.0-00010101000000-000000000000
 	github.com/TWI-Unified-Model/tacra/platform v0.0.0-00010101000000-000000000000
 	github.com/fxamacker/cbor/v2 v2.9.3
