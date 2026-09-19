@@ -31,6 +31,9 @@ func TestGRPCAcquireCredential(t *testing.T) {
 			if mode == caapiv1.CredentialAcquisitionMode_ACQUISITION_ENROLL {
 				resp.SigningAlgorithm = new(SigningAlgorithmECDSAP256)
 			}
+			if mode == caapiv1.CredentialAcquisitionMode_ACQUISITION_RETRIEVE {
+				resp.EncryptionAlgorithm = new(EncryptionAlgorithmECDHP256)
+			}
 			return resp, nil
 		},
 		enroll: func(_ context.Context, in *caapiv1.EnrollCredentialRequest) (*caapiv1.EnrollCredentialResponse, error) {
@@ -45,7 +48,7 @@ func TestGRPCAcquireCredential(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			wrapped, err := wrapCredential(pub, []byte("hdr.payload.sig"))
+			wrapped, err := wrapCEK(pub, []byte("hdr.payload.sig"))
 			if err != nil {
 				t.Fatal(err)
 			}

@@ -11,13 +11,15 @@ import (
 	"google.golang.org/grpc"
 )
 
-// CredentialType, Mode, FreshnessKind, and SigningAlgorithm are the CAAPI
-// enums, re-exported so the Attester can depend on cai alone.
+// CredentialType, Mode, FreshnessKind, SigningAlgorithm, and
+// EncryptionAlgorithm are the CAAPI enums, re-exported so the Attester
+// can depend on cai alone.
 type (
-	CredentialType   = caapiv1.CredentialType
-	Mode             = caapiv1.CredentialAcquisitionMode
-	FreshnessKind    = caapiv1.FreshnessKind
-	SigningAlgorithm = caapiv1.SigningAlgorithm
+	CredentialType      = caapiv1.CredentialType
+	Mode                = caapiv1.CredentialAcquisitionMode
+	FreshnessKind       = caapiv1.FreshnessKind
+	SigningAlgorithm    = caapiv1.SigningAlgorithm
+	EncryptionAlgorithm = caapiv1.EncryptionAlgorithm
 )
 
 const (
@@ -43,6 +45,10 @@ const (
 	SigningAlgorithmUnspecified SigningAlgorithm = caapiv1.SigningAlgorithm_SIGNING_ALGORITHM_UNSPECIFIED
 	SigningAlgorithmECDSAP256   SigningAlgorithm = caapiv1.SigningAlgorithm_SIGNING_ALGORITHM_ECDSA_P256
 	SigningAlgorithmRSA2048     SigningAlgorithm = caapiv1.SigningAlgorithm_SIGNING_ALGORITHM_RSA_2048
+
+	EncryptionAlgorithmUnspecified EncryptionAlgorithm = caapiv1.EncryptionAlgorithm_ENCRYPTION_ALGORITHM_UNSPECIFIED
+	EncryptionAlgorithmECDHP256    EncryptionAlgorithm = caapiv1.EncryptionAlgorithm_ENCRYPTION_ALGORITHM_ECDH_P256
+	EncryptionAlgorithmRSA2048     EncryptionAlgorithm = caapiv1.EncryptionAlgorithm_ENCRYPTION_ALGORITHM_RSA_2048
 )
 
 // Credential is the document returned to the Attester.
@@ -60,12 +66,13 @@ type Credential struct {
 // AcquisitionRequest is the CAS-chosen context for one enroll or retrieve
 // exchange. Further fields (cipher suites, etc.) will be added here.
 type AcquisitionRequest struct {
-	Target           string
-	Type             CredentialType
-	Hint             string
-	Kind             FreshnessKind
-	Handle           []byte
-	SigningAlgorithm SigningAlgorithm
+	Target              string
+	Type                CredentialType
+	Hint                string
+	Kind                FreshnessKind
+	Handle              []byte
+	SigningAlgorithm    SigningAlgorithm
+	EncryptionAlgorithm EncryptionAlgorithm
 }
 
 // Client is the CAI implementation: one AcquireCredential call that drives
@@ -129,20 +136,27 @@ func (c *Client) AcquireCredential(ctx context.Context, target string, credType 
 	}
 
 	req := AcquisitionRequest{
-		Target:           target,
-		Type:             credType,
-		Hint:             credHint,
-		Kind:             initResp.GetFreshnessKind(),
-		Handle:           handle,
-		SigningAlgorithm: initResp.GetSigningAlgorithm(),
+		Target:              target,
+		Type:                credType,
+		Hint:                credHint,
+		Kind:                initResp.GetFreshnessKind(),
+		Handle:              handle,
+		SigningAlgorithm:    initResp.GetSigningAlgorithm(),
+		EncryptionAlgorithm: initResp.GetEncryptionAlgorithm(),
 	}
 	switch initResp.GetMode() {
 	case ModeRetrieve:
 		if req.SigningAlgorithm != SigningAlgorithmUnspecified {
 			return nil, fmt.Errorf("%w: %s", ErrUnexpectedSigningAlgorithm, req.SigningAlgorithm)
 		}
+		if req.EncryptionAlgorithm == EncryptionAlgorithmUnspecified {
+			return nil, ErrMissingEncryptionAlgorithm
+		}
 		return c.retrieve(ctx, req)
 	case ModeEnroll:
+		if req.EncryptionAlgorithm != EncryptionAlgorithmUnspecified {
+			return nil, fmt.Errorf("%w: %s", ErrUnexpectedEncryptionAlgorithm, req.EncryptionAlgorithm)
+		}
 		if req.SigningAlgorithm == SigningAlgorithmUnspecified {
 			return nil, ErrMissingSigningAlgorithm
 		}
@@ -153,7 +167,7 @@ func (c *Client) AcquireCredential(ctx context.Context, target string, credType 
 }
 
 func (c *Client) retrieve(ctx context.Context, req AcquisitionRequest) (*Credential, error) {
-	cek, err := c.plugin.GenerateCEK()
+	cek, err := c.plugin.GenerateCEK(platform.EncryptionAlgorithm(req.EncryptionAlgorithm))
 	if err != nil {
 		return nil, fmt.Errorf("cai: generate CEK: %w", err)
 	}
@@ -167,10 +181,11 @@ func (c *Client) retrieve(ctx context.Context, req AcquisitionRequest) (*Credent
 		return nil, fmt.Errorf("cai: generate evidence: %w", err)
 	}
 	resp, err := c.caapi.RetrieveCredential(ctx, &caapiv1.RetrieveCredentialRequest{
-		Target:         req.Target,
-		CredentialType: req.Type,
-		CredentialHint: optionalHint(req.Hint),
-		Evidence:       ev.Token,
+		Target:              req.Target,
+		CredentialType:      req.Type,
+		CredentialHint:      optionalHint(req.Hint),
+		Evidence:            ev.Token,
+		EncryptionAlgorithm: new(req.EncryptionAlgorithm),
 	})
 	if err != nil {
 		return nil, rpcError("RetrieveCredential", err)
@@ -212,11 +227,12 @@ func (c *Client) enroll(ctx context.Context, req AcquisitionRequest) (*Credentia
 		return nil, fmt.Errorf("cai: generate evidence: %w", err)
 	}
 	resp, err := c.caapi.EnrollCredential(ctx, &caapiv1.EnrollCredentialRequest{
-		Target:         req.Target,
-		CredentialType: req.Type,
-		CredentialHint: optionalHint(req.Hint),
-		Evidence:       ev.Token,
-		Csr:            csr,
+		Target:           req.Target,
+		CredentialType:   req.Type,
+		CredentialHint:   optionalHint(req.Hint),
+		Evidence:         ev.Token,
+		Csr:              csr,
+		SigningAlgorithm: new(req.SigningAlgorithm),
 	})
 	if err != nil {
 		return nil, rpcError("EnrollCredential", err)

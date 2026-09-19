@@ -126,7 +126,16 @@ func NewSimulated(opts ...SimOption) (*Simulated, error) {
 func (s *Simulated) Name() string { return "simulated" }
 
 // GenerateCEK implements Plugin.
-func (s *Simulated) GenerateCEK() (*KeyPair, error) { return generateP256() }
+func (s *Simulated) GenerateCEK(alg EncryptionAlgorithm) (*KeyPair, error) {
+	switch alg {
+	case EncryptionAlgorithmECDHP256:
+		return generateP256()
+	case EncryptionAlgorithmRSA2048:
+		return generateRSA2048()
+	default:
+		return nil, fmt.Errorf("%w: %d", ErrUnsupportedEncryptionAlgorithm, alg)
+	}
+}
 
 // GenerateCSK implements Plugin.
 func (s *Simulated) GenerateCSK(alg SigningAlgorithm) (*KeyPair, error) {

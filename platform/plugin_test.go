@@ -20,7 +20,7 @@ func TestSimulatedRetrieveEvidence(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cek, err := p.GenerateCEK()
+	cek, err := p.GenerateCEK(EncryptionAlgorithmECDHP256)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -56,6 +56,34 @@ func TestSimulatedRetrieveEvidence(t *testing.T) {
 	assertBoundKey(t, claims, cek.Public())
 	assertStandardEAT(t, claims)
 	assertVeraisonEatDecode(t, ev.Claims, handle)
+}
+
+func TestGenerateCEKRejectsUnspecified(t *testing.T) {
+	p, err := NewSimulated()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := p.GenerateCEK(EncryptionAlgorithmUnspecified); !errors.Is(err, ErrUnsupportedEncryptionAlgorithm) {
+		t.Fatalf("got %v, want ErrUnsupportedEncryptionAlgorithm", err)
+	}
+}
+
+func TestGenerateCEKRSA(t *testing.T) {
+	p, err := NewSimulated()
+	if err != nil {
+		t.Fatal(err)
+	}
+	cek, err := p.GenerateCEK(EncryptionAlgorithmRSA2048)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pub, ok := cek.Public().(*rsa.PublicKey)
+	if !ok {
+		t.Fatalf("CEK %T, want *rsa.PublicKey", cek.Public())
+	}
+	if pub.N.BitLen() != 2048 {
+		t.Fatalf("RSA bits %d", pub.N.BitLen())
+	}
 }
 
 func TestSimulatedEnrollEvidence(t *testing.T) {
@@ -106,7 +134,7 @@ func TestEvidenceRejectsBadFreshnessHandle(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cek, err := p.GenerateCEK()
+	cek, err := p.GenerateCEK(EncryptionAlgorithmECDHP256)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -129,7 +157,7 @@ func TestEvidenceOmitsNonceWhenHandleAbsent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cek, err := p.GenerateCEK()
+	cek, err := p.GenerateCEK(EncryptionAlgorithmECDHP256)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -213,7 +241,7 @@ func TestTamperedEvidenceFailsVerify(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cek, err := p.GenerateCEK()
+	cek, err := p.GenerateCEK(EncryptionAlgorithmECDHP256)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -235,7 +263,7 @@ func TestWrongAKFailsVerify(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cek, err := p.GenerateCEK()
+	cek, err := p.GenerateCEK(EncryptionAlgorithmECDHP256)
 	if err != nil {
 		t.Fatal(err)
 	}

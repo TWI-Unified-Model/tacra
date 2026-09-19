@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"crypto/rsa"
 	"fmt"
 	"time"
 
@@ -51,6 +52,10 @@ func (s *caapiServer) InitiateRemoteAttestation(_ context.Context, in *caapiv1.I
 		alg := caapiv1.SigningAlgorithm_SIGNING_ALGORITHM_ECDSA_P256
 		resp.SigningAlgorithm = &alg
 	}
+	if mode == caapiv1.CredentialAcquisitionMode_ACQUISITION_RETRIEVE {
+		alg := caapiv1.EncryptionAlgorithm_ENCRYPTION_ALGORITHM_ECDH_P256
+		resp.EncryptionAlgorithm = &alg
+	}
 	return resp, nil
 }
 
@@ -63,6 +68,11 @@ func (s *caapiServer) EnrollCredential(_ context.Context, in *caapiv1.EnrollCred
 	}
 	if len(in.GetEvidence()) == 0 {
 		return nil, status.Error(codes.InvalidArgument, "Evidence is required")
+	}
+	switch in.GetSigningAlgorithm() {
+	case caapiv1.SigningAlgorithm_SIGNING_ALGORITHM_ECDSA_P256, caapiv1.SigningAlgorithm_SIGNING_ALGORITHM_RSA_2048:
+	default:
+		return nil, status.Error(codes.InvalidArgument, "signing algorithm is required")
 	}
 	claims, err := platform.ParseEvidence(in.GetEvidence())
 	if err != nil {
@@ -92,6 +102,19 @@ func (s *caapiServer) RetrieveCredential(_ context.Context, in *caapiv1.Retrieve
 	pub, err := claims.Cnf.BoundPublicKey()
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "CEKpub: %v", err)
+	}
+	switch in.GetEncryptionAlgorithm() {
+	case caapiv1.EncryptionAlgorithm_ENCRYPTION_ALGORITHM_ECDH_P256:
+		pub, err = publicToECDH(pub)
+		if err != nil {
+			return nil, status.Errorf(codes.InvalidArgument, "CEKpub: %v", err)
+		}
+	case caapiv1.EncryptionAlgorithm_ENCRYPTION_ALGORITHM_RSA_2048:
+		if _, ok := pub.(*rsa.PublicKey); !ok {
+			return nil, status.Errorf(codes.InvalidArgument, "CEKpub is %T, want RSA", pub)
+		}
+	default:
+		return nil, status.Error(codes.InvalidArgument, "encryption algorithm is required")
 	}
 	tok, err := s.issueJWT(in.GetTarget())
 	if err != nil {

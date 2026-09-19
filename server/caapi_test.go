@@ -86,10 +86,11 @@ func TestCAAPIEnrollAndRetrieve(t *testing.T) {
 		t.Fatal(err)
 	}
 	enroll, err := cli.EnrollCredential(ctx, &caapiv1.EnrollCredentialRequest{
-		Target:         target,
-		CredentialType: caapiv1.CredentialType_CREDENTIAL_TYPE_X509,
-		Evidence:       enrollEv.Token,
-		Csr:            csr,
+		Target:           target,
+		CredentialType:   caapiv1.CredentialType_CREDENTIAL_TYPE_X509,
+		Evidence:         enrollEv.Token,
+		Csr:              csr,
+		SigningAlgorithm: new(initEnroll.GetSigningAlgorithm()),
 	})
 	if err != nil {
 		t.Fatalf("enroll: %v", err)
@@ -119,7 +120,7 @@ func TestCAAPIEnrollAndRetrieve(t *testing.T) {
 	if initRetr.GetMode() != caapiv1.CredentialAcquisitionMode_ACQUISITION_RETRIEVE {
 		t.Fatalf("mode %s", initRetr.GetMode())
 	}
-	cek, err := plugin.GenerateCEK()
+	cek, err := plugin.GenerateCEK(platform.EncryptionAlgorithm(initRetr.GetEncryptionAlgorithm()))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -133,9 +134,10 @@ func TestCAAPIEnrollAndRetrieve(t *testing.T) {
 		t.Fatal(err)
 	}
 	retr, err := cli.RetrieveCredential(ctx, &caapiv1.RetrieveCredentialRequest{
-		Target:         target,
-		CredentialType: caapiv1.CredentialType_CREDENTIAL_TYPE_JWT,
-		Evidence:       retrEv.Token,
+		Target:              target,
+		CredentialType:      caapiv1.CredentialType_CREDENTIAL_TYPE_JWT,
+		Evidence:            retrEv.Token,
+		EncryptionAlgorithm: new(initRetr.GetEncryptionAlgorithm()),
 	})
 	if err != nil {
 		t.Fatalf("retrieve: %v", err)

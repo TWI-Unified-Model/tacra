@@ -34,11 +34,20 @@ enum FreshnessKind {
 
 // SigningAlgorithm is the CSK algorithm the Attester must generate for
 // Enrollment. Present on InitiateCredentialAcquisitionResponse when mode
-// is enroll; absent for retrieve.
+// is enroll; echoed on EnrollCredentialRequest. Absent for retrieve.
 enum SigningAlgorithm {
     SIGNING_ALGORITHM_UNSPECIFIED = 0;
     SIGNING_ALGORITHM_ECDSA_P256 = 1;
     SIGNING_ALGORITHM_RSA_2048 = 2;
+}
+
+// EncryptionAlgorithm is the CEK algorithm the Attester must generate for
+// Retrieval. Present on InitiateCredentialAcquisitionResponse when mode
+// is retrieve; echoed on RetrieveCredentialRequest. Absent for enroll.
+enum EncryptionAlgorithm {
+    ENCRYPTION_ALGORITHM_UNSPECIFIED = 0;
+    ENCRYPTION_ALGORITHM_ECDH_P256 = 1;
+    ENCRYPTION_ALGORITHM_RSA_2048 = 2;
 }
 
 enum CredentialType {
@@ -78,7 +87,8 @@ message InitiateCredentialAcquisitionResponse {
     // CSK algorithm for Enrollment. Present when mode is enroll.
     optional SigningAlgorithm signing_algorithm = 4;
 
-    // TODO: research and add supported ciphers and other fields
+    // CEK algorithm for Retrieval. Present when mode is retrieve.
+    optional EncryptionAlgorithm encryption_algorithm = 5;
 }
 
 message EnrollCredentialRequest {
@@ -94,6 +104,9 @@ message EnrollCredentialRequest {
 
     // CSR for CSKpub
     bytes csr = 5;
+
+    // CSK algorithm from Initiate-Credential-Acquisition.
+    optional SigningAlgorithm signing_algorithm = 6;
 }
 
 message EnrollCredentialResponse {
@@ -112,7 +125,8 @@ message RetrieveCredentialRequest {
     // Workload Evidence including CEKpub
     bytes evidence = 4;
 
-    // TODO: add CEKpub or is it implicit in Evidence?
+    // CEK algorithm from Initiate-Credential-Acquisition.
+    optional EncryptionAlgorithm encryption_algorithm = 5;
 }
 
 message RetrieveCredentialResponse {

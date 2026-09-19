@@ -6,6 +6,7 @@ import (
 	"crypto/cipher"
 	"crypto/ecdh"
 	"crypto/ecdsa"
+	"crypto/rsa"
 	"crypto/sha256"
 	"crypto/x509"
 	"fmt"
@@ -16,10 +17,11 @@ import (
 )
 
 const (
-	wrapVersion = 1
-	wrapInfo    = "tacra/cai/cek-wrap/v1"
-	wrapNonce   = 12
-	wrapKeyLen  = 32
+	wrapVersionECDH = 1
+	wrapVersionRSA  = 2
+	wrapInfo        = "tacra/cai/cek-wrap/v1"
+	wrapNonce       = 12
+	wrapKeyLen      = 32
 )
 
 // wrappedV1 is the CBOR encoding of Retrieve-Credential's wrapped_credential.
@@ -27,7 +29,7 @@ const (
 type wrappedV1 struct {
 	_          struct{} `cbor:",toarray"`
 	Version    uint64
-	Ephemeral  []byte // PKIX SPKI of the ephemeral P-256 public key
+	Ephemeral  []byte // v1: ephemeral P-256 SPKI; v2: RSA-OAEP of the AES key
 	Nonce      []byte
 	Ciphertext []byte
 }
@@ -44,13 +46,43 @@ func UnwrapCredential(priv crypto.PrivateKey, wrapped []byte) ([]byte, error) {
 	if err := cbor.Unmarshal(wrapped, &w); err != nil {
 		return nil, fmt.Errorf("%w: CBOR: %v", ErrUnwrap, err)
 	}
-	if w.Version != wrapVersion {
-		return nil, fmt.Errorf("%w: unsupported version %d", ErrUnwrap, w.Version)
-	}
 	if len(w.Nonce) != wrapNonce {
 		return nil, fmt.Errorf("%w: bad nonce length", ErrUnwrap)
 	}
-	ephAny, err := x509.ParsePKIXPublicKey(w.Ephemeral)
+	var key []byte
+	switch w.Version {
+	case wrapVersionECDH:
+		var err error
+		key, err = unwrapECDHKey(priv, w.Ephemeral)
+		if err != nil {
+			return nil, err
+		}
+	case wrapVersionRSA:
+		var err error
+		key, err = unwrapRSAKey(priv, w.Ephemeral)
+		if err != nil {
+			return nil, err
+		}
+	default:
+		return nil, fmt.Errorf("%w: unsupported version %d", ErrUnwrap, w.Version)
+	}
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return nil, fmt.Errorf("%w: AES: %v", ErrUnwrap, err)
+	}
+	aead, err := cipher.NewGCM(block)
+	if err != nil {
+		return nil, fmt.Errorf("%w: GCM: %v", ErrUnwrap, err)
+	}
+	plain, err := aead.Open(nil, w.Nonce, w.Ciphertext, nil)
+	if err != nil {
+		return nil, fmt.Errorf("%w: decrypt: %v", ErrUnwrap, err)
+	}
+	return plain, nil
+}
+
+func unwrapECDHKey(priv crypto.PrivateKey, ephDER []byte) ([]byte, error) {
+	ephAny, err := x509.ParsePKIXPublicKey(ephDER)
 	if err != nil {
 		return nil, fmt.Errorf("%w: ephemeral key: %v", ErrUnwrap, err)
 	}
@@ -70,19 +102,19 @@ func UnwrapCredential(priv crypto.PrivateKey, wrapped []byte) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrUnwrap, err)
 	}
-	block, err := aes.NewCipher(key)
-	if err != nil {
-		return nil, fmt.Errorf("%w: AES: %v", ErrUnwrap, err)
+	return key, nil
+}
+
+func unwrapRSAKey(priv crypto.PrivateKey, encKey []byte) ([]byte, error) {
+	rsaPriv, ok := priv.(*rsa.PrivateKey)
+	if !ok {
+		return nil, fmt.Errorf("%w: CEK is %T, want RSA", ErrUnwrap, priv)
 	}
-	aead, err := cipher.NewGCM(block)
+	key, err := rsa.DecryptOAEP(sha256.New(), nil, rsaPriv, encKey, []byte(wrapInfo))
 	if err != nil {
-		return nil, fmt.Errorf("%w: GCM: %v", ErrUnwrap, err)
+		return nil, fmt.Errorf("%w: RSA-OAEP: %v", ErrUnwrap, err)
 	}
-	plain, err := aead.Open(nil, w.Nonce, w.Ciphertext, nil)
-	if err != nil {
-		return nil, fmt.Errorf("%w: decrypt: %v", ErrUnwrap, err)
-	}
-	return plain, nil
+	return key, nil
 }
 
 func publicToECDH(pub crypto.PublicKey) (*ecdh.PublicKey, error) {
