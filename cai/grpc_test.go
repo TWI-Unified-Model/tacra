@@ -45,7 +45,7 @@ func TestGRPCAcquireCredential(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			wrapped, err := WrapCredential(pub, []byte("hdr.payload.sig"))
+			wrapped, err := wrapCredential(pub, []byte("hdr.payload.sig"))
 			if err != nil {
 				t.Fatal(err)
 			}

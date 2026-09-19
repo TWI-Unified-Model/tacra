@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/TWI-Unified-Model/tacra/cai"
 	caapiv1 "github.com/TWI-Unified-Model/tacra/gen/go/caapi/v1"
 	"github.com/TWI-Unified-Model/tacra/platform"
 	"github.com/golang-jwt/jwt/v5"
@@ -98,7 +97,7 @@ func (s *caapiServer) RetrieveCredential(_ context.Context, in *caapiv1.Retrieve
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "JWT: %v", err)
 	}
-	wrapped, err := cai.WrapCredential(pub, []byte(tok))
+	wrapped, err := wrapCredential(pub, []byte(tok))
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "wrap: %v", err)
 	}

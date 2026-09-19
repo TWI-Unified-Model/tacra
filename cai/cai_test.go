@@ -92,7 +92,7 @@ func TestAcquireCredentialRetrieve(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			wrapped, err := WrapCredential(pub, secret)
+			wrapped, err := wrapCredential(pub, secret)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -380,7 +380,7 @@ func TestAcquireCredentialFreshness(t *testing.T) {
 					if err != nil {
 						t.Fatal(err)
 					}
-					wrapped, err := WrapCredential(pub, secret)
+					wrapped, err := wrapCredential(pub, secret)
 					if err != nil {
 						t.Fatal(err)
 					}
@@ -414,7 +414,7 @@ func TestWrapRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 	plain := []byte("hello-secret")
-	wrapped, err := WrapCredential(&priv.PublicKey, plain)
+	wrapped, err := wrapCredential(&priv.PublicKey, plain)
 	if err != nil {
 		t.Fatal(err)
 	}

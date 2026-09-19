@@ -6,7 +6,6 @@ import (
 	"crypto/cipher"
 	"crypto/ecdh"
 	"crypto/ecdsa"
-	"crypto/rand"
 	"crypto/sha256"
 	"crypto/x509"
 	"fmt"
@@ -31,58 +30,6 @@ type wrappedV1 struct {
 	Ephemeral  []byte // PKIX SPKI of the ephemeral P-256 public key
 	Nonce      []byte
 	Ciphertext []byte
-}
-
-// WrapCredential encrypts plaintext to pub (CEKpub) using ephemeral P-256 ECDH,
-// HKDF-SHA256, and AES-256-GCM. The result is the CAAPI wrapped_credential blob.
-// CEK wrapping is ECDH, independent of the CSK signing algorithm.
-func WrapCredential(pub crypto.PublicKey, plaintext []byte) ([]byte, error) {
-	if pub == nil {
-		return nil, fmt.Errorf("cai: wrap: nil CEK public key")
-	}
-	peer, err := publicToECDH(pub)
-	if err != nil {
-		return nil, fmt.Errorf("cai: wrap: %w", err)
-	}
-	eph, err := ecdh.P256().GenerateKey(rand.Reader)
-	if err != nil {
-		return nil, fmt.Errorf("cai: wrap: ephemeral key: %w", err)
-	}
-	secret, err := eph.ECDH(peer)
-	if err != nil {
-		return nil, fmt.Errorf("cai: wrap: ECDH: %w", err)
-	}
-	key, err := deriveWrapKey(secret)
-	if err != nil {
-		return nil, err
-	}
-	block, err := aes.NewCipher(key)
-	if err != nil {
-		return nil, fmt.Errorf("cai: wrap: AES: %w", err)
-	}
-	aead, err := cipher.NewGCM(block)
-	if err != nil {
-		return nil, fmt.Errorf("cai: wrap: GCM: %w", err)
-	}
-	nonce := make([]byte, wrapNonce)
-	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
-		return nil, fmt.Errorf("cai: wrap: nonce: %w", err)
-	}
-	ephDER, err := x509.MarshalPKIXPublicKey(eph.Public())
-	if err != nil {
-		return nil, fmt.Errorf("cai: wrap: ephemeral SPKI: %w", err)
-	}
-	w := wrappedV1{
-		Version:    wrapVersion,
-		Ephemeral:  ephDER,
-		Nonce:      nonce,
-		Ciphertext: aead.Seal(nil, nonce, plaintext, nil),
-	}
-	b, err := cbor.Marshal(w)
-	if err != nil {
-		return nil, fmt.Errorf("cai: wrap: CBOR: %w", err)
-	}
-	return b, nil
 }
 
 // UnwrapCredential decrypts a wrapped_credential blob with CEKpri.
