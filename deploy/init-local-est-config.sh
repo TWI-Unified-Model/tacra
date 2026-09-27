@@ -102,10 +102,18 @@ cat > "${CONFIG_DIR}/estserver.json" <<EOF
   },
   "allowed_hosts": ["localhost", "127.0.0.1"],
   "attest": {
-	"trusted_provider_public_key": "/etc/est/certs/mock-tee-provider-public-key.pem",
+    "trusted_provider_public_key": "/etc/est/certs/mock-tee-provider-public-key.pem",
     "targets": [
-      { "name": "RUP-workload-1", "mechanism": "enroll" },
-      { "name": "RUP-workload-2", "mechanism": "retrieve" }
+      { "name": "RUP-workload-1", "mechanism": "enroll", "freshness_kind": "present-nonce" },
+      { "name": "RUP-workload-2", "mechanism": "retrieve", "freshness_kind": "present-nonce" },
+      { "name": "RUP-enroll-absent-timestamp", "mechanism": "enroll", "freshness_kind": "absent-timestamp", "max_age": 300 },
+      { "name": "RUP-enroll-absent-none", "mechanism": "enroll", "freshness_kind": "absent-none" },
+      { "name": "RUP-enroll-absent-epoch", "mechanism": "enroll", "freshness_kind": "absent-epoch", "epoch_marker": "twi-epoch-2026-09" },
+      { "name": "RUP-enroll-present-epoch", "mechanism": "enroll", "freshness_kind": "present-epoch", "epoch_marker": "twi-epoch-2026-09" },
+      { "name": "RUP-retrieve-absent-timestamp", "mechanism": "retrieve", "freshness_kind": "absent-timestamp", "max_age": 300 },
+      { "name": "RUP-retrieve-absent-none", "mechanism": "retrieve", "freshness_kind": "absent-none" },
+      { "name": "RUP-retrieve-absent-epoch", "mechanism": "retrieve", "freshness_kind": "absent-epoch", "epoch_marker": "twi-epoch-2026-09" },
+      { "name": "RUP-retrieve-present-epoch", "mechanism": "retrieve", "freshness_kind": "present-epoch", "epoch_marker": "twi-epoch-2026-09" }
     ]
   },
   "healthcheck_password": "${healthcheck_password}",

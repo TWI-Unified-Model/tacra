@@ -1,5 +1,6 @@
 {
   "host": "localhost:9444",
+  "server_id": "twi-globalsign-est",
   "common_name": "twi-unified-model-client",
   "ca_certificate": "../deploy/config/local/globalsign-est/certs/ca-certificates.pem",
   "provider_private_key": "../deploy/config/local/mock-tee-provider/key.pem",
@@ -7,6 +8,22 @@
     "enroll": "RUP-workload-1",
     "retrieve": "RUP-workload-2",
     "rejected": "RUP-workload-unknown"
+  },
+  "freshness": {
+    "epoch_marker": "twi-epoch-2026-09",
+    "timestamp_max_age": 300,
+    "enroll_targets": {
+      "absent_timestamp": "RUP-enroll-absent-timestamp",
+      "absent_none": "RUP-enroll-absent-none",
+      "absent_epoch": "RUP-enroll-absent-epoch",
+      "present_epoch": "RUP-enroll-present-epoch"
+    },
+    "retrieve_targets": {
+      "absent_timestamp": "RUP-retrieve-absent-timestamp",
+      "absent_none": "RUP-retrieve-absent-none",
+      "absent_epoch": "RUP-retrieve-absent-epoch",
+      "present_epoch": "RUP-retrieve-present-epoch"
+    }
   },
   "credential_types": {
     "x509": "x509",

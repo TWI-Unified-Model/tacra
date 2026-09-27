@@ -77,15 +77,24 @@ sequenceDiagram
 
 ### Freshness
 
-Two kinds are implemented:
+All five TACRA Freshness Kinds are implemented by the mock profile. Freshness
+policy is configured per Target; `attest-initiate` reports that policy, and the
+second leg must match it.
 
 | Kind | Behaviour |
 | --- | --- |
 | `present-nonce` | The Verifier originates a single-use 32-byte Handle with a 300 second lifetime. The Attester embeds it in Evidence. Replay, expiry or an unknown Handle yields `409 Conflict`. |
-| `absent-none` | No freshness claim. Per the draft, the client completes attest-initiate **locally and must not contact the server**, then posts leg two directly. |
+| `present-epoch` | The Verifier returns the Target's configured current epoch marker as the Handle. Evidence embeds it; a marker that no longer equals current policy yields `409 Conflict`. |
+| `absent-timestamp` | The Attester uses its trusted clock and omits the Handle. The Verifier checks the signed EAT `iat` against the Target's configured `max_age` and a five-second future-clock-skew allowance. |
+| `absent-epoch` | Initiation returns no Handle. The Attester supplies its locally held epoch marker in the second-leg `handle` field and embeds it in Evidence; a stale marker yields `409 Conflict`. |
+| `absent-none` | No freshness claim and no Handle. |
 
-`present-epoch`, `absent-epoch` and `absent-timestamp` are not implemented in
-this POC.
+For any `absent-*` kind, an EST client that already knows the freshness policy,
+mode, algorithm suite, and `server_id` completes initiation locally and **must
+not contact the server**. The integration tests also call `attest-initiate` for
+absent Targets to verify that server-side policy discovery returns no Handle.
+The mock EAT uses its nonce claim for nonce and epoch freshness elements and
+its issued-at claim for `absent-timestamp`.
 
 ### Mechanism selection
 
@@ -110,13 +119,68 @@ type the target permits resolves to that same mechanism:
 
 | Target | Mechanism | Required binding |
 | --- | --- | --- |
-| `RUP-workload-1` | `enroll` | `csr-hash` |
-| `RUP-workload-2` | `retrieve` | `cek-thumbprint` |
+| `RUP-workload-1` | `enroll` | `binding-input` |
+| `RUP-workload-2` | `retrieve` | `binding-input` |
 
 A target may optionally restrict which credential types it will provision via
 `credential_types`. That is a capability check only — line 80: "If a Credential
 Type specified by the Attester is unavailable due to Credential Acquisition
 System limitations, an error will result" — and it never changes the mechanism.
+
+### Binding
+
+Evidence must bind more than the CSR or CEK: the updated EST profile
+(`zz_suds-docs/est_lamps-tacra-est-updates`) also requires an Evidence-to-Server
+and an Evidence-to-Target binding, so that a conduit cannot carry a genuine
+request to a different EST Server (server substitution) or present it under a
+Target the Attester did not choose (target substitution). This mock closes all
+three with a single digest, the draft's direct-form `binding-input`:
+
+```text
+binding_input = len32(handle)    || handle
+             || len32(server_id) || server_id
+             || len32(target)    || target
+             || len32(subject)   || subject
+```
+
+`len32` is a 32-bit big-endian octet count; `subject` is the CSR DER for
+enrollment or the CEKpub SubjectPublicKeyInfo DER for retrieval; `handle` is
+empty for `absent-none`. The digest is SHA-512, matching a 64-octet
+report-data field such as AMD SEV-SNP `REPORT_DATA` or Intel TDX `REPORTDATA`.
+[`EncodeBindingInput` and `BindingDigest`](../../globalsign-est/attest.go)
+implement the framing and digest; the mock Attester embeds the digest in a new
+EAT claim (label `-70005`), and the mock Verifier/Credential Authority/Secret
+Vault in [`internal/mockca/attest.go`](../../globalsign-est/internal/mockca/attest.go)
+recompute it from their own `server_id`, the Target the Handle was issued for,
+and the CSR or CEKpub they received, refusing the request on any mismatch —
+this is the only binding method the mock server accepts
+(`Binding{Method: est.BindingInput, Hash: "sha512"}`). The length prefixes are
+what make the encoding unambiguous: without them, `server_id="AB", target="CD"`
+and `server_id="ABC", target="D"` would hash identically.
+
+`BindingCSRHash` and `BindingCEKThumbprint` remain defined for documentation —
+they are two of the CSR-only Evidence-to-CSR mechanisms the draft lists — but
+this mock no longer accepts them alone, since they do not cover the
+Evidence-to-Server and Evidence-to-Target requirements.
+
+The attest-initiate response now also carries a required `server_id`, naming
+the EST Server the Handle and mode were issued by. The Attester **MUST**
+compare it with the EST Server it is configured to use for the Target and
+**MUST NOT** produce Evidence on a mismatch; the test's `serverID()` helper and
+the `Initiate/EnrollMode` and `Initiate/RetrieveMode` subtests assert this
+field is present, and `Enroll/ServerSubstitution`, `Enroll/TargetSubstitution`
+and `Retrieve/ServerSubstitution` assert that Evidence bound to the wrong
+server or Target is rejected with `403`.
+
+This mock's `server_id` (`twi-globalsign-est`) is currently a fixed constant in
+`internal/mockca/attest.go`, not yet derived from the deployment's TLS endpoint
+or made configurable — a known PoC simplification, not a protocol limitation.
+
+An optional `credential_hint` (advisory only, never authorization) now flows
+end-to-end: `AttestedEnrollmentRequest`/`AttestedRetrievalRequest` carry it,
+the mock Secret Vault folds it into `group_id` alongside the attestation
+subject and policy version, and the retrieval bundle's associated data
+authenticates it together with `server_id` and `target`.
 
 Because the mechanism is fixed by the CAS, posting the wrong second leg for a
 target is rejected with `403`.
@@ -127,9 +191,11 @@ The Attester generates a Content Signing Key and CSR separately from signed
 mock TEE Evidence. Evidence is a CBOR-encoded, tagged COSE Sign1 EAT using
 ES256. Its protected headers carry `alg=ES256` and
 `content-type=application/eat+cwt`; its unprotected `kid` identifies the mock
-provider key. The EAT carries standard TEE claims, PCR measurements, and the
-Freshness kind and Handle returned by attest-initiate. `AttestedEnrollmentRequest` carries `target`,
-`credential_type`, `freshness_kind`, `handle`, `csr`, `evidence` and `binding`.
+provider key. The EAT carries standard TEE claims, PCR measurements, the
+Freshness kind, and the applicable nonce, epoch marker, or timestamp.
+`AttestedEnrollmentRequest` carries `target`,
+`credential_type`, `freshness_kind`, `handle`, `csr`, `evidence`, `binding` and
+an optional `credential_hint`.
 
 Server processing follows the draft ordering: validate syntax and media type,
 correlate the Handle, forward Evidence to the Verifier, then forward the CSR
@@ -138,10 +204,12 @@ possession and authorises issuance.
 
 The mock Verifier validates the provider's P-256 public-key trust anchor and
 COSE signature, appraises the PCR values, and compares the signed Freshness
-with the request and the preceding attest-initiate result. The CSR remains a
-request parameter, and proof of possession is verified separately by checking
-its signature. The `binding` object remains request metadata; this POC does not
-place CSR data in Evidence.
+with the request and the preceding attest-initiate result. Proof of possession
+of the CSR key is verified separately by checking the CSR's own signature. The
+`binding` object is no longer just request metadata: Evidence itself now
+carries a digest (the mock EAT's `-70005` claim) covering the CSR (or CEKpub),
+`server_id` and Target, computed as described in [Binding](#binding), and the
+Verifier/Credential Authority recompute and compare it before issuance.
 
 ### Mock EAT profile
 
@@ -188,12 +256,22 @@ ECDH-P256+HKDF-SHA256+A256GCM
 
 The vault performs ECDH against `CEKpub` using an ephemeral key, derives a
 256-bit key with HKDF-SHA256, and seals the bundle with AES-256-GCM. The
-associated data binds `group_id`, `handle`, `profile` and `server_id`.
+associated data binds `group_id`, `server_id`, `target`, `handle` (when
+present) and `credential_hint` (when present), matching the draft's
+`encrypted-credential-bundle` `aad` structure.
 
 Only the holder of `CEKpri` can open the result. The EST client and EST server
 never see the plaintext credential, satisfying TACRA requirement 10. The test
 asserts this directly by decrypting with `CEKpri` alone and by confirming that
 a different key fails.
+
+**Not yet implemented:** the bundle's origin is not authenticated. The draft
+requires the Attester to verify the container came from the Secret Vault
+(HPKE `mode_auth` or a Vault signature over the container) before trusting its
+AAD or decrypting it; this mock's `EncryptedCredentialBundle` has no such
+signature, so a conduit that has observed `CEKpub` could still forge a
+well-formed container. Closing this ("bundle substitution" in the draft's
+Security Considerations) is future work, not part of this change.
 
 The decrypted `CredentialBundle` carries the group ID, metadata, and credential
 items typed `x509-cert`, `pkcs8-key` and `ca-certs-pem`.
@@ -219,9 +297,9 @@ interface or exported type was changed, so the extensions are purely additive.
 
 | File | Lines | Contents |
 | --- | --- | --- |
-| `attest.go` | ~420 | Protocol types, the `est.AttestationCA` optional interface, credential/mechanism constants, `SealCredentialBundle` / `Open` crypto, and the three server handlers |
+| `attest.go` | ~670 | Protocol types, the `est.AttestationCA` optional interface, credential/mechanism constants, the `EncodeBindingInput` / `BindingDigest` binding construction, `SealCredentialBundle` / `Open` crypto, and the three server handlers |
 | `attest_client.go` | ~150 | Client methods `InitiateRemoteAttestation`, `EnrollCredential`, `RetrieveCredential`, plus the shared `postAttest` helper |
-| `internal/mockca/attest.go` | ~430 | `mockca.AttestedCA`: mock Verifier, mock Credential Authority and mock Secret Vault, Handle store, and target whitelist |
+| `internal/mockca/attest.go` | ~535 | `mockca.AttestedCA`: mock Verifier, mock Credential Authority and mock Secret Vault, Handle store, binding-input recomputation, and target whitelist |
 
 ### Files modified
 
@@ -231,7 +309,7 @@ interface or exported type was changed, so the extensions are purely additive.
 | `common.go` | Added `attestInitiateEndpoint`, `attestEnrollEndpoint`, `attestRetrieveEndpoint` to the URI block, and the `attestTargetParam` / `attestCredentialTypeParam` query parameter names. Existing constants unchanged. |
 | `errors.go` | Added `errAttestNotSupported` (501) and `errInvalidJSON` (400). Existing error values unchanged. |
 | `cmd/estserver/config.go` | Added the `attest` config section with `allowed_targets`, and included it in the sample configuration. |
-| `cmd/estserver/main.go` | Wrapped the mock CA with `mockca.NewAttested(ca, cfg.Attest.AllowedTargets)` before passing it to `est.NewRouter`. |
+| `cmd/estserver/main.go` | Wrapped the mock CA with `mockca.NewAttested(ca, cfg.Attest.Targets, trustedProviderKey)` before passing it to `est.NewRouter`. |
 
 ### Files deliberately not modified
 
@@ -272,6 +350,7 @@ CAAPI.
 | `csr` | `csr` | DER-encoded PKCS#10 |
 | `plaintext_credential` | PKCS#7 response body | Returned as for `simpleenroll` |
 | `wrapped_credential` | `EncryptedCredentialBundle` | Sealed to CEKpub |
+| `credential_hint` | `credential_hint` | Advisory only; folded into `group_id` and the bundle's AAD, never authorization |
 
 `CredentialAcquisitionMechanism` maps to `est.MechanismEnroll` and
 `est.MechanismRetrieve`. `OPERATION_UNSPECIFIED` has no EST equivalent; the
@@ -300,7 +379,7 @@ the proto. It is left as-is here since the generated bindings depend on it.
 | Status | Condition |
 | --- | --- |
 | `400` | Malformed envelope, missing CSR, unsupported freshness kind or binding method |
-| `403` | Target not whitelisted, provider signature or PCR appraisal failed, Evidence not bound to Handle |
+| `403` | Target not whitelisted, provider signature or PCR appraisal failed, Evidence not bound to Handle, server_id, Target or key material (CSR/CEKpub) |
 | `409` | Handle replay, expiry, or unknown Handle |
 | `415` | Content type is not `application/json` |
 | `501` | Backing CA does not implement `est.AttestationCA` |
@@ -355,11 +434,26 @@ go test -v -count=1 ./...
 `-count=1` disables Go's test result cache, which matters because these tests
 talk to a live container.
 
+`TestBindingInputEncoding` and `TestBindingInputUnambiguous` verify the
+`EncodeBindingInput` / `BindingDigest` framing directly and do not require a
+running container, so they also run under `go test -short`.
+`TestMockEvidenceFreshnessKinds` verifies Evidence generation for all five
+kinds without a container. `TestAllFreshnessKinds` exercises initiation,
+enrollment, and retrieval for every kind and rejects stale/future timestamps,
+stale epoch markers, and a request that does not match Target freshness policy.
+The
+`Enroll/ServerSubstitution`, `Enroll/TargetSubstitution` and
+`Retrieve/ServerSubstitution` subtests of `TestAttestedCredentialAcquisition`
+do require the container: they bind Evidence to a server or Target other than
+the one requested and assert the Credential Authority / Secret Vault reject it
+with `403`.
+
 The test defaults are defined in [est_attest.json](est_attest.json). It contains the EST host,
-client Common Name, CA and mock-provider key paths, target names, and credential
-types. The test loads this file once before running and rejects unknown fields,
-missing required values, or additional JSON values. Paths in the file are
-resolved from the `est` module directory, matching the `go test` command above.
+`server_id` the mock server is expected to report, client Common Name, CA and
+mock-provider key paths, target names, and credential types. The test loads
+this file once before running and rejects unknown fields, missing required
+values, or additional JSON values. Paths in the file are resolved from the
+`est` module directory, matching the `go test` command above.
 
 ### Overrides
 
