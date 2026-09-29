@@ -153,6 +153,17 @@ type EvidenceRequest struct {
 	// BoundKeyUse selects encrypt vs sign. If Unspecified, Enrollment is
 	// inferred from a non-empty CSR and Retrieval otherwise.
 	BoundKeyUse BoundKeyUse
+
+	// Target is the Target of Initiate-Credential-Acquisition. Hardware
+	// back-ends bind it into Evidence (the binding input of
+	// draft-novak-lamps-tacra-est, Section 9.1.5); the simulated back-end
+	// ignores it.
+	Target string
+
+	// RelyingParty identifies the RATS Relying Party that will rely on the
+	// Evidence (the Credential Authority or the Secret Vault). Hardware
+	// back-ends bind it; empty when the CAI holds none.
+	RelyingParty string
 }
 
 // Evidence is RATS Evidence ready to send over CAAPI.
