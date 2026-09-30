@@ -5,19 +5,23 @@ import (
 	"encoding/binary"
 )
 
-// BindingInput is the octet string of draft-novak-lamps-tacra-est, Section
-// 9.1.5: each value preceded by its length as a 32-bit big-endian integer.
+// BindingInput is the octet string of TACRA Section 4.5 (master 912bd50, 30
+// September 2026) and of draft-novak-lamps-tacra-est, Section 9.1.5: each
+// value preceded by its length as a 32-bit big-endian integer, the Target
+// before the Relying Party identifier.
 //
-//	binding_input = len32(handle) || handle || len32(rrp_id) || rrp_id
-//	             || len32(target) || target || len32(subject) || subject
+//	binding_input = len32(handle) || handle || len32(target) || target
+//	             || len32(rrp_id) || rrp_id || len32(subject) || subject
 //
+// The arguments keep their earlier order (rrpID, then target) so that no
+// caller changes; the octets follow the order above.
 // handle is the freshness element (the Freshness Handle, the epoch marker or
 // the 8-octet timestamp; empty only for absent-none), rrp_id the RATS Relying
 // Party identifier, target the Target, and subject the DER CSR (Enrollment)
 // or the DER SubjectPublicKeyInfo of CEKpub (Retrieval).
 func BindingInput(handle []byte, rrpID, target string, subject []byte) []byte {
 	var out []byte
-	for _, v := range [][]byte{handle, []byte(rrpID), []byte(target), subject} {
+	for _, v := range [][]byte{handle, []byte(target), []byte(rrpID), subject} {
 		out = binary.BigEndian.AppendUint32(out, uint32(len(v)))
 		out = append(out, v...)
 	}
