@@ -103,7 +103,7 @@ func newTSMConfig(opts []TSMOption) (tsmConfig, error) {
 }
 
 // SEVSNP is the AMD SEV-SNP back-end. Evidence is a configfs-tsm report whose
-// REPORT_DATA is BindingValue(freshness element, RelyingParty, Target,
+// REPORT_DATA is BindingValue(freshness element, Target, RelyingParty,
 // subject), with the host's certificate table as auxblob, encoded as a
 // Veraison TSM report. Keys are generated in guest memory.
 type SEVSNP struct {
@@ -219,7 +219,7 @@ func (p *SEVSNP) GenerateEvidence(req EvidenceRequest) (*Evidence, error) {
 	if err != nil {
 		return nil, err
 	}
-	bv := BindingValue(elem, req.RelyingParty, req.Target, subject)
+	bv := BindingValue(elem, req.Target, req.RelyingParty, subject)
 
 	resp, err := report.Get(p.client, &report.Request{InBlob: bv[:], GetAuxBlob: true})
 	if err != nil {

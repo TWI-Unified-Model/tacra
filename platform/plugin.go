@@ -155,9 +155,8 @@ type EvidenceRequest struct {
 	BoundKeyUse BoundKeyUse
 
 	// Target is the Target of Initiate-Credential-Acquisition. Hardware
-	// back-ends bind it into Evidence (the binding input of
-	// draft-novak-lamps-tacra-est, Section 9.1.5); the simulated back-end
-	// ignores it.
+	// back-ends bind it into Evidence (the binding input of the EST profile,
+	// draft-novak-lamps-tacra-est); the simulated back-end ignores it.
 	Target string
 
 	// RelyingParty identifies the RATS Relying Party that will rely on the

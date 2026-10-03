@@ -100,11 +100,11 @@ func TestBindingValueMatchesDraftTestVector(t *testing.T) {
 	handle, _ := hex.DecodeString(tvHandleHex)
 	subject, _ := hex.DecodeString(tvSubjectHex)
 	want, _ := hex.DecodeString(tvDigestHex)
-	got := BindingValue(handle, tvRRPID, tvTarget, subject)
+	got := BindingValue(handle, tvTarget, tvRRPID, subject)
 	if !bytes.Equal(got[:], want) {
 		t.Fatalf("SHA-512(binding_input) = %x, want the draft's %x", got, want)
 	}
-	if n := len(BindingInput(handle, tvRRPID, tvTarget, subject)); n != 320 {
+	if n := len(BindingInput(handle, tvTarget, tvRRPID, subject)); n != 320 {
 		t.Fatalf("binding_input is %d octets, the draft's vector is 320", n)
 	}
 }
@@ -156,7 +156,7 @@ func TestSEVSNPEvidenceAllFreshnessKinds(t *testing.T) {
 			if err := cbor.Unmarshal(ev.Token, &tsm); err != nil {
 				t.Fatal(err)
 			}
-			want := BindingValue(c.want, req.RelyingParty, req.Target, subject)
+			want := BindingValue(c.want, req.Target, req.RelyingParty, subject)
 			if tsm.Provider != "sev_guest" || !bytes.Equal(tsm.OutBlob[snpReportDataStart:snpReportDataEnd], want[:]) {
 				t.Fatalf("%s enroll=%v: REPORT_DATA does not carry the binding value", c.name, enroll)
 			}
@@ -227,7 +227,7 @@ func TestTDXEvidenceAllFreshnessKinds(t *testing.T) {
 			t.Fatal(err)
 		}
 		spki, _ := x509.MarshalPKIXPublicKey(cek.Public())
-		want := BindingValue(c.want, req.RelyingParty, req.Target, spki)
+		want := BindingValue(c.want, req.Target, req.RelyingParty, spki)
 		if tsm.Provider != "tdx_guest" || !bytes.Equal(tsm.OutBlob[tdxReportDataStart:tdxReportDataEnd], want[:]) {
 			t.Fatalf("kind %d: REPORTDATA does not carry the binding value", c.kind)
 		}

@@ -5,21 +5,19 @@ import (
 	"encoding/binary"
 )
 
-// BindingInput is the octet string of TACRA Section 4.5 (master 912bd50, 30
-// September 2026) and of draft-novak-lamps-tacra-est, Section 9.1.5: each
-// value preceded by its length as a 32-bit big-endian integer, the Target
-// before the Relying Party identifier.
+// BindingInput is the octet string of the TACRA section "Binding Credential
+// Keys to Evidence", which the EST profile (draft-novak-lamps-tacra-est,
+// "Binding Input") also uses: each value preceded by its length as a 32-bit
+// big-endian integer, the Target before the Relying Party identifier.
 //
 //	binding_input = len32(handle) || handle || len32(target) || target
 //	             || len32(rrp_id) || rrp_id || len32(subject) || subject
 //
-// The arguments keep their earlier order (rrpID, then target) so that no
-// caller changes; the octets follow the order above.
 // handle is the freshness element (the Freshness Handle, the epoch marker or
-// the 8-octet timestamp; empty only for absent-none), rrp_id the RATS Relying
-// Party identifier, target the Target, and subject the DER CSR (Enrollment)
-// or the DER SubjectPublicKeyInfo of CEKpub (Retrieval).
-func BindingInput(handle []byte, rrpID, target string, subject []byte) []byte {
+// the 8-octet timestamp; empty only for absent-none), target the Target,
+// rrp_id the RATS Relying Party identifier, and subject the DER CSR
+// (Enrollment) or the DER SubjectPublicKeyInfo of CEKpub (Retrieval).
+func BindingInput(handle []byte, target, rrpID string, subject []byte) []byte {
 	var out []byte
 	for _, v := range [][]byte{handle, []byte(target), []byte(rrpID), subject} {
 		out = binary.BigEndian.AppendUint32(out, uint32(len(v)))
@@ -30,8 +28,8 @@ func BindingInput(handle []byte, rrpID, target string, subject []byte) []byte {
 
 // BindingValue is SHA-512 of BindingInput: the 64 octets a hardware back-end
 // writes into its guest-chosen report field (REPORT_DATA on AMD SEV-SNP).
-func BindingValue(handle []byte, rrpID, target string, subject []byte) [64]byte {
-	return sha512.Sum512(BindingInput(handle, rrpID, target, subject))
+func BindingValue(handle []byte, target, rrpID string, subject []byte) [64]byte {
+	return sha512.Sum512(BindingInput(handle, target, rrpID, subject))
 }
 
 // TimestampElement is the absent-timestamp freshness element: seconds since

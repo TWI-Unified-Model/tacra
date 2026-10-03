@@ -1,7 +1,7 @@
 package platform
 
-// Test vector of draft-novak-lamps-tacra-est, Appendix A, in the order of TACRA Section 4.5 (master 912bd50, 30 September
-// 2026): the enrollment of SEV-SNP run 20260930T172002Z, where SHA-512(binding_input) equals REPORT_DATA of the hardware
+// Test vector of draft-novak-lamps-tacra-est ("Test Vector for the Binding Input"), in the order of the TACRA section
+// "Binding Credential Keys to Evidence": the enrollment of SEV-SNP run 20260930T172002Z, where SHA-512(binding_input) equals REPORT_DATA of the hardware
 // report (github.com/nikolaichuk7/tacra-est, commit 5661be5).
 const (
 	tvHandleHex  = "f8170e6438729e1e3ded60c7c8b220716b7138f9a7e6250c569f1548790ee25f"
