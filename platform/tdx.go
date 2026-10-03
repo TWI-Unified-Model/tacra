@@ -17,12 +17,14 @@ import (
 const (
 	tdxQuoteHeaderLen   = 48
 	tdxQuoteBodyLen     = 584
-	tdxReportDataStart  = tdxQuoteHeaderLen + 520
-	tdxReportDataEnd    = tdxReportDataStart + 64
+	tdxReportDataLen    = 64
+	tdxReportDataStart  = tdxQuoteHeaderLen + tdxQuoteBodyLen - tdxReportDataLen
+	tdxReportDataEnd    = tdxReportDataStart + tdxReportDataLen
 	tdxQuoteVersion4    = 4
 	tdxTEETypeTDX       = 0x81
 	tdxProvider         = "tdx_guest"
-	tdxMinQuoteLen      = tdxQuoteHeaderLen + tdxQuoteBodyLen + 4
+	tdxSignatureLenSize = 4 // the signature data after the body starts with its length, a uint32
+	tdxMinQuoteLen      = tdxQuoteHeaderLen + tdxQuoteBodyLen + tdxSignatureLenSize
 	tdxTEETypeOffset    = 4
 	tdxVersionOffset    = 0
 	tdxSignatureLenOffs = tdxQuoteHeaderLen + tdxQuoteBodyLen
@@ -88,7 +90,7 @@ func (p *TDX) GenerateEvidence(req EvidenceRequest) (*Evidence, error) {
 		return nil, fmt.Errorf("%w: not a version 4 TDX quote (%d octets)", ErrNotTDX, len(q))
 	}
 	// The kernel hands back its whole buffer; keep the quote and its signature data only.
-	if n := tdxSignatureLenOffs + 4 + int(binary.LittleEndian.Uint32(q[tdxSignatureLenOffs:])); n <= len(q) {
+	if n := tdxSignatureLenOffs + tdxSignatureLenSize + int(binary.LittleEndian.Uint32(q[tdxSignatureLenOffs:])); n <= len(q) {
 		q = q[:n]
 	}
 	if !bytes.Equal(q[tdxReportDataStart:tdxReportDataEnd], bv[:]) {

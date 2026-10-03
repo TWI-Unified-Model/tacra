@@ -27,13 +27,34 @@ const TSMReportMediaTypeCBOR = "application/vnd.veraison.tsm-report+cbor"
 // layout and the certificate-table GUIDs come from go-sev-guest's abi package.
 const snpProvider = "sev_guest"
 
+// Names under which ParseSNPCertTable returns the host's certificates.
+const (
+	SNPCertVCEK = "VCEK"
+	SNPCertVLEK = "VLEK"
+	SNPCertASK  = "ASK" // or the ASVK, in a VLEK chain
+	SNPCertARK  = "ARK"
+)
+
+// Keys of the unsigned Claims of configfs-tsm Evidence (SEV-SNP and TDX): what
+// the Relying Party needs to recompute the binding value.
+const (
+	TSMClaimFreshnessKind    = "freshness-kind"
+	TSMClaimFreshnessElement = "freshness-element"
+	TSMClaimTarget           = "target"
+	TSMClaimRelyingParty     = "relying-party"
+	TSMClaimBindingValue     = "binding-value"
+	// TSMClaimCertTableCompleted (SEV-SNP) is true when the plug-in appended
+	// AMD's ASK or ASVK and ARK to the host's certificate table.
+	TSMClaimCertTableCompleted = "cert-table-completed"
+)
+
 // snpCertGUIDs names the host's certificate-table entries by the GUIDs
 // go-sev-guest defines.
 var snpCertGUIDs = map[string]string{
-	abi.VcekGUID: "VCEK",
-	abi.VlekGUID: "VLEK",
-	abi.AskGUID:  "ASK",
-	abi.ArkGUID:  "ARK",
+	abi.VcekGUID: SNPCertVCEK,
+	abi.VlekGUID: SNPCertVLEK,
+	abi.AskGUID:  SNPCertASK,
+	abi.ArkGUID:  SNPCertARK,
 }
 
 var (
@@ -251,9 +272,9 @@ func (p *SEVSNP) GenerateEvidence(req EvidenceRequest) (*Evidence, error) {
 		return nil, ErrReportDataMismatch
 	}
 	if certs, err := ParseSNPCertTable(resp.AuxBlob); err == nil {
-		signer := certs["VCEK"]
+		signer := certs[SNPCertVCEK]
 		if signer == nil {
-			signer = certs["VLEK"]
+			signer = certs[SNPCertVLEK]
 		}
 		if c, err := x509.ParseCertificate(signer); err == nil {
 			if pub, ok := c.PublicKey.(*ecdsa.PublicKey); ok {
@@ -272,7 +293,7 @@ func (p *SEVSNP) GenerateEvidence(req EvidenceRequest) (*Evidence, error) {
 		}
 	}
 	return tsmEvidence(req, elem, bv, tsmReport{AuxBlob: aux, OutBlob: resp.OutBlob, Provider: provider},
-		map[string]any{"cert-table-completed": completed})
+		map[string]any{TSMClaimCertTableCompleted: completed})
 }
 
 // tsmEvidence encodes a configfs-tsm report as Evidence. Claims carries,
@@ -284,11 +305,11 @@ func tsmEvidence(req EvidenceRequest, elem []byte, bv [sha512.Size]byte, rep tsm
 		return nil, fmt.Errorf("platform: TSM report CBOR: %w", err)
 	}
 	c := map[string]any{
-		"freshness-kind":    int32(req.FreshnessKind),
-		"freshness-element": elem,
-		"target":            req.Target,
-		"relying-party":     req.RelyingParty,
-		"binding-value":     bv[:],
+		TSMClaimFreshnessKind:    int32(req.FreshnessKind),
+		TSMClaimFreshnessElement: elem,
+		TSMClaimTarget:           req.Target,
+		TSMClaimRelyingParty:     req.RelyingParty,
+		TSMClaimBindingValue:     bv[:],
 	}
 	for k, v := range extra {
 		c[k] = v
@@ -301,8 +322,8 @@ func tsmEvidence(req EvidenceRequest, elem []byte, bv [sha512.Size]byte, rep tsm
 }
 
 // ParseSNPCertTable splits the host's certificate table, as go-sev-guest's abi
-// reads it, into the certificates keyed VCEK, VLEK, ASK and ARK; unknown GUIDs
-// are kept under their GUID string.
+// reads it, into the certificates keyed by the SNPCert names; unknown GUIDs are
+// kept under their GUID string.
 func ParseSNPCertTable(buf []byte) (map[string][]byte, error) {
 	entries, err := abi.ParseSnpCertTableHeader(buf)
 	if err != nil {

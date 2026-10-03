@@ -63,7 +63,8 @@ func TestCompleteCertTable(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if !bytes.Equal(certs["VLEK"], vlek) || !bytes.Equal(certs["ASK"], milanVlekASVK) || !bytes.Equal(certs["ARK"], milanARK) {
+		if !bytes.Equal(certs[SNPCertVLEK], vlek) || !bytes.Equal(certs[SNPCertASK], milanVlekASVK) ||
+			!bytes.Equal(certs[SNPCertARK], milanARK) {
 			t.Fatal("table is not VLEK + Milan ASVK + Milan ARK")
 		}
 	})
@@ -78,7 +79,7 @@ func TestCompleteCertTable(t *testing.T) {
 			t.Fatalf("added=%v err=%v", added, err)
 		}
 		certs, _ := ParseSNPCertTable(out)
-		if !bytes.Equal(certs["ASK"], turinASVK) || !bytes.Equal(certs["ARK"], turinARK) {
+		if !bytes.Equal(certs[SNPCertASK], turinASVK) || !bytes.Equal(certs[SNPCertARK], turinARK) {
 			t.Fatal("table is not VLEK + Turin ASVK + Turin ARK")
 		}
 	})
@@ -88,7 +89,7 @@ func TestCompleteCertTable(t *testing.T) {
 			t.Fatalf("added=%v err=%v", added, err)
 		}
 		certs, _ := ParseSNPCertTable(out)
-		if !bytes.Equal(certs["ASK"], genoaASK) || !bytes.Equal(certs["ARK"], genoaARK) {
+		if !bytes.Equal(certs[SNPCertASK], genoaASK) || !bytes.Equal(certs[SNPCertARK], genoaARK) {
 			t.Fatal("table is not VCEK + Genoa ASK + Genoa ARK")
 		}
 	})
@@ -106,4 +107,20 @@ func TestCompleteCertTable(t *testing.T) {
 			t.Fatalf("added=%v err=%v", added, err)
 		}
 	})
+}
+
+func TestAMDChainsAreKeyedByTheirASKName(t *testing.T) {
+	for name, chain := range amdChains {
+		ask, _, err := parseAMDChain(chain)
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		c, err := x509.ParseCertificate(ask)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if c.Subject.CommonName != name {
+			t.Fatalf("chain under %q has the ASK or ASVK %q", name, c.Subject.CommonName)
+		}
+	}
 }

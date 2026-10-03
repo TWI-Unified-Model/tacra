@@ -11,15 +11,15 @@ import (
 	"github.com/google/go-sev-guest/verify/trust"
 )
 
-// AMD's public product chains (ASK or ASVK, and ARK), as embedded in go-sev-guest, by product line and by the key
-// that signs the report. The plug-in needs no network to supply them.
+// AMD's public product chains (ASK or ASVK, and ARK), as embedded in go-sev-guest, by the common name of the ASK or
+// ASVK, which is the issuer of the VCEK or VLEK it certifies. The plug-in needs no network to supply them.
 var amdChains = map[string][]byte{
-	"Milan/VCEK": trust.AskArkMilanVcekBytes,
-	"Milan/VLEK": trust.AskArkMilanVlekBytes,
-	"Genoa/VCEK": trust.AskArkGenoaVcekBytes,
-	"Genoa/VLEK": trust.AskArkGenoaVlekBytes,
-	"Turin/VCEK": trust.AskArkTurinVcekBytes,
-	"Turin/VLEK": trust.AskArkTurinVlekBytes,
+	"SEV-Milan":      trust.AskArkMilanVcekBytes,
+	"SEV-VLEK-Milan": trust.AskArkMilanVlekBytes,
+	"SEV-Genoa":      trust.AskArkGenoaVcekBytes,
+	"SEV-VLEK-Genoa": trust.AskArkGenoaVlekBytes,
+	"SEV-Turin":      trust.AskArkTurinVcekBytes,
+	"SEV-VLEK-Turin": trust.AskArkTurinVlekBytes,
 }
 
 // Certificate table GUIDs as the host writes them: go-sev-guest's abi
@@ -53,9 +53,9 @@ func completeCertTable(table []byte) (out []byte, added bool, err error) {
 	if have[guidASK] != nil && have[guidARK] != nil {
 		return table, false, nil
 	}
-	signer, kind := have[guidVCEK], "VCEK"
+	signer := have[guidVCEK]
 	if signer == nil {
-		signer, kind = have[guidVLEK], "VLEK"
+		signer = have[guidVLEK]
 	}
 	if signer == nil {
 		return table, false, nil
@@ -64,12 +64,7 @@ func completeCertTable(table []byte) (out []byte, added bool, err error) {
 	if err != nil {
 		return table, false, nil
 	}
-	// The VCEK is issued by "SEV-<product>", the VLEK by "SEV-VLEK-<product>".
-	cn := leaf.Issuer.CommonName
-	if !strings.HasPrefix(cn, "SEV-") {
-		return table, false, nil
-	}
-	chain, ok := amdChains[cn[strings.LastIndex(cn, "-")+1:]+"/"+kind]
+	chain, ok := amdChains[leaf.Issuer.CommonName]
 	if !ok {
 		return table, false, nil
 	}
