@@ -16,28 +16,24 @@ import (
 	"github.com/google/go-configfs-tsm/configfs/configfsi"
 	"github.com/google/go-configfs-tsm/configfs/linuxtsm"
 	"github.com/google/go-configfs-tsm/report"
+	"github.com/google/go-sev-guest/abi"
 )
 
 // TSMReportMediaTypeCBOR is the media type under which the Veraison sevsnp
 // scheme accepts a Linux configfs-tsm report as Evidence.
 const TSMReportMediaTypeCBOR = "application/vnd.veraison.tsm-report+cbor"
 
-// SEV-SNP ATTESTATION_REPORT (AMD publication 56860, Table 27): REPORT_DATA
-// is the only guest-chosen field, 64 octets at offset 50h.
-const (
-	snpReportMinLen    = 0x4A0
-	snpReportDataStart = 0x50
-	snpReportDataEnd   = 0x90
-	snpProvider        = "sev_guest"
-)
+// snpProvider is the configfs-tsm provider name of an SEV-SNP guest. The report
+// layout and the certificate-table GUIDs come from go-sev-guest's abi package.
+const snpProvider = "sev_guest"
 
-// Certificate table GUIDs (GHCB specification, Guest Request with extended
-// report), in the byte order the host writes them.
+// snpCertGUIDs names the host's certificate-table entries by the GUIDs
+// go-sev-guest defines.
 var snpCertGUIDs = map[string]string{
-	"63da758d-e664-4564-adc5-f4b93be8accd": "VCEK",
-	"a8074bc2-a25a-483e-aae6-39c045a0b8a1": "VLEK",
-	"4ab7b379-bbac-4fe4-a02f-05aef327c782": "ASK",
-	"c0b406a4-a803-4952-9743-3fb6014cd0ae": "ARK",
+	abi.VcekGUID: "VCEK",
+	abi.VlekGUID: "VLEK",
+	abi.AskGUID:  "ASK",
+	abi.ArkGUID:  "ARK",
 }
 
 var (
@@ -229,10 +225,11 @@ func (p *SEVSNP) GenerateEvidence(req EvidenceRequest) (*Evidence, error) {
 	if provider != snpProvider {
 		return nil, fmt.Errorf("%w: %q", ErrNotSEVSNP, provider)
 	}
-	if len(resp.OutBlob) < snpReportMinLen {
-		return nil, fmt.Errorf("platform: SEV-SNP report is %d octets", len(resp.OutBlob))
+	rep, err := abi.ReportToProto(resp.OutBlob)
+	if err != nil {
+		return nil, fmt.Errorf("platform: SEV-SNP report: %w", err)
 	}
-	if !bytes.Equal(resp.OutBlob[snpReportDataStart:snpReportDataEnd], bv[:]) {
+	if !bytes.Equal(rep.GetReportData(), bv[:]) {
 		return nil, ErrReportDataMismatch
 	}
 	if certs, err := ParseSNPCertTable(resp.AuxBlob); err == nil {

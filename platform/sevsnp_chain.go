@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/google/go-sev-guest/abi"
 	"github.com/google/go-sev-guest/kds"
 	"github.com/google/go-sev-guest/verify/trust"
 )
@@ -23,12 +24,13 @@ var amdChains = map[string][]byte{
 	"Turin/VLEK": trust.AskArkTurinVlekBytes,
 }
 
-// Certificate table GUIDs as the host writes them (see snpCertGUIDs).
-const (
-	guidVCEK = "63da758de6644564adc5f4b93be8accd"
-	guidVLEK = "a8074bc2a25a483eaae639c045a0b8a1"
-	guidASK  = "4ab7b379bbac4fe4a02f05aef327c782" // also carries the ASVK of a VLEK chain
-	guidARK  = "c0b406a4a803495297433fb6014cd0ae"
+// Certificate table GUIDs as the host writes them: go-sev-guest's abi
+// constants, in hex without the dashes (see snpCertGUIDs).
+var (
+	guidVCEK = strings.ReplaceAll(abi.VcekGUID, "-", "")
+	guidVLEK = strings.ReplaceAll(abi.VlekGUID, "-", "")
+	guidASK  = strings.ReplaceAll(abi.AskGUID, "-", "") // also carries the ASVK of a VLEK chain
+	guidARK  = strings.ReplaceAll(abi.ArkGUID, "-", "")
 )
 
 type certEntry struct {

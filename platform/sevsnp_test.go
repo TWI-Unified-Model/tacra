@@ -19,6 +19,8 @@ import (
 	"time"
 
 	"github.com/fxamacker/cbor/v2"
+	"github.com/google/go-sev-guest/abi"
+	sgtest "github.com/google/go-sev-guest/testing"
 )
 
 // fakeSNP emulates /sys/kernel/config/tsm/report for the sev_guest provider:
@@ -58,12 +60,13 @@ func (f *fakeSNP) ReadFile(name string) ([]byte, error) {
 			}
 			return q, nil
 		}
-		rep := make([]byte, snpReportMinLen)
-		copy(rep[snpReportDataStart:snpReportDataEnd], f.inblob)
+		var rd [64]byte
+		copy(rd[:], f.inblob)
 		if f.tamper {
-			rep[snpReportDataStart] ^= 1
+			rd[0] ^= 1
 		}
-		return rep, nil
+		raw := sgtest.TestRawReport(rd)
+		return raw[:abi.ReportSize], nil
 	case "auxblob":
 		return f.aux, nil
 	case "provider":
@@ -157,7 +160,11 @@ func TestSEVSNPEvidenceAllFreshnessKinds(t *testing.T) {
 				t.Fatal(err)
 			}
 			want := BindingValue(c.want, req.Target, req.RelyingParty, subject)
-			if tsm.Provider != "sev_guest" || !bytes.Equal(tsm.OutBlob[snpReportDataStart:snpReportDataEnd], want[:]) {
+			rep, err := abi.ReportToProto(tsm.OutBlob)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if tsm.Provider != "sev_guest" || !bytes.Equal(rep.GetReportData(), want[:]) {
 				t.Fatalf("%s enroll=%v: REPORT_DATA does not carry the binding value", c.name, enroll)
 			}
 			var claims map[string]any
