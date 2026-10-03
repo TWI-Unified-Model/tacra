@@ -16,6 +16,7 @@ import (
 	"github.com/google/go-configfs-tsm/configfs/linuxtsm"
 	"github.com/google/go-configfs-tsm/report"
 	"github.com/google/go-sev-guest/abi"
+	"github.com/google/go-sev-guest/verify/trust"
 	"github.com/veraison/eat"
 )
 
@@ -188,9 +189,10 @@ func (p *tsmConfig) LocalEpoch() []byte {
 	return append([]byte(nil), p.localEpoch...)
 }
 
-// AttestationPublicKey implements Plugin: the key that signed the last report
-// (the VCEK or VLEK from the host's certificate table), nil before the first
-// report or when the host supplies no table.
+// AttestationPublicKey implements Plugin: the key that signed the last report,
+// the VCEK or VLEK as the report's SIGNING_KEY names it, from the host's
+// certificate table; nil before the first report or when the table does not
+// hold it.
 func (p *SEVSNP) AttestationPublicKey() *ecdsa.PublicKey {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -268,22 +270,18 @@ func (p *SEVSNP) GenerateEvidence(req EvidenceRequest) (*Evidence, error) {
 	if err != nil {
 		return nil, fmt.Errorf("platform: SEV-SNP report: %w", err)
 	}
+	// The report must carry the binding value we asked for; fail here rather
+	// than hand out Evidence the Relying Party would refuse.
 	if !bytes.Equal(rep.GetReportData(), bv[:]) {
 		return nil, ErrReportDataMismatch
 	}
-	if certs, err := ParseSNPCertTable(resp.AuxBlob); err == nil {
-		signer := certs[SNPCertVCEK]
-		if signer == nil {
-			signer = certs[SNPCertVLEK]
-		}
-		if c, err := x509.ParseCertificate(signer); err == nil {
-			if pub, ok := c.PublicKey.(*ecdsa.PublicKey); ok {
-				p.mu.Lock()
-				p.vcek = pub
-				p.mu.Unlock()
-			}
-		}
-	}
+	// Keep the key that signed this report for AttestationPublicKey. The table
+	// is outside the signed report, so the key is a hint only; the Verifier
+	// checks the report against AMD's chain.
+	signer := reportSigner(rep.GetSignerInfo(), resp.AuxBlob)
+	p.mu.Lock()
+	p.vcek = signer
+	p.mu.Unlock()
 
 	aux := resp.AuxBlob
 	completed := false
@@ -294,6 +292,35 @@ func (p *SEVSNP) GenerateEvidence(req EvidenceRequest) (*Evidence, error) {
 	}
 	return tsmEvidence(req, elem, bv, tsmReport{AuxBlob: aux, OutBlob: resp.OutBlob, Provider: provider},
 		map[string]any{TSMClaimCertTableCompleted: completed})
+}
+
+// reportSigner returns the public key of the certificate in the host's table
+// that the report's SIGNING_KEY names (VCEK or VLEK), or nil when the report is
+// unsigned or the table does not hold that certificate.
+func reportSigner(signerInfo uint32, table []byte) *ecdsa.PublicKey {
+	info, err := abi.ParseSignerInfo(signerInfo)
+	if err != nil {
+		return nil
+	}
+	certs, err := ParseSNPCertTable(table)
+	if err != nil {
+		return nil
+	}
+	var cert []byte
+	switch info.SigningKey {
+	case abi.VcekReportSigner:
+		cert = certs[SNPCertVCEK]
+	case abi.VlekReportSigner:
+		cert = certs[SNPCertVLEK]
+	default:
+		return nil
+	}
+	c, err := trust.ParseCert(cert) // hosts write DER or PEM
+	if err != nil {
+		return nil
+	}
+	pub, _ := c.PublicKey.(*ecdsa.PublicKey)
+	return pub
 }
 
 // tsmEvidence encodes a configfs-tsm report as Evidence. Claims carries,

@@ -49,6 +49,7 @@ type fakeSNP struct {
 	gen      uint64
 	aux      []byte
 	provider string
+	signer   abi.ReportSigner // the report's SIGNING_KEY; the zero value is the VCEK
 	tamper   bool
 	tdx      bool // outblob is a version 4 TDX quote, padded as the kernel's buffer is
 }
@@ -88,7 +89,8 @@ func (f *fakeSNP) ReadFile(name string) ([]byte, error) {
 		if f.tamper {
 			rd[0] ^= 1
 		}
-		raw := sgtest.TestRawReport(rd)
+		raw := sgtest.CreateRawReport(&sgtest.TestReportOptions{ReportData: rd[:],
+			SignerInfo: abi.SignerInfo{SigningKey: f.signer}})
 		return raw[:abi.ReportSize], nil
 	case "auxblob":
 		return f.aux, nil
@@ -194,6 +196,33 @@ func TestSEVSNPEvidenceAllFreshnessKinds(t *testing.T) {
 	}
 	if pub := p.AttestationPublicKey(); pub == nil || !pub.Equal(vcek) {
 		t.Fatal("AttestationPublicKey is not the VCEK from the certificate table")
+	}
+}
+
+func TestSEVSNPAttestationPublicKeyIsTheKeyTheReportNames(t *testing.T) {
+	vcek, vlek := leafIssuedBy(t, "SEV-Milan"), leafIssuedBy(t, "SEV-VLEK-Milan")
+	fake := &fakeSNP{provider: snpProvider, signer: abi.VlekReportSigner,
+		aux: table(t, map[string][]byte{guidVCEK: vcek, guidVLEK: vlek}, guidVCEK, guidVLEK)}
+	p, err := NewSEVSNP(WithTSMClient(fake), WithoutChainCompletion())
+	if err != nil {
+		t.Fatal(err)
+	}
+	cek, _ := generateP256()
+	req := EvidenceRequest{FreshnessKind: FreshnessKindPresentNonce, FreshnessHandle: testNonce,
+		BoundKey: cek.Public(), BoundKeyUse: BoundKeyUseEncrypt, Target: "t"}
+	if _, err := p.GenerateEvidence(req); err != nil {
+		t.Fatal(err)
+	}
+	c, _ := x509.ParseCertificate(vlek)
+	if pub := p.AttestationPublicKey(); pub == nil || !pub.Equal(c.PublicKey) {
+		t.Fatal("AttestationPublicKey is not the VLEK the report names, with a VCEK also in the table")
+	}
+	fake.aux = nil
+	if _, err := p.GenerateEvidence(req); err != nil {
+		t.Fatal(err)
+	}
+	if p.AttestationPublicKey() != nil {
+		t.Fatal("AttestationPublicKey kept the key of an earlier report when the host supplied no table")
 	}
 }
 

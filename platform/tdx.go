@@ -93,6 +93,7 @@ func (p *TDX) GenerateEvidence(req EvidenceRequest) (*Evidence, error) {
 	if n := tdxSignatureLenOffs + tdxSignatureLenSize + int(binary.LittleEndian.Uint32(q[tdxSignatureLenOffs:])); n <= len(q) {
 		q = q[:n]
 	}
+	// As in the SEV-SNP back-end: the quote must carry the binding value we asked for.
 	if !bytes.Equal(q[tdxReportDataStart:tdxReportDataEnd], bv[:]) {
 		return nil, ErrReportDataMismatch
 	}
