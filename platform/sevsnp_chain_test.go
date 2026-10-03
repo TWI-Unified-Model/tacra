@@ -67,6 +67,21 @@ func TestCompleteCertTable(t *testing.T) {
 			t.Fatal("table is not VLEK + Milan ASVK + Milan ARK")
 		}
 	})
+	t.Run("VLEK on Turin gets the Turin ASVK and ARK", func(t *testing.T) {
+		turinASVK, turinARK, err := kds.ParseProductCertChain(bytes.TrimSpace(trust.AskArkTurinVlekBytes))
+		if err != nil {
+			t.Fatal(err)
+		}
+		vlekTurin := leafIssuedBy(t, "SEV-VLEK-Turin")
+		out, added, err := completeCertTable(table(t, map[string][]byte{guidVLEK: vlekTurin}, guidVLEK))
+		if err != nil || !added {
+			t.Fatalf("added=%v err=%v", added, err)
+		}
+		certs, _ := ParseSNPCertTable(out)
+		if !bytes.Equal(certs["ASK"], turinASVK) || !bytes.Equal(certs["ARK"], turinARK) {
+			t.Fatal("table is not VLEK + Turin ASVK + Turin ARK")
+		}
+	})
 	t.Run("VCEK only gets the Genoa ASK and ARK", func(t *testing.T) {
 		out, added, err := completeCertTable(table(t, map[string][]byte{guidVCEK: vcekGenoa}, guidVCEK))
 		if err != nil || !added {

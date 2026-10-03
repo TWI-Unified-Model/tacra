@@ -1,6 +1,7 @@
 package platform
 
 import (
+	"bytes"
 	"encoding/hex"
 	"fmt"
 	"strings"
@@ -72,7 +73,7 @@ func completeCertTable(table []byte) (out []byte, added bool, err error) {
 	if !ok {
 		return table, false, nil
 	}
-	ask, ark, err := kds.ParseProductCertChain(chain)
+	ask, ark, err := parseAMDChain(chain)
 	if err != nil {
 		return nil, false, err
 	}
@@ -87,6 +88,12 @@ func completeCertTable(table []byte) (out []byte, added bool, err error) {
 		}
 	}
 	return encodeCertTable(entries), added, nil
+}
+
+// parseAMDChain returns the DER ASK (or ASVK) and ARK of an embedded product chain. It trims the bundle first:
+// go-sev-guest's Turin VLEK bundle (v0.15.0) ends with a blank line, which kds.ParseProductCertChain refuses.
+func parseAMDChain(chain []byte) (ask, ark []byte, err error) {
+	return kds.ParseProductCertChain(bytes.TrimSpace(chain))
 }
 
 func certTableEntries(table []byte) ([]certEntry, error) {
