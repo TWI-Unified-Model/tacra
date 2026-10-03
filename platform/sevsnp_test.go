@@ -37,8 +37,12 @@ type fakeSNP struct {
 func (f *fakeSNP) MkdirTemp(dir, pattern string) (string, error) {
 	return dir + "/" + pattern + "0", nil
 }
-func (f *fakeSNP) ReadDir(string) ([]os.DirEntry, error) { return nil, nil }
-func (f *fakeSNP) RemoveAll(string) error                { return nil }
+func (f *fakeSNP) ReadDir(string) ([]os.DirEntry, error) {
+	return nil, nil
+}
+func (f *fakeSNP) RemoveAll(string) error {
+	return nil
+}
 func (f *fakeSNP) WriteFile(name string, b []byte) error {
 	if path.Base(name) == "inblob" {
 		f.inblob = append([]byte(nil), b...)
@@ -117,7 +121,10 @@ func TestSEVSNPEvidenceAllFreshnessKinds(t *testing.T) {
 	fake := &fakeSNP{provider: "sev_guest", aux: aux}
 	epoch := bytes.Repeat([]byte{0xe7}, 32)
 	now := time.Unix(1790600000, 0)
-	p, err := NewSEVSNP(WithTSMClient(fake), WithClock(func() time.Time { return now }), WithLocalEpoch(epoch))
+	clock := func() time.Time {
+		return now
+	}
+	p, err := NewSEVSNP(WithTSMClient(fake), WithClock(clock), WithLocalEpoch(epoch))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -205,8 +212,11 @@ func TestSEVSNPRefusesTamperedReportAndOtherProviders(t *testing.T) {
 func TestTDXEvidenceAllFreshnessKinds(t *testing.T) {
 	epoch := bytes.Repeat([]byte{0xe7}, 32)
 	now := time.Unix(1790600000, 0)
+	clock := func() time.Time {
+		return now
+	}
 	p, err := NewTDX(WithTSMClient(&fakeSNP{provider: "tdx_guest", tdx: true}),
-		WithClock(func() time.Time { return now }), WithLocalEpoch(epoch))
+		WithClock(clock), WithLocalEpoch(epoch))
 	if err != nil {
 		t.Fatal(err)
 	}

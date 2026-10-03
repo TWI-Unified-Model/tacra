@@ -70,18 +70,32 @@ type tsmConfig struct {
 type TSMOption func(*tsmConfig)
 
 // WithTSMClient replaces the configfs client (tests use a fake).
-func WithTSMClient(c configfsi.Client) TSMOption { return func(p *tsmConfig) { p.client = c } }
+func WithTSMClient(c configfsi.Client) TSMOption {
+	return func(p *tsmConfig) {
+		p.client = c
+	}
+}
 
 // WithClock sets the clock used for the absent-timestamp freshness element.
-func WithClock(clock func() time.Time) TSMOption { return func(p *tsmConfig) { p.clock = clock } }
+func WithClock(clock func() time.Time) TSMOption {
+	return func(p *tsmConfig) {
+		p.clock = clock
+	}
+}
 
 // WithLocalEpoch sets the epoch identifier held locally for absent-epoch.
 func WithLocalEpoch(epoch []byte) TSMOption {
-	return func(p *tsmConfig) { p.localEpoch = append([]byte(nil), epoch...) }
+	return func(p *tsmConfig) {
+		p.localEpoch = append([]byte(nil), epoch...)
+	}
 }
 
 // WithoutChainCompletion keeps the host's certificate table exactly as delivered.
-func WithoutChainCompletion() TSMOption { return func(p *tsmConfig) { p.completeChain = false } }
+func WithoutChainCompletion() TSMOption {
+	return func(p *tsmConfig) {
+		p.completeChain = false
+	}
+}
 
 func newTSMConfig(opts []TSMOption) (tsmConfig, error) {
 	c := tsmConfig{clock: time.Now, completeChain: true}
@@ -120,7 +134,9 @@ func NewSEVSNP(opts ...TSMOption) (*SEVSNP, error) {
 }
 
 // Name implements Plugin.
-func (p *SEVSNP) Name() string { return "sev-snp" }
+func (p *SEVSNP) Name() string {
+	return "sev-snp"
+}
 
 // GenerateCEK implements Plugin.
 func (p *tsmConfig) GenerateCEK(alg EncryptionAlgorithm) (*KeyPair, error) {
@@ -147,7 +163,9 @@ func (p *tsmConfig) GenerateCSK(alg SigningAlgorithm) (*KeyPair, error) {
 }
 
 // LocalEpoch implements Plugin.
-func (p *tsmConfig) LocalEpoch() []byte { return append([]byte(nil), p.localEpoch...) }
+func (p *tsmConfig) LocalEpoch() []byte {
+	return append([]byte(nil), p.localEpoch...)
+}
 
 // AttestationPublicKey implements Plugin: the key that signed the last report
 // (the VCEK or VLEK from the host's certificate table), nil before the first

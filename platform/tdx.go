@@ -51,12 +51,16 @@ func NewTDX(opts ...TSMOption) (*TDX, error) {
 }
 
 // Name implements Plugin.
-func (p *TDX) Name() string { return "tdx" }
+func (p *TDX) Name() string {
+	return "tdx"
+}
 
 // AttestationPublicKey implements Plugin. A TDX quote carries its own
 // attestation key, certified by the Quoting Enclave; the plug-in does not
 // hold it.
-func (p *TDX) AttestationPublicKey() *ecdsa.PublicKey { return nil }
+func (p *TDX) AttestationPublicKey() *ecdsa.PublicKey {
+	return nil
+}
 
 // GenerateEvidence implements Plugin.
 func (p *TDX) GenerateEvidence(req EvidenceRequest) (*Evidence, error) {
