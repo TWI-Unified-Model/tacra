@@ -1,10 +1,7 @@
 package platform
 
 import (
-	"bytes"
-	"encoding/binary"
 	"encoding/hex"
-	"errors"
 	"fmt"
 	"strings"
 
@@ -93,30 +90,31 @@ func completeCertTable(table []byte) (out []byte, added bool, err error) {
 }
 
 func certTableEntries(table []byte) ([]certEntry, error) {
-	var entries []certEntry
-	for i := 0; i+24 <= len(table); i += 24 {
-		g := table[i : i+16]
-		if bytes.Equal(g, make([]byte, 16)) {
-			return entries, nil
-		}
-		off, n := binary.LittleEndian.Uint32(table[i+16:]), binary.LittleEndian.Uint32(table[i+20:])
-		if uint64(off)+uint64(n) > uint64(len(table)) {
-			return nil, fmt.Errorf("platform: certificate table entry %d out of range", i/24)
-		}
-		entries = append(entries, certEntry{append([]byte(nil), g...), append([]byte(nil), table[off:off+n]...)})
+	hdr, err := abi.ParseSnpCertTableHeader(table)
+	if err != nil {
+		return nil, fmt.Errorf("platform: certificate table: %w", err)
 	}
-	return nil, errors.New("platform: certificate table without terminator")
+	entries := make([]certEntry, 0, len(hdr))
+	for i, h := range hdr {
+		if uint64(h.Offset)+uint64(h.Length) > uint64(len(table)) {
+			return nil, fmt.Errorf("platform: certificate table entry %d out of range", i)
+		}
+		entries = append(entries, certEntry{append([]byte(nil), h.GUID[:]...), append([]byte(nil), table[h.Offset:h.Offset+h.Length]...)})
+	}
+	return entries, nil
 }
 
+// encodeCertTable writes the entries in the layout of go-sev-guest's abi, ended
+// by an all-zero entry, with the certificates after the header.
 func encodeCertTable(entries []certEntry) []byte {
-	off := uint32(24 * (len(entries) + 1))
-	var head, body []byte
-	for _, e := range entries {
-		head = append(head, e.guid...)
-		head = binary.LittleEndian.AppendUint32(head, off+uint32(len(body)))
-		head = binary.LittleEndian.AppendUint32(head, uint32(len(e.cert)))
+	head := make([]byte, abi.CertTableEntrySize*(len(entries)+1))
+	var body []byte
+	for i, e := range entries {
+		h := abi.CertTableHeaderEntry{Offset: uint32(len(head) + len(body)), Length: uint32(len(e.cert))}
+		copy(h.GUID[:], e.guid)
+		// The slice holds the whole entry, so Write cannot fail.
+		_ = h.Write(head[i*abi.CertTableEntrySize:])
 		body = append(body, e.cert...)
 	}
-	head = append(head, make([]byte, 24)...)
 	return append(head, body...)
 }

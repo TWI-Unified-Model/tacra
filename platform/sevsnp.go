@@ -3,9 +3,8 @@ package platform
 import (
 	"bytes"
 	"crypto/ecdsa"
+	"crypto/sha512"
 	"crypto/x509"
-	"encoding/binary"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"strings"
@@ -17,6 +16,7 @@ import (
 	"github.com/google/go-configfs-tsm/configfs/linuxtsm"
 	"github.com/google/go-configfs-tsm/report"
 	"github.com/google/go-sev-guest/abi"
+	"github.com/veraison/eat"
 )
 
 // TSMReportMediaTypeCBOR is the media type under which the Veraison sevsnp
@@ -184,16 +184,16 @@ func (p *SEVSNP) AttestationPublicKey() *ecdsa.PublicKey {
 func (p *tsmConfig) FreshnessElement(req EvidenceRequest) ([]byte, error) {
 	switch req.FreshnessKind {
 	case FreshnessKindPresentNonce, FreshnessKindPresentEpoch, FreshnessKindAbsentEpoch:
-		if n := len(req.FreshnessHandle); n < 8 || n > 64 {
+		if n := len(req.FreshnessHandle); n < eat.MinNonceSize || n > eat.MaxNonceSize {
 			return nil, fmt.Errorf("%w: %d octets", ErrInvalidFreshnessHandle, n)
 		}
 		return append([]byte(nil), req.FreshnessHandle...), nil
 	case FreshnessKindAbsentTimestamp:
-		if len(req.FreshnessHandle) == 8 {
+		if len(req.FreshnessHandle) == TimestampElementSize {
 			return append([]byte(nil), req.FreshnessHandle...), nil
 		}
 		if len(req.FreshnessHandle) != 0 {
-			return nil, fmt.Errorf("%w: absent-timestamp takes 8 octets", ErrFreshnessElement)
+			return nil, fmt.Errorf("%w: absent-timestamp takes %d octets", ErrFreshnessElement, TimestampElementSize)
 		}
 		return TimestampElement(p.clock().Unix()), nil
 	case FreshnessKindAbsentNone:
@@ -278,7 +278,7 @@ func (p *SEVSNP) GenerateEvidence(req EvidenceRequest) (*Evidence, error) {
 // tsmEvidence encodes a configfs-tsm report as Evidence. Claims carries,
 // unsigned, what the Relying Party needs to recompute the binding, and any
 // back-end specific notes in extra.
-func tsmEvidence(req EvidenceRequest, elem []byte, bv [64]byte, rep tsmReport, extra map[string]any) (*Evidence, error) {
+func tsmEvidence(req EvidenceRequest, elem []byte, bv [sha512.Size]byte, rep tsmReport, extra map[string]any) (*Evidence, error) {
 	token, err := cbor.Marshal(rep)
 	if err != nil {
 		return nil, fmt.Errorf("platform: TSM report CBOR: %w", err)
@@ -300,37 +300,29 @@ func tsmEvidence(req EvidenceRequest, elem []byte, bv [64]byte, rep tsmReport, e
 	return &Evidence{Token: token, MediaType: TSMReportMediaTypeCBOR, Claims: claims}, nil
 }
 
-// ParseSNPCertTable splits the host's certificate table (entries of GUID,
-// offset and length, little-endian, ended by a zero GUID) into DER
-// certificates keyed VCEK, VLEK, ASK and ARK; unknown GUIDs are kept under
-// their GUID string.
+// ParseSNPCertTable splits the host's certificate table, as go-sev-guest's abi
+// reads it, into the certificates keyed VCEK, VLEK, ASK and ARK; unknown GUIDs
+// are kept under their GUID string.
 func ParseSNPCertTable(buf []byte) (map[string][]byte, error) {
+	entries, err := abi.ParseSnpCertTableHeader(buf)
+	if err != nil {
+		return nil, fmt.Errorf("platform: certificate table: %w", err)
+	}
+	if len(entries) == 0 {
+		return nil, errors.New("platform: empty certificate table")
+	}
 	out := map[string][]byte{}
-	for i := 0; i+24 <= len(buf); i += 24 {
-		g := buf[i : i+16]
-		if bytes.Equal(g, make([]byte, 16)) {
-			if len(out) == 0 {
-				return nil, errors.New("platform: empty certificate table")
-			}
-			return out, nil
+	for i, e := range entries {
+		if uint64(e.Offset)+uint64(e.Length) > uint64(len(buf)) {
+			return nil, fmt.Errorf("platform: certificate table entry %d out of range", i)
 		}
-		off := binary.LittleEndian.Uint32(buf[i+16:])
-		n := binary.LittleEndian.Uint32(buf[i+20:])
-		if uint64(off)+uint64(n) > uint64(len(buf)) {
-			return nil, fmt.Errorf("platform: certificate table entry %d out of range", i/24)
-		}
-		name := guidString(g)
+		name := e.GUID.String()
 		if k, ok := snpCertGUIDs[name]; ok {
 			name = k
 		}
-		out[name] = append([]byte(nil), buf[off:off+n]...)
+		out[name] = append([]byte(nil), buf[e.Offset:e.Offset+e.Length]...)
 	}
-	return nil, errors.New("platform: certificate table without terminator")
-}
-
-func guidString(g []byte) string {
-	h := hex.EncodeToString(g)
-	return h[0:8] + "-" + h[8:12] + "-" + h[12:16] + "-" + h[16:20] + "-" + h[20:32]
+	return out, nil
 }
 
 // ReportFromTSMToken returns the SEV-SNP report (outblob) inside a TSM token.

@@ -28,9 +28,13 @@ func BindingInput(handle []byte, target, rrpID string, subject []byte) []byte {
 
 // BindingValue is SHA-512 of BindingInput: the 64 octets a hardware back-end
 // writes into its guest-chosen report field (REPORT_DATA on AMD SEV-SNP).
-func BindingValue(handle []byte, target, rrpID string, subject []byte) [64]byte {
+func BindingValue(handle []byte, target, rrpID string, subject []byte) [sha512.Size]byte {
 	return sha512.Sum512(BindingInput(handle, target, rrpID, subject))
 }
+
+// TimestampElementSize is the length in octets of the absent-timestamp freshness
+// element.
+const TimestampElementSize = 8
 
 // TimestampElement is the absent-timestamp freshness element: seconds since
 // 1970-01-01T00:00:00Z as an 8-octet big-endian unsigned integer.
