@@ -31,6 +31,13 @@ tree or in an ignored local directory. The expected layout is:
       ca.json
     secrets/
       password
+  tacra-rup/                   # Demo RATS-unaware Relying Party (tacra/server)
+    rup.json
+    certs/
+      rup-ca.pem               # Clients trust the RUP via RUP_CA_FILE
+      rup-ca-key.pem
+      server-cert.pem
+      server-key.pem
 ```
 
 Copy `../../../globalsign-est/estserver.json.example` to
@@ -46,7 +53,16 @@ also run a generator explicitly:
 ./tacra/deploy/init-local-hashicorp-vault-config.sh
 ./tacra/deploy/init-local-spiffe-spire-config.sh
 ./tacra/deploy/init-local-step-ca-config.sh
+./tacra/deploy/init-local-rup-config.sh    # not run by components.sh
 ```
+
+The RUP generator creates a 30-day development CA and server certificate for
+the demo RATS-unaware Relying Party and a `rup.json` under
+`config/local/tacra-rup/`. It never generates client trust anchors: pass the
+issuing CA and token-issuer public keys through `RUP_CLIENT_CA_FILE`,
+`RUP_JWT_ISSUER`, `RUP_JWT_PUBLIC_KEY_FILE`, `RUP_WIT_ISSUER`, and
+`RUP_WIT_PUBLIC_KEY_FILE` (or the `*_JWKS_FILE` variants). Without them the RUP
+starts but rejects every request.
 
 The EST generator creates a 30-day local CA, EST TLS certificate, client-CA
 bundle, mock TEE provider key pair, and health-check password under

@@ -1,0 +1,28 @@
+{
+  "audience": "https://localhost:8443",
+  "clock_skew_seconds": 30,
+  "accept": [["x509"], ["wic"], ["wit"], ["jwt"]],
+  "tls": {
+    "cert_file": "server-cert.pem",
+    "key_file": "server-key.pem"
+  },
+  "x509": {
+    "ca_files": ["client-ca.pem"]
+  },
+  "wic": {
+    "ca_files": ["client-ca.pem"],
+    "uri_schemes": ["spiffe", "wimse"],
+    "trust_domains": ["example.org"]
+  },
+  "jwt": {
+    "issuers": ["https://issuer.example.org"],
+    "algorithms": ["ES256"],
+    "jwks_files": ["jwt-jwks.json"],
+    "public_key_files": ["jwt-issuer-pub.pem"]
+  },
+  "wit": {
+    "issuers": ["https://wit.example.org"],
+    "algorithms": ["ES256", "EdDSA"],
+    "jwks_files": ["/etc/rup/wit-jwks.json"]
+  }
+}

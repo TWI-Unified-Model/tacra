@@ -128,18 +128,18 @@ Override with `--platform` when building for remote deployment (e.g., building A
 The attester (HTTP client) runs in Docker and does **not** link the CAI library. It calls a CAI sidecar over gRPC. The sidecar owns the platform plug-in and the CAAPI client.
 
 ```
-┌─────────────┐   AcquireCredential gRPC   ┌──────────────┐  CAAPI gRPC   ┌─────────────────────┐
-│ client      │ ─────────────────────────► │ cai sidecar  │ ────────────► │ server :9090 (CAS)  │
-│ (attester)  │                            │ :50051       │               └─────────────────────┘
-└──────┬──────┘                            └──────────────┘
-       │ HTTPS mTLS + Bearer JWT
+┌─────────────┐   AcquireCredential gRPC   ┌──────────────┐  CAAPI gRPC   ┌──────────────────────────┐
+│ client      │ ─────────────────────────► │ cai sidecar  │ ────────────► │ CAS client (CAAPI server)│
+│ (attester)  │                            │ :50051       │               │ external; not in this repo│
+└──────┬──────┘                            └──────────────┘               └──────────────────────────┘
+       │ HTTPS mTLS (+ optional Bearer JWT / WIT)
        ▼
-┌─────────────────────┐
-│ server :8443 (RUP)  │
-└─────────────────────┘
+┌─────────────────────────────┐
+│ server :8443 (RUP only)     │
+└─────────────────────────────┘
 ```
 
-`docker-compose.yml` starts **cai** and **client**. The PoC **server** (CAAPI + HTTPS mTLS) is expected on the host unless you point the compose file at another address.
+`docker-compose.yml` starts **cai** and **client**. `tacra/server` is only the demo RATS-unaware Relying Party (RUP); see [server/README.md](server/README.md). The former PoC CAAPI server, which combined the CAS with mock Credential Authority and Secret Vault roles, has been removed, so the sidecar's `CAAPI_ADDR` must point at a CAAPI server provided by a CAS client implementation outside this repository. Until one exists, the full client flow cannot run end to end; the RUP can be exercised on its own.
 
 ### Prerequisites
 
@@ -152,24 +152,27 @@ make proto
 
 The host must be able to reach Docker (`docker info`). On Linux, `extra_hosts: host.docker.internal:host-gateway` in the compose file lets containers reach services on the host.
 
-### Quick start (server on the host)
+### Quick start (RUP on the host)
 
-Terminal 1 — PoC server (CAAPI `:9090`, HTTPS mTLS `:8443`):
+Terminal 1 — demo RUP (HTTPS `:8443`). Generate its TLS identity and `rup.json` once, supplying the trust anchors of whichever Credential Authority or Secret Vault issues the client credentials:
 
 ```bash
 cd tacra
+RUP_CLIENT_CA_FILE=/path/to/issuing-ca.pem \
+RUP_JWT_ISSUER=https://issuer.example RUP_JWT_PUBLIC_KEY_FILE=/path/to/issuer-pub.pem \
+  ./deploy/init-local-rup-config.sh
 make server
 ./bin/server
 ```
 
-Terminal 2 — sidecar + client:
+Terminal 2 — sidecar + client, with `CAAPI_ADDR` pointing at a CAAPI server:
 
 ```bash
 cd tacra
-docker compose up --build
+CAAPI_ADDR=<cas-client-host>:<port> docker compose up --build
 ```
 
-The client container calls the sidecar at `cai:50051`, acquires an X.509 client certificate and a JWT, then GETs `https://host.docker.internal:8443` with mTLS and `Authorization: Bearer <jwt>`. On success it prints `Received valid URI: https://example.com/received` and exits. Compose then stops the sidecar if you used `--abort-on-container-exit`:
+The client container calls the sidecar at `cai:50051`, acquires an X.509 client certificate and a JWT, then GETs `https://host.docker.internal:8443` with mTLS and `Authorization: Bearer <jwt>`, trusting the RUP through `RUP_CA_FILE` (the RUP CA generated above, mounted into the container). On success it prints `Received valid URI: https://example.com/received` and exits. Compose then stops the sidecar if you used `--abort-on-container-exit`:
 
 ```bash
 docker compose up --build --abort-on-container-exit --exit-code-from client
@@ -186,7 +189,7 @@ docker compose down
 | Service | Dockerfile | Image (compose) | Role |
 |---------|------------|-----------------|------|
 | `cai` | `cai/Dockerfile` | `tacra-cai` | CAI sidecar: platform plug-in + CAAPI client; gRPC `AcquireCredential` on `:50051` |
-| `client` | `client/Dockerfile` | `tacra-client` | Attester: calls the sidecar, then HTTPS mTLS + JWT to the server |
+| `client` | `client/Dockerfile` | `tacra-client` | Attester: calls the sidecar, then authenticates to the RUP |
 
 Build context for both is the `tacra/` directory (not the subdirectory).
 
@@ -194,15 +197,16 @@ Build context for both is the `tacra/` directory (not the subdirectory).
 
 | Variable | Set on | Default | Meaning |
 |----------|--------|---------|---------|
-| `CAAPI_ADDR` | `cai` | `host.docker.internal:9090` | CAS / CAAPI gRPC address the sidecar dials |
+| `CAAPI_ADDR` | `cai` | `host.docker.internal:9090` | CAAPI gRPC address of the CAS client the sidecar dials (external) |
 | `CAI_LISTEN` | `cai` | `:50051` | Sidecar listen address |
 | `CAI_ADDR` | `client` | `cai:50051` (compose) | CAI sidecar gRPC address |
-| `TLS_SERVER_NAME` | `client` | `localhost` | SNI / certificate hostname for the HTTPS server |
-| `CLIENT_SERVER` | compose `command` | `https://host.docker.internal:8443` | HTTPS URL passed as the client argument |
-| `HTTPS_ADDR` | host `./bin/server` | `:8443` | HTTPS mTLS listen address |
-| `CAAPI_ADDR` | host `./bin/server` | `:9090` | CAAPI gRPC listen address |
+| `TLS_SERVER_NAME` | `client` | `localhost` | SNI / certificate hostname for the RUP |
+| `RUP_CA_FILE` | `client` | `/etc/tacra-rup/rup-ca.pem` (compose) | CA that authenticates the RUP's server certificate; if unset, the client falls back to the CA in its acquired certificate chain |
+| `CLIENT_SERVER` | compose `command` | `https://host.docker.internal:8443` | RUP URL passed as the client argument |
+| `HTTPS_ADDR` | host `./bin/server` | `:8443` | RUP HTTPS listen address |
+| `RUP_CONFIG` | host `./bin/server` | `deploy/config/local/tacra-rup/rup.json` | RUP JSON configuration, written by `init-local-rup-config.sh` (format: `server/testdata/rup.json`) |
 
-Example: server not on the default host ports:
+Example: RUP not on the default host port:
 
 ```bash
 CAAPI_ADDR=host.docker.internal:19090 \
@@ -211,7 +215,7 @@ TLS_SERVER_NAME=localhost \
   docker compose up --build
 ```
 
-`TLS_SERVER_NAME` should match a SAN on the server certificate (`localhost`, `tacra-server`, `host.docker.internal`, `127.0.0.1`, or `::1`). The default `localhost` works with `https://host.docker.internal:8443` because verification uses SNI, not the TCP hostname.
+`TLS_SERVER_NAME` should match a SAN on the RUP certificate (by default `localhost`, `tacra-server`, `host.docker.internal`, `127.0.0.1`, or `::1`; set `RUP_SERVER_SANS` when generating). The default `localhost` works with `https://host.docker.internal:8443` because verification uses SNI, not the TCP hostname.
 
 ### Build images without compose
 
@@ -225,7 +229,7 @@ docker build -f server/Dockerfile -t tacra-server .
 
 `cai/Dockerfile` copies `cai/`, `platform/`, and `gen/go/`.  
 `client/Dockerfile` copies `client/` and `gen/go/` only (no CAI library).  
-`server/Dockerfile` copies `server/`, `cai/`, `platform/`, `gen/go/`, and `go.work`.
+`server/Dockerfile` copies `server/` only; the RUP is a standalone module with no TACRA protocol dependencies.
 
 ### Run the sidecar and client manually
 
@@ -247,16 +251,19 @@ docker run --rm --name tacra-client --network tacra-poc \
 
 With a user-defined bridge network, the sidecar's hostname is the container name (`tacra-cai`), so set `CAI_ADDR=tacra-cai:50051` instead of `cai:50051`. Compose DNS uses the service name `cai`.
 
-### PoC server in Docker
+### RUP in Docker
 
-Compose does not start the server. To run it in a container (CAAPI and HTTPS published to the host):
+Compose does not start the RUP. To run it in a container, mount the directory written by `init-local-rup-config.sh`:
 
 ```bash
 docker build -f server/Dockerfile -t tacra-server .
-docker run --rm -p 8443:8443 -p 9090:9090 --name tacra-server tacra-server
+docker run --rm -p 8443:8443 --name tacra-server \
+  -v "$PWD/deploy/config/local/tacra-rup:/etc/tacra-rup:ro" \
+  -e RUP_CONFIG=/etc/tacra-rup/rup.json \
+  tacra-server
 ```
 
-Then run `docker compose up --build` as above so the sidecar and client still use `host.docker.internal`.
+Trust-anchor paths inside `rup.json` must then resolve inside the container; relative paths are resolved from the `rup.json` directory.
 
 ### Local binaries (no Docker)
 
@@ -264,17 +271,16 @@ Same split, on the host:
 
 ```bash
 make server cai client
-./bin/server          # CAAPI :9090, HTTPS :8443
-./bin/cai             # sidecar :50051, CAAPI 127.0.0.1:9090
-./bin/client https://127.0.0.1:8443
+./bin/server                                         # RUP :8443
+CAAPI_ADDR=<cas-client-host>:<port> ./bin/cai        # sidecar :50051
+RUP_CA_FILE=deploy/config/local/tacra-rup/certs/rup-ca.pem ./bin/client https://127.0.0.1:8443
 ```
 
 ### Ports
 
 | Process | Port | Protocol |
 |---------|------|----------|
-| PoC server HTTPS (mTLS + JWT) | 8443 | HTTPS |
-| PoC server CAAPI | 9090 | gRPC |
+| Demo RUP | 8443 | HTTPS (mTLS optional per credential format) |
 | CAI sidecar | 50051 | gRPC |
 
 ## Configuration Management
@@ -488,7 +494,7 @@ Builds the `step-ca` binary and sets up the CA environment. The mounted configur
 
 Uses the existing Veraison project's own `make docker-deploy` workflow. The dispatcher invokes this for veraison-services instead of building a custom image.
 
-### PoC CAI sidecar, client, and server
+### PoC CAI sidecar, client, and RUP
 
 These images are **not** built by `components.sh`. Build them from `tacra/` so the context includes `gen/go/` (run `make proto` first).
 
@@ -496,9 +502,9 @@ These images are **not** built by `components.sh`. Build them from `tacra/` so t
 |-------|------------|---------------|--------|---------|
 | CAI sidecar | `cai/Dockerfile` | `tacra/` | `cai/`, `platform/`, `gen/go/` | gRPC `:50051` |
 | Attester client | `client/Dockerfile` | `tacra/` | `client/`, `gen/go/` | (one-shot; argument is the HTTPS URL) |
-| PoC server | `server/Dockerfile` | `tacra/` | `server/`, `cai/`, `platform/`, `gen/go/`, `go.work` | HTTPS `:8443`, CAAPI `:9090` |
+| Demo RUP | `server/Dockerfile` | `tacra/` | `server/` | HTTPS `:8443` |
 
-CAI and client Dockerfiles set `GOWORK=off` and use Go `replace` directives to sibling modules. The client image does not contain the CAI library or platform plug-in.
+All three Dockerfiles set `GOWORK=off`; CAI and client use Go `replace` directives to sibling modules. The client image does not contain the CAI library or platform plug-in.
 
 ## Deployment Workflows
 
@@ -632,11 +638,10 @@ Default ports:
 - Vault: 8200, 8201
 - SPIRE Server: 8081
 - step-ca: 9000
-- PoC server HTTPS: 8443
-- PoC server CAAPI: 9090
+- Demo RUP HTTPS: 8443
 - CAI sidecar: 50051 (compose network only unless you publish it)
 
-If `docker compose up` fails with "connection refused" to `host.docker.internal:9090` or `:8443`, start `./bin/server` on the host first (or run the `tacra-server` image as in [PoC server in Docker](#poc-server-in-docker)).
+If `docker compose up` fails with "connection refused" to `CAAPI_ADDR`, no CAAPI server is listening there: this repository no longer contains one. If it fails against `:8443`, start `./bin/server` on the host first (or run the `tacra-server` image as in [RUP in Docker](#rup-in-docker)).
 
 If the client fails TLS hostname verification, set `TLS_SERVER_NAME` to a SAN on the server certificate (`localhost` is the compose default).
 
