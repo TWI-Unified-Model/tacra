@@ -5,7 +5,7 @@
 set -euo pipefail
 
 readonly SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-readonly CONFIG_DIR="${DEPLOY_CONFIG_DIR:-${SCRIPT_DIR}/config/local}/tacra-rup"
+readonly CONFIG_DIR="${DEPLOY_CONFIG_DIR:-${SCRIPT_DIR}/config/local}/rup"
 readonly CERT_DIR="${CONFIG_DIR}/certs"
 
 readonly CERT_DAYS="${RUP_CERT_DAYS:-30}"

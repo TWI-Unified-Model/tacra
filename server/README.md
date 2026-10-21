@@ -65,13 +65,13 @@ X.509 client certificate and a bearer JWT.
 ## Configuration
 
 `main.go` loads only `RUP_CONFIG`. The default is
-`deploy/config/local/tacra-rup/rup.json`, relative to `tacra/`. Unknown fields
+`deploy/config/local/rup/rup.json`, relative to `tacra/`. Unknown fields
 are rejected. Relative paths are resolved from the configuration file's
 directory. See [testdata/rup.json](testdata/rup.json) for a complete example.
 
 | Environment variable | Default | Meaning |
 | --- | --- | --- |
-| `RUP_CONFIG` | `deploy/config/local/tacra-rup/rup.json` | RUP configuration |
+| `RUP_CONFIG` | `deploy/config/local/rup/rup.json` | RUP configuration |
 | `HTTPS_ADDR` | `:8443` | Listen address |
 
 ### Generating a local configuration
@@ -79,7 +79,7 @@ directory. See [testdata/rup.json](testdata/rup.json) for a complete example.
 [`deploy/init-local-rup-config.sh`](../deploy/init-local-rup-config.sh)
 follows the pattern of `init-local-est-config.sh`. It creates a 30-day
 development CA and server certificate for the RUP's own TLS identity. It also
-writes `rup.json` under `deploy/config/local/tacra-rup/`, which is ignored by
+writes `rup.json` under `deploy/config/local/rup/`, which is ignored by
 Git. The script **never generates client trust anchors**. Supply the issuer's
 trust material:
 
@@ -99,12 +99,12 @@ make server && ./bin/server
 - **No trust anchors:** without trust anchors, the RUP starts but rejects every
   request.
 - **Existing configuration:** if `rup.json` already exists, the script leaves
-  it unchanged. To regenerate it, remove `deploy/config/local/tacra-rup/`.
+  it unchanged. To regenerate it, remove `deploy/config/local/rup/`.
 
 ### Client trust in the RUP
 
 The client authenticates the RUP through `RUP_CA_FILE`, for example
-`deploy/config/local/tacra-rup/certs/rup-ca.pem`. This identity is independent
+`deploy/config/local/rup/certs/rup-ca.pem`. This identity is independent
 of the CA that issued the client's credential. If `RUP_CA_FILE` is unset,
 `tacra/client` falls back to the CA in its acquired certificate chain.
 

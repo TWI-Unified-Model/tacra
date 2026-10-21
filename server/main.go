@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"time"
@@ -10,15 +11,16 @@ import (
 const (
 	// defaultConfigPath is where deploy/init-local-rup-config.sh writes rup.json,
 	// relative to tacra/, where ./bin/server runs.
-	defaultConfigPath = "deploy/config/local/tacra-rup/rup.json"
-	defaultHTTPSAddr  = ":8443"
+	defaultConfigPath = "deploy/config/local/rup/rup.json"
+	defaultHTTPSHost  = ""
+	defaultHTTPSPort  = "8443"
 	readHeaderTimeout = 10 * time.Second
 	// demoReceivedURI is the demo RUP's success response body.
 	demoReceivedURI = "https://example.com/received"
 )
 
 func main() {
-	httpsAddr := envOr("HTTPS_ADDR", defaultHTTPSAddr)
+	httpsAddr := envOr("HTTPS_ADDR", net.JoinHostPort(defaultHTTPSHost, defaultHTTPSPort))
 	configPath := envOr("RUP_CONFIG", defaultConfigPath)
 
 	cfg, err := LoadConfig(configPath)

@@ -129,8 +129,8 @@ The attester (HTTP client) runs in Docker and does **not** link the CAI library.
 
 ```
 ┌─────────────┐   AcquireCredential gRPC   ┌──────────────┐  CAAPI gRPC   ┌──────────────────────────┐
-│ client      │ ─────────────────────────► │ cai sidecar  │ ────────────► │ CAS client (CAAPI server)│
-│ (attester)  │                            │ :50051       │               │ external; not in this repo│
+│ client      │ ─────────────────────────► │ cai sidecar  │ ────────────► │ CAS client (CAAPI server) │
+│ (attester)  │                            │ :50051       │               │ external CAS endpoint     │
 └──────┬──────┘                            └──────────────┘               └──────────────────────────┘
        │ HTTPS mTLS (+ optional Bearer JWT / WIT)
        ▼
@@ -201,10 +201,10 @@ Build context for both is the `tacra/` directory (not the subdirectory).
 | `CAI_LISTEN` | `cai` | `:50051` | Sidecar listen address |
 | `CAI_ADDR` | `client` | `cai:50051` (compose) | CAI sidecar gRPC address |
 | `TLS_SERVER_NAME` | `client` | `localhost` | SNI / certificate hostname for the RUP |
-| `RUP_CA_FILE` | `client` | `/etc/tacra-rup/rup-ca.pem` (compose) | CA that authenticates the RUP's server certificate; if unset, the client falls back to the CA in its acquired certificate chain |
+| `RUP_CA_FILE` | `client` | `/etc/rup/rup-ca.pem` (compose) | CA that authenticates the RUP's server certificate; if unset, the client falls back to the CA in its acquired certificate chain |
 | `CLIENT_SERVER` | compose `command` | `https://host.docker.internal:8443` | RUP URL passed as the client argument |
 | `HTTPS_ADDR` | host `./bin/server` | `:8443` | RUP HTTPS listen address |
-| `RUP_CONFIG` | host `./bin/server` | `deploy/config/local/tacra-rup/rup.json` | RUP JSON configuration, written by `init-local-rup-config.sh` (format: `server/testdata/rup.json`) |
+| `RUP_CONFIG` | host `./bin/server` | `deploy/config/local/rup/rup.json` | RUP JSON configuration, written by `init-local-rup-config.sh` (format: `server/testdata/rup.json`) |
 
 Example: RUP not on the default host port:
 
@@ -258,8 +258,8 @@ Compose does not start the RUP. To run it in a container, mount the directory wr
 ```bash
 docker build -f server/Dockerfile -t tacra-server .
 docker run --rm -p 8443:8443 --name tacra-server \
-  -v "$PWD/deploy/config/local/tacra-rup:/etc/tacra-rup:ro" \
-  -e RUP_CONFIG=/etc/tacra-rup/rup.json \
+  -v "$PWD/deploy/config/local/rup:/etc/rup:ro" \
+  -e RUP_CONFIG=/etc/rup/rup.json \
   tacra-server
 ```
 
@@ -273,7 +273,7 @@ Same split, on the host:
 make server cai client
 ./bin/server                                         # RUP :8443
 CAAPI_ADDR=<cas-client-host>:<port> ./bin/cai        # sidecar :50051
-RUP_CA_FILE=deploy/config/local/tacra-rup/certs/rup-ca.pem ./bin/client https://127.0.0.1:8443
+RUP_CA_FILE=deploy/config/local/rup/certs/rup-ca.pem ./bin/client https://127.0.0.1:8443
 ```
 
 ### Ports

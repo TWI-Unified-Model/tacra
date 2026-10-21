@@ -28,9 +28,9 @@ services:
     environment:
       CAI_ADDR: cai:50051
       TLS_SERVER_NAME: ${TLS_SERVER_NAME:-localhost}
-      RUP_CA_FILE: ${RUP_CA_FILE:-/etc/tacra-rup/rup-ca.pem}
+      RUP_CA_FILE: ${RUP_CA_FILE:-/etc/rup/rup-ca.pem}
     volumes:
-      - ${RUP_CERTS_DIR:-./deploy/config/local/tacra-rup/certs}/rup-ca.pem:/etc/tacra-rup/rup-ca.pem:ro
+      - ${RUP_CERTS_DIR:-./deploy/config/local/rup/certs}/rup-ca.pem:/etc/rup/rup-ca.pem:ro
     extra_hosts:
       - "host.docker.internal:host-gateway"
     command: ["${CLIENT_SERVER:-https://host.docker.internal:8443}"]
