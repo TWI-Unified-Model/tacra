@@ -129,8 +129,8 @@ The attester (HTTP client) runs in Docker and does **not** link the CAI library.
 
 ```
 ┌─────────────┐   AcquireCredential gRPC   ┌──────────────┐  CAAPI gRPC   ┌──────────────────────────┐
-│ client      │ ─────────────────────────► │ cai sidecar  │ ────────────► │ CAS client (CAAPI server) │
-│ (attester)  │                            │ :50051       │               │ external CAS endpoint     │
+│ client      │ ─────────────────────────► │ cai sidecar  │ ────────────► │ CAS client (CAAPI server)│
+│ (attester)  │                            │ :50051       │               │   external CAS endpoint  │
 └──────┬──────┘                            └──────────────┘               └──────────────────────────┘
        │ HTTPS mTLS (+ optional Bearer JWT / WIT)
        ▼
