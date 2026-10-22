@@ -1,98 +1,69 @@
 package main
 
 import (
-	"crypto/tls"
 	"fmt"
 	"net"
 	"net/http"
 	"os"
-	"strings"
 	"time"
+)
 
-	caapiv1 "github.com/TWI-Unified-Model/tacra/gen/go/caapi/v1"
-	"google.golang.org/grpc"
+const (
+	// defaultConfigPath is where deploy/init-local-rup-config.sh writes rup.json,
+	// relative to tacra/, where ./bin/server runs.
+	defaultConfigPath = "deploy/config/local/rup/rup.json"
+	defaultHTTPSHost  = ""
+	defaultHTTPSPort  = "8443"
+	readHeaderTimeout = 10 * time.Second
+	// demoReceivedURI is the demo RUP's success response body.
+	demoReceivedURI = "https://example.com/received"
 )
 
 func main() {
-	httpsAddr := envOr("HTTPS_ADDR", ":8443")
-	caapiAddr := envOr("CAAPI_ADDR", ":9090")
+	httpsAddr := envOr("HTTPS_ADDR", net.JoinHostPort(defaultHTTPSHost, defaultHTTPSPort))
+	configPath := envOr("RUP_CONFIG", defaultConfigPath)
 
-	iss, err := newIssuer()
+	cfg, err := LoadConfig(configPath)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "issuer: %v\n", err)
+		fmt.Fprintf(os.Stderr, "rup: %v\n", err)
 		os.Exit(1)
 	}
-	cas, err := newCAAPIServer(iss)
+	verifier, err := New(cfg)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "caapi: %v\n", err)
+		fmt.Fprintf(os.Stderr, "rup: %v\n", err)
 		os.Exit(1)
 	}
 
-	go func() {
-		if err := serveCAAPI(caapiAddr, cas); err != nil {
-			fmt.Fprintf(os.Stderr, "CAAPI server failed: %v\n", err)
-			os.Exit(1)
-		}
-	}()
-
-	fmt.Printf("CAAPI gRPC on %s\n", caapiAddr)
-	fmt.Printf("HTTPS mTLS on %s\n", httpsAddr)
-	if err := serveHTTPS(httpsAddr, iss, cas); err != nil {
+	fmt.Printf("RATS-unaware Relying Party on %s (config %s)\n", httpsAddr, configPath)
+	if err := serveHTTPS(httpsAddr, verifier); err != nil {
 		fmt.Fprintf(os.Stderr, "HTTPS server failed: %v\n", err)
 		os.Exit(1)
 	}
 }
 
-func serveCAAPI(addr string, cas *caapiServer) error {
-	ln, err := net.Listen("tcp", addr)
-	if err != nil {
-		return err
-	}
-	s := grpc.NewServer()
-	caapiv1.RegisterCredentialAcquisitionServiceServer(s, cas)
-	return s.Serve(ln)
-}
-
-func serveHTTPS(addr string, iss *issuer, cas *caapiServer) error {
+func serveHTTPS(addr string, verifier *Verifier) error {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		if r.TLS == nil || len(r.TLS.PeerCertificates) == 0 {
-			http.Error(w, "client certificate required", http.StatusUnauthorized)
-			return
-		}
-		auth := r.Header.Get("Authorization")
-		const bearer = "Bearer "
-		if !strings.HasPrefix(auth, bearer) {
-			http.Error(w, "bearer token required", http.StatusUnauthorized)
-			return
-		}
-		if err := cas.verifyJWT(strings.TrimPrefix(auth, bearer)); err != nil {
-			http.Error(w, "invalid token", http.StatusUnauthorized)
-			return
-		}
-
-		message := r.URL.Query().Get("message")
-		greeting := r.Header.Get("X-Greeting")
-		fmt.Printf("Received mTLS+JWT request. Message: %q, X-Greeting: %q, client CN: %q\n",
-			message, greeting, r.TLS.PeerCertificates[0].Subject.CommonName)
-
-		w.Header().Set("Content-Type", "text/plain")
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("https://example.com/received"))
-	})
+	mux.Handle("/", verifier.Middleware(http.HandlerFunc(demoHandler), func(r *http.Request, err error) {
+		fmt.Printf("RUP rejected request from %s: %v\n", r.RemoteAddr, err)
+	}))
 
 	srv := &http.Server{
 		Addr:              addr,
 		Handler:           mux,
-		ReadHeaderTimeout: 10 * time.Second,
-		TLSConfig: &tls.Config{
-			MinVersion:   tls.VersionTLS12,
-			Certificates: []tls.Certificate{iss.serverTLS},
-			ClientCAs:    iss.clientCAPool(),
-			ClientAuth:   tls.RequireAndVerifyClientCert,
-		},
+		ReadHeaderTimeout: readHeaderTimeout,
+		TLSConfig:         verifier.TLSConfig(),
 	}
 	return srv.ListenAndServeTLS("", "")
+}
+
+func demoHandler(w http.ResponseWriter, r *http.Request) {
+	p, _ := PrincipalFrom(r.Context())
+	fmt.Printf("Received authenticated request. Formats: %v, subject: %q, Message: %q, X-Greeting: %q\n",
+		p.Formats, p.Subject, r.URL.Query().Get("message"), r.Header.Get("X-Greeting"))
+
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write([]byte(demoReceivedURI))
 }
 
 func envOr(key, fallback string) string {

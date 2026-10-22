@@ -43,6 +43,7 @@ export DEPLOY_CONFIG_DIR="$PWD/deploy/config/local"
 │   ├── components.sh           # Main deployment dispatcher script
 │   ├── init-local-est-config.sh             # Local EST config generator
 │   ├── init-local-hashicorp-vault-config.sh # Local HashiCorp Vault config generator
+│   ├── init-local-rup-config.sh             # Local demo RUP TLS identity + rup.json generator
 │   ├── init-local-spiffe-spire-config.sh    # Local SPIFFE/SPIRE config generator
 │   ├── init-local-step-ca-config.sh         # Local step-ca config generator
 │   └── config/
@@ -69,7 +70,7 @@ export DEPLOY_CONFIG_DIR="$PWD/deploy/config/local"
 ├── README.md                   # This file
 ├── readme_docker_build_deploy.md # Docker deployment guide
 ├── readme_install_prereq.md    # Installation prerequisites
-└── server/                     # PoC Server
+└── server/                     # Demo RATS-unaware Relying Party (RUP); see server/README.md
 ```
 
 ## Component Integration

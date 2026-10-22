@@ -72,6 +72,17 @@ func main() {
 		fmt.Fprintf(os.Stderr, "X.509 credential: %v\n", err)
 		os.Exit(1)
 	}
+	// The RUP's server identity is independent of the credential's issuer.
+	if caFile := os.Getenv("RUP_CA_FILE"); caFile != "" {
+		if roots, err = loadRoots(caFile); err != nil {
+			fmt.Fprintf(os.Stderr, "RUP_CA_FILE: %v\n", err)
+			os.Exit(1)
+		}
+	}
+	if roots == nil {
+		fmt.Fprintf(os.Stderr, "No trust anchor for the RUP: set RUP_CA_FILE\n")
+		os.Exit(1)
+	}
 	fmt.Println("Acquired X.509 certificate.")
 
 	fmt.Printf("Acquiring JWT for %s via CAI sidecar...\n", serverURL.String())
@@ -151,15 +162,18 @@ func tlsCertFromCAI(resp *caiv1.AcquireCredentialResponse) (tls.Certificate, *x5
 	if err != nil {
 		return tls.Certificate{}, nil, err
 	}
-	if len(certs) < 2 {
-		return tls.Certificate{}, nil, fmt.Errorf("X.509 credential has no CA certificate to verify the server")
+	if len(certs) == 0 {
+		return tls.Certificate{}, nil, fmt.Errorf("X.509 credential has no certificate")
 	}
 
 	chain := make([][]byte, 0, len(certs))
-	roots := x509.NewCertPool()
+	var roots *x509.CertPool
 	for i, c := range certs {
 		chain = append(chain, c.Raw)
 		if i > 0 {
+			if roots == nil {
+				roots = x509.NewCertPool()
+			}
 			roots.AddCert(c)
 		}
 	}
@@ -167,6 +181,18 @@ func tlsCertFromCAI(resp *caiv1.AcquireCredentialResponse) (tls.Certificate, *x5
 		Certificate: chain,
 		PrivateKey:  key,
 	}, roots, nil
+}
+
+func loadRoots(path string) (*x509.CertPool, error) {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	pool := x509.NewCertPool()
+	if !pool.AppendCertsFromPEM(b) {
+		return nil, fmt.Errorf("%s contains no PEM certificates", path)
+	}
+	return pool, nil
 }
 
 func parseCerts(doc []byte) ([]*x509.Certificate, error) {
