@@ -4,9 +4,9 @@ import (
 	"bytes"
 	"crypto/ecdsa"
 	"crypto/sha512"
-	"crypto/x509"
 	"errors"
 	"fmt"
+	"maps"
 	"strings"
 	"sync"
 	"time"
@@ -17,18 +17,23 @@ import (
 	"github.com/google/go-configfs-tsm/report"
 	"github.com/google/go-sev-guest/abi"
 	"github.com/google/go-sev-guest/verify/trust"
-	"github.com/veraison/eat"
 )
 
 // TSMReportMediaTypeCBOR is the media type under which the Veraison sevsnp
 // scheme accepts a Linux configfs-tsm report as Evidence.
 const TSMReportMediaTypeCBOR = "application/vnd.veraison.tsm-report+cbor"
 
+// The bounds of an eat_nonce (RFC 9711, Section 4.1): 8 to 64 octets.
+const (
+	minNonceSize = 8
+	maxNonceSize = 64
+)
+
 // snpProvider is the configfs-tsm provider name of an SEV-SNP guest. The report
-// layout and the certificate-table GUIDs come from go-sev-guest's abi package.
+// layout and the certificate-table GUIDs come from the abi package of go-sev-guest.
 const snpProvider = "sev_guest"
 
-// Names under which ParseSNPCertTable returns the host's certificates.
+// Names under which ParseSNPCertTable returns the certificates of the host.
 const (
 	SNPCertVCEK = "VCEK"
 	SNPCertVLEK = "VLEK"
@@ -42,14 +47,13 @@ const (
 	TSMClaimFreshnessKind    = "freshness-kind"
 	TSMClaimFreshnessElement = "freshness-element"
 	TSMClaimTarget           = "target"
-	TSMClaimRelyingParty     = "relying-party"
 	TSMClaimBindingValue     = "binding-value"
 	// TSMClaimCertTableCompleted (SEV-SNP) is true when the plug-in appended
-	// AMD's ASK or ASVK and ARK to the host's certificate table.
+	// the AMD ASK or ASVK and ARK to the certificate table of the host.
 	TSMClaimCertTableCompleted = "cert-table-completed"
 )
 
-// snpCertGUIDs names the host's certificate-table entries by the GUIDs
+// snpCertGUIDs names the certificate-table entries of the host by the GUIDs
 // go-sev-guest defines.
 var snpCertGUIDs = map[string]string{
 	abi.VcekGUID: SNPCertVCEK,
@@ -66,7 +70,7 @@ var (
 	ErrReportDataMismatch = errors.New("platform: REPORT_DATA differs from the requested binding value")
 	// ErrFreshnessElement is returned when the freshness element does not
 	// fit the Freshness Kind.
-	ErrFreshnessElement = errors.New("platform: freshness element does not fit the freshness kind")
+	ErrFreshnessElement = errors.New("platform: freshness element does not fit the Freshness Kind")
 )
 
 // tsmReport is the Veraison TSM report (github.com/veraison/ratsd tokens,
@@ -85,13 +89,15 @@ type tsmConfig struct {
 	client        configfsi.Client
 	clock         func() time.Time
 	localEpoch    []byte
-	completeChain bool // SEV-SNP: append AMD's ASK/ASVK and ARK when the host leaves them out
+	completeChain bool       // SEV-SNP: append the ASK or ASVK and ARK of AMD when the host leaves them out
+	amdChainsDir  string     // SEV-SNP: a directory of chains in place of the copies this Workload ships
+	amdChains     *amdChains // SEV-SNP: the chains, loaded when completeChain is set
 }
 
 // TSMOption configures a configfs-tsm back-end.
 type TSMOption func(*tsmConfig)
 
-// WithTSMClient replaces the configfs client (tests use a fake).
+// WithTSMClient replaces the configfs client (tests use a mock).
 func WithTSMClient(c configfsi.Client) TSMOption {
 	return func(p *tsmConfig) {
 		p.client = c
@@ -112,10 +118,19 @@ func WithLocalEpoch(epoch []byte) TSMOption {
 	}
 }
 
-// WithoutChainCompletion keeps the host's certificate table exactly as delivered.
+// WithoutChainCompletion keeps the certificate table of the host exactly as delivered.
 func WithoutChainCompletion() TSMOption {
 	return func(p *tsmConfig) {
 		p.completeChain = false
+	}
+}
+
+// WithAMDChains names a directory of PEM files, the ASK or ASVK and ARK of AMD
+// per product line, in place of the copies this Workload ships; empty keeps
+// the copies.
+func WithAMDChains(dir string) TSMOption {
+	return func(p *tsmConfig) {
+		p.amdChainsDir = dir
 	}
 }
 
@@ -123,6 +138,13 @@ func newTSMConfig(opts []TSMOption) (tsmConfig, error) {
 	c := tsmConfig{clock: time.Now, completeChain: true}
 	for _, o := range opts {
 		o(&c)
+	}
+	if c.completeChain {
+		chains, err := loadAMDChains(c.amdChainsDir)
+		if err != nil {
+			return c, err
+		}
+		c.amdChains = chains
 	}
 	if c.client == nil {
 		client, err := linuxtsm.MakeClient()
@@ -135,8 +157,8 @@ func newTSMConfig(opts []TSMOption) (tsmConfig, error) {
 }
 
 // SEVSNP is the AMD SEV-SNP back-end. Evidence is a configfs-tsm report whose
-// REPORT_DATA is BindingValue(freshness element, Target, RelyingParty,
-// subject), with the host's certificate table as auxblob, encoded as a
+// REPORT_DATA is BindingValue(freshness element, Target, subject), with the
+// certificate table of the host as auxblob, encoded as a
 // Veraison TSM report. Keys are generated in guest memory.
 type SEVSNP struct {
 	tsmConfig
@@ -167,6 +189,8 @@ func (p *tsmConfig) GenerateCEK(alg EncryptionAlgorithm) (*KeyPair, error) {
 		return generateP256()
 	case EncryptionAlgorithmRSA2048:
 		return generateRSA2048()
+	case EncryptionAlgorithmMLKEM768P256:
+		return generateMLKEM768P256()
 	default:
 		return nil, fmt.Errorf("%w: %d", ErrUnsupportedEncryptionAlgorithm, alg)
 	}
@@ -190,8 +214,8 @@ func (p *tsmConfig) LocalEpoch() []byte {
 }
 
 // AttestationPublicKey implements Plugin: the key that signed the last report,
-// the VCEK or VLEK as the report's SIGNING_KEY names it, from the host's
-// certificate table; nil before the first report or when the table does not
+// the VCEK or VLEK as SIGNING_KEY of the report names it, from the certificate
+// table of the host; nil before the first report or when the table does not
 // hold it.
 func (p *SEVSNP) AttestationPublicKey() *ecdsa.PublicKey {
 	p.mu.Lock()
@@ -201,13 +225,13 @@ func (p *SEVSNP) AttestationPublicKey() *ecdsa.PublicKey {
 
 // FreshnessElement returns the value bound as the freshness element for req:
 // the Handle for the present kinds, the local epoch (which the CAI passes as
-// the handle) for absent-epoch, eight octets of Unix time for absent-timestamp
-// (the request's handle when it carries them, else the clock), and nothing for
+// the Handle) for absent-epoch, eight octets of Unix time for absent-timestamp
+// (the Handle of the request when it carries them, else the clock), and nothing for
 // absent-none.
 func (p *tsmConfig) FreshnessElement(req EvidenceRequest) ([]byte, error) {
 	switch req.FreshnessKind {
 	case FreshnessKindPresentNonce, FreshnessKindPresentEpoch, FreshnessKindAbsentEpoch:
-		if n := len(req.FreshnessHandle); n < eat.MinNonceSize || n > eat.MaxNonceSize {
+		if n := len(req.FreshnessHandle); n < minNonceSize || n > maxNonceSize {
 			return nil, fmt.Errorf("%w: %d octets", ErrInvalidFreshnessHandle, n)
 		}
 		return append([]byte(nil), req.FreshnessHandle...), nil
@@ -216,12 +240,12 @@ func (p *tsmConfig) FreshnessElement(req EvidenceRequest) ([]byte, error) {
 			return append([]byte(nil), req.FreshnessHandle...), nil
 		}
 		if len(req.FreshnessHandle) != 0 {
-			return nil, fmt.Errorf("%w: absent-timestamp takes %d octets", ErrFreshnessElement, TimestampElementSize)
+			return nil, fmt.Errorf("%w: absent-timestamp needs %d octets", ErrFreshnessElement, TimestampElementSize)
 		}
 		return TimestampElement(p.clock().Unix()), nil
 	case FreshnessKindAbsentNone:
 		if len(req.FreshnessHandle) != 0 {
-			return nil, fmt.Errorf("%w: absent-none takes none", ErrFreshnessElement)
+			return nil, fmt.Errorf("%w: absent-none needs none", ErrFreshnessElement)
 		}
 		return nil, nil
 	default:
@@ -229,8 +253,9 @@ func (p *tsmConfig) FreshnessElement(req EvidenceRequest) ([]byte, error) {
 	}
 }
 
-// Subject returns the binding subject: the DER CSR for Enrollment, the DER
-// SubjectPublicKeyInfo of the bound key for Retrieval.
+// Subject returns the binding subject: the DER CSR for Enrollment, CEKpub for
+// Retrieval (CEKPub: the encapsulation key itself for MLKEM768-P256, else the
+// DER SubjectPublicKeyInfo of the bound key).
 func Subject(req EvidenceRequest) ([]byte, error) {
 	if resolveKeyUse(req) == BoundKeyUseSign {
 		if len(req.CSR) == 0 {
@@ -241,12 +266,12 @@ func Subject(req EvidenceRequest) ([]byte, error) {
 	if req.BoundKey == nil {
 		return nil, ErrMissingBoundKey
 	}
-	return x509.MarshalPKIXPublicKey(req.BoundKey)
+	return CEKPub(req.BoundKey)
 }
 
 // GenerateEvidence implements Plugin. Claims carries, unsigned, what the
 // Relying Party needs to recompute the binding: the freshness element (which
-// for absent-timestamp originates here), the Target and the RelyingParty.
+// for absent-timestamp originates here) and the Target.
 func (p *SEVSNP) GenerateEvidence(req EvidenceRequest) (*Evidence, error) {
 	elem, err := p.FreshnessElement(req)
 	if err != nil {
@@ -256,7 +281,7 @@ func (p *SEVSNP) GenerateEvidence(req EvidenceRequest) (*Evidence, error) {
 	if err != nil {
 		return nil, err
 	}
-	bv := BindingValue(elem, req.Target, req.RelyingParty, subject)
+	bv := BindingValue(elem, req.Target, subject)
 
 	resp, err := report.Get(p.client, &report.Request{InBlob: bv[:], GetAuxBlob: true})
 	if err != nil {
@@ -277,7 +302,7 @@ func (p *SEVSNP) GenerateEvidence(req EvidenceRequest) (*Evidence, error) {
 	}
 	// Keep the key that signed this report for AttestationPublicKey. The table
 	// is outside the signed report, so the key is a hint only; the Verifier
-	// checks the report against AMD's chain.
+	// checks the report against the AMD chain.
 	signer := reportSigner(rep.GetSignerInfo(), resp.AuxBlob)
 	p.mu.Lock()
 	p.vcek = signer
@@ -286,7 +311,7 @@ func (p *SEVSNP) GenerateEvidence(req EvidenceRequest) (*Evidence, error) {
 	aux := resp.AuxBlob
 	completed := false
 	if p.completeChain && len(aux) > 0 {
-		if aux, completed, err = completeCertTable(aux); err != nil {
+		if aux, completed, err = completeCertTable(aux, p.amdChains); err != nil {
 			return nil, err
 		}
 	}
@@ -294,8 +319,8 @@ func (p *SEVSNP) GenerateEvidence(req EvidenceRequest) (*Evidence, error) {
 		map[string]any{TSMClaimCertTableCompleted: completed})
 }
 
-// reportSigner returns the public key of the certificate in the host's table
-// that the report's SIGNING_KEY names (VCEK or VLEK), or nil when the report is
+// reportSigner returns the public key of the certificate in the table of the
+// host that SIGNING_KEY of the report names (VCEK or VLEK), or nil when the report is
 // unsigned or the table does not hold that certificate.
 func reportSigner(signerInfo uint32, table []byte) *ecdsa.PublicKey {
 	info, err := abi.ParseSignerInfo(signerInfo)
@@ -335,12 +360,9 @@ func tsmEvidence(req EvidenceRequest, elem []byte, bv [sha512.Size]byte, rep tsm
 		TSMClaimFreshnessKind:    int32(req.FreshnessKind),
 		TSMClaimFreshnessElement: elem,
 		TSMClaimTarget:           req.Target,
-		TSMClaimRelyingParty:     req.RelyingParty,
 		TSMClaimBindingValue:     bv[:],
 	}
-	for k, v := range extra {
-		c[k] = v
-	}
+	maps.Copy(c, extra)
 	claims, err := cbor.Marshal(c)
 	if err != nil {
 		return nil, fmt.Errorf("platform: claims CBOR: %w", err)
@@ -348,7 +370,7 @@ func tsmEvidence(req EvidenceRequest, elem []byte, bv [sha512.Size]byte, rep tsm
 	return &Evidence{Token: token, MediaType: TSMReportMediaTypeCBOR, Claims: claims}, nil
 }
 
-// ParseSNPCertTable splits the host's certificate table, as go-sev-guest's abi
+// ParseSNPCertTable splits the certificate table of the host, as the abi package of go-sev-guest
 // reads it, into the certificates keyed by the SNPCert names; unknown GUIDs are
 // kept under their GUID string.
 func ParseSNPCertTable(buf []byte) (map[string][]byte, error) {

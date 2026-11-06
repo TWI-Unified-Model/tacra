@@ -1,11 +1,17 @@
-// Package platform is the TACRA Platform Plug-In used by the Credential
-// Acquisition Interface (CAI).
+// Package platform is the TACRA Platform Plug-In: the side of the Attester in
+// draft-novak-rats-tacra, which the Credential Acquisition Interface (CAI) or
+// an attested Workload calls to generate Credential Signing Keys (CSK) and
+// Credential Encryption Keys (CEK), and Remote Attestation Evidence bound to
+// them.
 //
-// CAI calls this package to generate Credential Encryption Keys (CEK),
-// Credential Signing Keys (CSK), and Remote Attestation Evidence. Evidence is
-// an RFC 9711 Entity Attestation Token serialized as a tagged COSE_Sign1
-// (CBOR tag 18), which open-source RATS verifiers such as Veraison consume.
+// The hardware back-ends are AMD SEV-SNP (sevsnp.go) and Intel TDX (tdx.go),
+// through the Linux configfs-tsm interface: the Evidence is the report of the
+// hardware, whose report data is the TACRA binding value (binding.go), with
+// the certificates of the host, as the media type
+// application/vnd.veraison.tsm-report+cbor. They ran on Google Cloud and AWS
+// SEV-SNP guests and on Google Cloud TDX guests against a Veraison Verifier.
 //
-// This package ships a software-simulated plug-in. Hardware backends (Intel
-// TDX, AMD SEV-SNP, and so on) can implement the same Plugin interface later.
+// The simulated plug-in (sim.go) runs without hardware: its Evidence is an
+// RFC 9711 Entity Attestation Token serialized as a tagged COSE_Sign1, signed
+// by an in-memory Attestation Key.
 package platform

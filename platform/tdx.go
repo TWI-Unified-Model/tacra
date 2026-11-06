@@ -36,8 +36,8 @@ var ErrNotTDX = errors.New("platform: configfs-tsm provider is not tdx_guest")
 
 // TDX is the Intel TDX back-end. Evidence is a configfs-tsm report whose
 // outblob is a TDX quote with REPORTDATA = BindingValue(freshness element,
-// Target, RelyingParty, subject), encoded as a Veraison TSM report like the
-// SEV-SNP back-end's. Keys are generated in guest memory.
+// Target, subject), encoded as a Veraison TSM report like the one of the
+// SEV-SNP back-end. Keys are generated in guest memory.
 type TDX struct {
 	tsmConfig
 }
@@ -74,7 +74,7 @@ func (p *TDX) GenerateEvidence(req EvidenceRequest) (*Evidence, error) {
 	if err != nil {
 		return nil, err
 	}
-	bv := BindingValue(elem, req.Target, req.RelyingParty, subject)
+	bv := BindingValue(elem, req.Target, subject)
 
 	resp, err := report.Get(p.client, &report.Request{InBlob: bv[:]})
 	if err != nil {

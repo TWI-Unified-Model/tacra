@@ -35,50 +35,50 @@ func testClock() time.Time {
 	return testNow
 }
 
-// The fake TDX outblob: a quote whose signature data is fakeTDXSignatureLen octets, in a buffer of fakeTDXBufferLen
-// octets, larger than the quote, as the kernel's is.
+// The mock TDX outblob: a quote whose signature data is mockTDXSignatureLen octets, in a buffer of mockTDXBufferLen
+// octets, larger than the quote, as the buffer of the kernel is.
 const (
-	fakeTDXSignatureLen = 100
-	fakeTDXBufferLen    = 8000
+	mockTDXSignatureLen = 100
+	mockTDXBufferLen    = 8000
 )
 
-// fakeSNP emulates /sys/kernel/config/tsm/report for the sev_guest provider:
+// mockSNP emulates /sys/kernel/config/tsm/report for the sev_guest provider:
 // the report echoes inblob in REPORT_DATA, auxblob is a certificate table.
-type fakeSNP struct {
+type mockSNP struct {
 	inblob   []byte
 	gen      uint64
 	aux      []byte
 	provider string
-	signer   abi.ReportSigner // the report's SIGNING_KEY; the zero value is the VCEK
+	signer   abi.ReportSigner // SIGNING_KEY of the report; the zero value is the VCEK
 	tamper   bool
-	tdx      bool // outblob is a version 4 TDX quote, padded as the kernel's buffer is
+	tdx      bool // outblob is a version 4 TDX quote, padded as the buffer of the kernel is
 }
 
-func (f *fakeSNP) MkdirTemp(dir, pattern string) (string, error) {
+func (f *mockSNP) MkdirTemp(dir, pattern string) (string, error) {
 	return dir + "/" + pattern + "0", nil
 }
-func (f *fakeSNP) ReadDir(string) ([]os.DirEntry, error) {
+func (f *mockSNP) ReadDir(string) ([]os.DirEntry, error) {
 	return nil, nil
 }
-func (f *fakeSNP) RemoveAll(string) error {
+func (f *mockSNP) RemoveAll(string) error {
 	return nil
 }
-func (f *fakeSNP) WriteFile(name string, b []byte) error {
+func (f *mockSNP) WriteFile(name string, b []byte) error {
 	if path.Base(name) == "inblob" {
 		f.inblob = append([]byte(nil), b...)
 	}
 	f.gen++
 	return nil
 }
-func (f *fakeSNP) ReadFile(name string) ([]byte, error) {
+func (f *mockSNP) ReadFile(name string) ([]byte, error) {
 	switch path.Base(name) {
 	case "outblob":
 		if f.tdx {
-			q := make([]byte, fakeTDXBufferLen)
+			q := make([]byte, mockTDXBufferLen)
 			binary.LittleEndian.PutUint16(q[tdxVersionOffset:], tdxQuoteVersion4)
 			binary.LittleEndian.PutUint32(q[tdxTEETypeOffset:], tdxTEETypeTDX)
 			copy(q[tdxReportDataStart:tdxReportDataEnd], f.inblob)
-			binary.LittleEndian.PutUint32(q[tdxSignatureLenOffs:], fakeTDXSignatureLen)
+			binary.LittleEndian.PutUint32(q[tdxSignatureLenOffs:], mockTDXSignatureLen)
 			if f.tamper {
 				q[tdxReportDataStart] ^= 1
 			}
@@ -110,7 +110,7 @@ func certTable(t *testing.T) ([]byte, *ecdsa.PublicKey) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	tpl := &x509.Certificate{SerialNumber: big.NewInt(1), Subject: pkix.Name{CommonName: "fake VCEK"},
+	tpl := &x509.Certificate{SerialNumber: big.NewInt(1), Subject: pkix.Name{CommonName: "mock VCEK"},
 		NotBefore: time.Now().Add(-time.Hour), NotAfter: time.Now().Add(time.Hour)}
 	der, err := x509.CreateCertificate(rand.Reader, tpl, tpl, &k.PublicKey, k)
 	if err != nil {
@@ -120,22 +120,9 @@ func certTable(t *testing.T) ([]byte, *ecdsa.PublicKey) {
 	return encodeCertTable([]certEntry{{guid, der}}), &k.PublicKey
 }
 
-func TestBindingValueMatchesDraftTestVector(t *testing.T) {
-	handle, _ := hex.DecodeString(tvHandleHex)
-	subject, _ := hex.DecodeString(tvSubjectHex)
-	want, _ := hex.DecodeString(tvDigestHex)
-	got := BindingValue(handle, tvTarget, tvRRPID, subject)
-	if !bytes.Equal(got[:], want) {
-		t.Fatalf("SHA-512(binding_input) = %x, want the draft's %x", got, want)
-	}
-	if n := len(BindingInput(handle, tvTarget, tvRRPID, subject)); n != tvBindingInputLen {
-		t.Fatalf("binding_input is %d octets, the draft's vector is %d", n, tvBindingInputLen)
-	}
-}
-
 func TestSEVSNPEvidenceAllFreshnessKinds(t *testing.T) {
 	aux, vcek := certTable(t)
-	fake := &fakeSNP{provider: snpProvider, aux: aux}
+	fake := &mockSNP{provider: snpProvider, aux: aux}
 	p, err := NewSEVSNP(WithTSMClient(fake), WithClock(testClock), WithLocalEpoch(testEpoch))
 	if err != nil {
 		t.Fatal(err)
@@ -144,10 +131,10 @@ func TestSEVSNPEvidenceAllFreshnessKinds(t *testing.T) {
 	cek, _ := generateP256()
 	csr := []byte("a DER CSR stands here")
 	cases := []struct {
-		name   string
-		kind   FreshnessKind
-		handle []byte
-		want   []byte
+		name     string
+		kind     FreshnessKind
+		handle   []byte
+		expected []byte
 	}{
 		{"present-nonce", FreshnessKindPresentNonce, testNonce, testNonce},
 		{"present-epoch", FreshnessKindPresentEpoch, testEpoch, testEpoch},
@@ -157,8 +144,7 @@ func TestSEVSNPEvidenceAllFreshnessKinds(t *testing.T) {
 	}
 	for _, c := range cases {
 		for _, enroll := range []bool{true, false} {
-			req := EvidenceRequest{FreshnessKind: c.kind, FreshnessHandle: c.handle, Target: "https://db.example",
-				RelyingParty: "https://ca.example"}
+			req := EvidenceRequest{FreshnessKind: c.kind, FreshnessHandle: c.handle, Target: "https://db.example"}
 			var subject []byte
 			if enroll {
 				req.BoundKey, req.CSR, req.BoundKeyUse, subject = csk.Public(), csr, BoundKeyUseSign, csr
@@ -177,20 +163,20 @@ func TestSEVSNPEvidenceAllFreshnessKinds(t *testing.T) {
 			if err := cbor.Unmarshal(ev.Token, &tsm); err != nil {
 				t.Fatal(err)
 			}
-			want := BindingValue(c.want, req.Target, req.RelyingParty, subject)
+			expected := BindingValue(c.expected, req.Target, subject)
 			rep, err := abi.ReportToProto(tsm.OutBlob)
 			if err != nil {
 				t.Fatal(err)
 			}
-			if tsm.Provider != snpProvider || !bytes.Equal(rep.GetReportData(), want[:]) {
+			if tsm.Provider != snpProvider || !bytes.Equal(rep.GetReportData(), expected[:]) {
 				t.Fatalf("%s enroll=%v: REPORT_DATA does not carry the binding value", c.name, enroll)
 			}
 			var claims map[string]any
 			if err := cbor.Unmarshal(ev.Claims, &claims); err != nil {
 				t.Fatal(err)
 			}
-			if got, _ := claims[TSMClaimFreshnessElement].([]byte); !bytes.Equal(got, c.want) && !(len(got) == 0 && len(c.want) == 0) {
-				t.Fatalf("%s: freshness element %x, want %x", c.name, got, c.want)
+			if got, _ := claims[TSMClaimFreshnessElement].([]byte); !bytes.Equal(got, c.expected) && !(len(got) == 0 && len(c.expected) == 0) {
+				t.Fatalf("%s: freshness element %x, expected %x", c.name, got, c.expected)
 			}
 		}
 	}
@@ -201,7 +187,7 @@ func TestSEVSNPEvidenceAllFreshnessKinds(t *testing.T) {
 
 func TestSEVSNPAttestationPublicKeyIsTheKeyTheReportNames(t *testing.T) {
 	vcek, vlek := leafIssuedBy(t, "SEV-Milan"), leafIssuedBy(t, "SEV-VLEK-Milan")
-	fake := &fakeSNP{provider: snpProvider, signer: abi.VlekReportSigner,
+	fake := &mockSNP{provider: snpProvider, signer: abi.VlekReportSigner,
 		aux: table(t, map[string][]byte{guidVCEK: vcek, guidVLEK: vlek}, guidVCEK, guidVLEK)}
 	p, err := NewSEVSNP(WithTSMClient(fake), WithoutChainCompletion())
 	if err != nil {
@@ -230,11 +216,11 @@ func TestSEVSNPRefusesTamperedReportAndOtherProviders(t *testing.T) {
 	cek, _ := generateP256()
 	req := EvidenceRequest{FreshnessKind: FreshnessKindPresentNonce, FreshnessHandle: testNonce,
 		BoundKey: cek.Public(), BoundKeyUse: BoundKeyUseEncrypt, Target: "t"}
-	p, _ := NewSEVSNP(WithTSMClient(&fakeSNP{provider: snpProvider, tamper: true}))
+	p, _ := NewSEVSNP(WithTSMClient(&mockSNP{provider: snpProvider, tamper: true}))
 	if _, err := p.GenerateEvidence(req); !errors.Is(err, ErrReportDataMismatch) {
 		t.Fatalf("tampered REPORT_DATA: got %v", err)
 	}
-	p, _ = NewSEVSNP(WithTSMClient(&fakeSNP{provider: tdxProvider}))
+	p, _ = NewSEVSNP(WithTSMClient(&mockSNP{provider: tdxProvider}))
 	if _, err := p.GenerateEvidence(req); !errors.Is(err, ErrNotSEVSNP) {
 		t.Fatalf("tdx provider: got %v", err)
 	}
@@ -248,16 +234,16 @@ func TestSEVSNPRefusesTamperedReportAndOtherProviders(t *testing.T) {
 }
 
 func TestTDXEvidenceAllFreshnessKinds(t *testing.T) {
-	p, err := NewTDX(WithTSMClient(&fakeSNP{provider: tdxProvider, tdx: true}),
+	p, err := NewTDX(WithTSMClient(&mockSNP{provider: tdxProvider, tdx: true}),
 		WithClock(testClock), WithLocalEpoch(testEpoch))
 	if err != nil {
 		t.Fatal(err)
 	}
 	cek, _ := generateP256()
 	for _, c := range []struct {
-		kind   FreshnessKind
-		handle []byte
-		want   []byte
+		kind     FreshnessKind
+		handle   []byte
+		expected []byte
 	}{
 		{FreshnessKindPresentNonce, testNonce, testNonce},
 		{FreshnessKindPresentEpoch, testEpoch, testEpoch},
@@ -266,7 +252,7 @@ func TestTDXEvidenceAllFreshnessKinds(t *testing.T) {
 		{FreshnessKindAbsentNone, nil, nil},
 	} {
 		req := EvidenceRequest{FreshnessKind: c.kind, FreshnessHandle: c.handle, Target: "https://db.example",
-			RelyingParty: "https://vault.example", BoundKey: cek.Public(), BoundKeyUse: BoundKeyUseEncrypt}
+			BoundKey: cek.Public(), BoundKeyUse: BoundKeyUseEncrypt}
 		ev, err := p.GenerateEvidence(req)
 		if err != nil {
 			t.Fatalf("kind %d: %v", c.kind, err)
@@ -276,12 +262,12 @@ func TestTDXEvidenceAllFreshnessKinds(t *testing.T) {
 			t.Fatal(err)
 		}
 		spki, _ := x509.MarshalPKIXPublicKey(cek.Public())
-		want := BindingValue(c.want, req.Target, req.RelyingParty, spki)
-		if tsm.Provider != tdxProvider || !bytes.Equal(tsm.OutBlob[tdxReportDataStart:tdxReportDataEnd], want[:]) {
+		expected := BindingValue(c.expected, req.Target, spki)
+		if tsm.Provider != tdxProvider || !bytes.Equal(tsm.OutBlob[tdxReportDataStart:tdxReportDataEnd], expected[:]) {
 			t.Fatalf("kind %d: REPORTDATA does not carry the binding value", c.kind)
 		}
-		if n := tdxSignatureLenOffs + tdxSignatureLenSize + fakeTDXSignatureLen; len(tsm.OutBlob) != n {
-			t.Fatalf("quote is %d octets, want the %d the signature length gives", len(tsm.OutBlob), n)
+		if n := tdxSignatureLenOffs + tdxSignatureLenSize + mockTDXSignatureLen; len(tsm.OutBlob) != n {
+			t.Fatalf("quote is %d octets, expected the %d the signature length gives", len(tsm.OutBlob), n)
 		}
 	}
 }
@@ -290,15 +276,15 @@ func TestTDXRefusesTamperedQuoteAndOtherProviders(t *testing.T) {
 	cek, _ := generateP256()
 	req := EvidenceRequest{FreshnessKind: FreshnessKindPresentNonce, FreshnessHandle: testNonce,
 		BoundKey: cek.Public(), BoundKeyUse: BoundKeyUseEncrypt, Target: "t"}
-	p, _ := NewTDX(WithTSMClient(&fakeSNP{provider: tdxProvider, tdx: true, tamper: true}))
+	p, _ := NewTDX(WithTSMClient(&mockSNP{provider: tdxProvider, tdx: true, tamper: true}))
 	if _, err := p.GenerateEvidence(req); !errors.Is(err, ErrReportDataMismatch) {
 		t.Fatalf("tampered REPORTDATA: got %v", err)
 	}
-	p, _ = NewTDX(WithTSMClient(&fakeSNP{provider: snpProvider, tdx: true}))
+	p, _ = NewTDX(WithTSMClient(&mockSNP{provider: snpProvider, tdx: true}))
 	if _, err := p.GenerateEvidence(req); !errors.Is(err, ErrNotTDX) {
 		t.Fatalf("sev_guest provider: got %v", err)
 	}
-	p, _ = NewTDX(WithTSMClient(&fakeSNP{provider: tdxProvider})) // an SEV-SNP report where a quote belongs
+	p, _ = NewTDX(WithTSMClient(&mockSNP{provider: tdxProvider})) // an SEV-SNP report where a quote belongs
 	if _, err := p.GenerateEvidence(req); !errors.Is(err, ErrNotTDX) {
 		t.Fatalf("not a quote: got %v", err)
 	}

@@ -189,7 +189,7 @@ func TestEvidenceRejectsBadKey(t *testing.T) {
 		t.Fatalf("nil key: %v", err)
 	}
 
-	rsaKey, err := rsa.GenerateKey(rand.Reader, 1024)
+	rsaKey, err := rsa.GenerateKey(rand.Reader, 1024) //nolint:gosec // a key too small, which the plug-in must refuse
 	if err != nil {
 		t.Fatal(err)
 	}
