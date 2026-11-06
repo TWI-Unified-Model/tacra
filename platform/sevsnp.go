@@ -186,11 +186,11 @@ func (p *SEVSNP) Name() string {
 func (p *tsmConfig) GenerateCEK(alg EncryptionAlgorithm) (*KeyPair, error) {
 	switch alg {
 	case EncryptionAlgorithmECDHP256:
-		return generateP256()
+		return NewP256KeyPair()
 	case EncryptionAlgorithmRSA2048:
-		return generateRSA2048()
+		return NewRSA2048KeyPair()
 	case EncryptionAlgorithmMLKEM768P256:
-		return generateMLKEM768P256()
+		return NewMLKEM768P256KeyPair()
 	default:
 		return nil, fmt.Errorf("%w: %d", ErrUnsupportedEncryptionAlgorithm, alg)
 	}
@@ -200,9 +200,9 @@ func (p *tsmConfig) GenerateCEK(alg EncryptionAlgorithm) (*KeyPair, error) {
 func (p *tsmConfig) GenerateCSK(alg SigningAlgorithm) (*KeyPair, error) {
 	switch alg {
 	case SigningAlgorithmUnspecified, SigningAlgorithmECDSAP256:
-		return generateP256()
+		return NewP256KeyPair()
 	case SigningAlgorithmRSA2048:
-		return generateRSA2048()
+		return NewRSA2048KeyPair()
 	default:
 		return nil, fmt.Errorf("%w: %d", ErrUnsupportedSigningAlgorithm, alg)
 	}
@@ -257,7 +257,7 @@ func (p *tsmConfig) FreshnessElement(req EvidenceRequest) ([]byte, error) {
 // Retrieval (CEKPub: the encapsulation key itself for MLKEM768-P256, else the
 // DER SubjectPublicKeyInfo of the bound key).
 func Subject(req EvidenceRequest) ([]byte, error) {
-	if resolveKeyUse(req) == BoundKeyUseSign {
+	if ResolveKeyUse(req) == BoundKeyUseSign {
 		if len(req.CSR) == 0 {
 			return nil, errors.New("platform: Enrollment needs the CSR")
 		}

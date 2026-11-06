@@ -1,6 +1,8 @@
-package platform
+package sim
 
 import (
+	"github.com/TWI-Unified-Model/tacra/platform"
+
 	"crypto"
 	"crypto/ecdsa"
 	"crypto/elliptic"
@@ -26,26 +28,26 @@ const MediaTypeEATProfile = `application/eat+cwt; eat_profile="` + ProfileURI + 
 // Profile-specific CWT claim keys (private use, defined by ProfileURI).
 const (
 	ClaimCSR         int64 = -70001 // PKCS#10 CSR bytes
-	ClaimBoundKeyUse int64 = -70002 // BoundKeyUseEncrypt or BoundKeyUseSign
+	ClaimBoundKeyUse int64 = -70002 // platform.BoundKeyUseEncrypt or platform.BoundKeyUseSign
 )
 
 // Claims is the RFC 9711 EAT claims set signed as the COSE_Sign1 payload.
 type Claims struct {
-	Issuer        string           `cbor:"1,keyasint,omitempty"`
-	Subject       string           `cbor:"2,keyasint,omitempty"`
-	IssuedAt      int64            `cbor:"6,keyasint,omitempty"`
-	Cnf           *Confirmation    `cbor:"8,keyasint,omitempty"`
-	Nonce         *eat.Nonce       `cbor:"10,keyasint,omitempty"`
-	UEID          eat.UEID         `cbor:"256,keyasint,omitempty"`
-	HardwareModel []byte           `cbor:"259,keyasint,omitempty"`
-	OemBoot       *bool            `cbor:"262,keyasint,omitempty"`
-	DebugStatus   *eat.Debug       `cbor:"263,keyasint,omitempty"`
-	Profile       *eat.Profile     `cbor:"265,keyasint,omitempty"`
-	BootCount     *uint            `cbor:"267,keyasint,omitempty"`
-	BootSeed      []byte           `cbor:"268,keyasint,omitempty"`
-	SoftwareName  *eat.StringOrURI `cbor:"270,keyasint,omitempty"`
-	CSR           []byte           `cbor:"-70001,keyasint,omitempty"`
-	BoundKeyUse   BoundKeyUse      `cbor:"-70002,keyasint,omitempty"`
+	Issuer        string               `cbor:"1,keyasint,omitempty"`
+	Subject       string               `cbor:"2,keyasint,omitempty"`
+	IssuedAt      int64                `cbor:"6,keyasint,omitempty"`
+	Cnf           *Confirmation        `cbor:"8,keyasint,omitempty"`
+	Nonce         *eat.Nonce           `cbor:"10,keyasint,omitempty"`
+	UEID          eat.UEID             `cbor:"256,keyasint,omitempty"`
+	HardwareModel []byte               `cbor:"259,keyasint,omitempty"`
+	OemBoot       *bool                `cbor:"262,keyasint,omitempty"`
+	DebugStatus   *eat.Debug           `cbor:"263,keyasint,omitempty"`
+	Profile       *eat.Profile         `cbor:"265,keyasint,omitempty"`
+	BootCount     *uint                `cbor:"267,keyasint,omitempty"`
+	BootSeed      []byte               `cbor:"268,keyasint,omitempty"`
+	SoftwareName  *eat.StringOrURI     `cbor:"270,keyasint,omitempty"`
+	CSR           []byte               `cbor:"-70001,keyasint,omitempty"`
+	BoundKeyUse   platform.BoundKeyUse `cbor:"-70002,keyasint,omitempty"`
 }
 
 // Confirmation is the CWT cnf claim (RFC 8747): a COSE_Key of the bound
@@ -58,7 +60,7 @@ type Confirmation struct {
 // (*ecdsa.PublicKey or *rsa.PublicKey).
 func (c *Confirmation) BoundPublicKey() (crypto.PublicKey, error) {
 	if c == nil || len(c.COSEKey) == 0 {
-		return nil, fmt.Errorf("platform: missing cnf COSE_Key")
+		return nil, fmt.Errorf("sim: missing cnf COSE_Key")
 	}
 	var key cose.Key
 	if err := key.UnmarshalCBOR(c.COSEKey); err == nil {
@@ -79,34 +81,34 @@ type coseRSAKey struct {
 func parseRSACOSEKey(raw []byte) (*rsa.PublicKey, error) {
 	var k coseRSAKey
 	if err := decMode.Unmarshal(raw, &k); err != nil {
-		return nil, fmt.Errorf("platform: cnf COSE_Key: %w", err)
+		return nil, fmt.Errorf("sim: cnf COSE_Key: %w", err)
 	}
 	if k.Kty != 3 || len(k.N) == 0 || len(k.E) == 0 {
-		return nil, fmt.Errorf("platform: cnf COSE_Key is not ECDSA or RSA")
+		return nil, fmt.Errorf("sim: cnf COSE_Key is not ECDSA or RSA")
 	}
 	e := new(big.Int).SetBytes(k.E)
 	if !e.IsInt64() {
-		return nil, fmt.Errorf("platform: RSA exponent overflow")
+		return nil, fmt.Errorf("sim: RSA exponent overflow")
 	}
 	return &rsa.PublicKey{N: new(big.Int).SetBytes(k.N), E: int(e.Int64())}, nil
 }
 
 func encodeCOSEKey(pub crypto.PublicKey) (cbor.RawMessage, error) {
 	if pub == nil {
-		return nil, ErrMissingBoundKey
+		return nil, platform.ErrMissingBoundKey
 	}
 	switch k := pub.(type) {
 	case *ecdsa.PublicKey:
 		if k.Curve != elliptic.P256() {
-			return nil, fmt.Errorf("%w: curve %s", ErrUnsupportedKey, k.Curve.Params().Name)
+			return nil, fmt.Errorf("%w: curve %s", platform.ErrUnsupportedKey, k.Curve.Params().Name)
 		}
 		key, err := cose.NewKeyFromPublic(k)
 		if err != nil {
-			return nil, fmt.Errorf("platform: COSE_Key from public key: %w", err)
+			return nil, fmt.Errorf("sim: COSE_Key from public key: %w", err)
 		}
 		b, err := key.MarshalCBOR()
 		if err != nil {
-			return nil, fmt.Errorf("platform: marshal COSE_Key: %w", err)
+			return nil, fmt.Errorf("sim: marshal COSE_Key: %w", err)
 		}
 		return b, nil
 	case *rsa.PublicKey:
@@ -115,7 +117,7 @@ func encodeCOSEKey(pub crypto.PublicKey) (cbor.RawMessage, error) {
 			if k.N != nil {
 				bits = k.N.BitLen()
 			}
-			return nil, fmt.Errorf("%w: RSA %d bits", ErrUnsupportedKey, bits)
+			return nil, fmt.Errorf("%w: RSA %d bits", platform.ErrUnsupportedKey, bits)
 		}
 		b, err := encMode.Marshal(coseRSAKey{
 			Kty: 3,
@@ -123,10 +125,10 @@ func encodeCOSEKey(pub crypto.PublicKey) (cbor.RawMessage, error) {
 			E:   big.NewInt(int64(k.E)).Bytes(),
 		})
 		if err != nil {
-			return nil, fmt.Errorf("platform: marshal RSA COSE_Key: %w", err)
+			return nil, fmt.Errorf("sim: marshal RSA COSE_Key: %w", err)
 		}
 		return b, nil
 	default:
-		return nil, fmt.Errorf("%w: %T", ErrUnsupportedKey, pub)
+		return nil, fmt.Errorf("%w: %T", platform.ErrUnsupportedKey, pub)
 	}
 }

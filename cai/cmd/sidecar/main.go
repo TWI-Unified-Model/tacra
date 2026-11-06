@@ -7,7 +7,7 @@ import (
 
 	"github.com/TWI-Unified-Model/tacra/cai"
 	caiv1 "github.com/TWI-Unified-Model/tacra/gen/go/cai/v1"
-	"github.com/TWI-Unified-Model/tacra/platform"
+	"github.com/TWI-Unified-Model/tacra/platform/sim"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
@@ -16,7 +16,7 @@ func main() {
 	listen := envOr("CAI_LISTEN", ":50051")
 	caapiAddr := envOr("CAAPI_ADDR", "127.0.0.1:9090")
 
-	plugin, err := platform.NewSimulated()
+	plugin, err := sim.NewSimulated()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "platform plug-in: %v\n", err)
 		os.Exit(1)

@@ -11,7 +11,7 @@
 // application/vnd.veraison.tsm-report+cbor. They ran on Google Cloud and AWS
 // SEV-SNP guests and on Google Cloud TDX guests against a Veraison Verifier.
 //
-// The simulated plug-in (sim.go) runs without hardware: its Evidence is an
-// RFC 9711 Entity Attestation Token serialized as a tagged COSE_Sign1, signed
-// by an in-memory Attestation Key.
+// The simulated plug-in, which runs without hardware, is the module sim in
+// this directory, so that its dependencies stay out of the Workloads that
+// import the hardware back-ends.
 package platform

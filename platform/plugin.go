@@ -149,15 +149,6 @@ const (
 	EncryptionAlgorithmMLKEM768P256 EncryptionAlgorithm = 3 // the hybrid suite of the hpke-base container
 )
 
-// generateMLKEM768P256 makes a fresh MLKEM768-P256 CEK (the hybrid KEM of the hpke-base container).
-func generateMLKEM768P256() (*KeyPair, error) {
-	sk, err := hpke.MLKEM768P256().GenerateKey()
-	if err != nil {
-		return nil, fmt.Errorf("platform: generate MLKEM768-P256 key: %w", err)
-	}
-	return &KeyPair{Private: sk}, nil
-}
-
 // EvidenceRequest is the input to Plugin.GenerateEvidence.
 type EvidenceRequest struct {
 	// FreshnessKind selects how freshness is established. present-* kinds
@@ -210,7 +201,9 @@ var (
 	ErrNilPlugin                      = errors.New("platform: nil plugin")
 )
 
-func resolveKeyUse(req EvidenceRequest) BoundKeyUse {
+// ResolveKeyUse is the use of the bound key of a request: the one the request
+// names, else sign when it carries a CSR and encrypt otherwise.
+func ResolveKeyUse(req EvidenceRequest) BoundKeyUse {
 	if req.BoundKeyUse != BoundKeyUseUnspecified {
 		return req.BoundKeyUse
 	}

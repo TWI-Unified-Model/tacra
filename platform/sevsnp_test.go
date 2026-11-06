@@ -127,8 +127,8 @@ func TestSEVSNPEvidenceAllFreshnessKinds(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	csk, _ := generateP256()
-	cek, _ := generateP256()
+	csk, _ := NewP256KeyPair()
+	cek, _ := NewP256KeyPair()
 	csr := []byte("a DER CSR stands here")
 	cases := []struct {
 		name     string
@@ -193,7 +193,7 @@ func TestSEVSNPAttestationPublicKeyIsTheKeyTheReportNames(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cek, _ := generateP256()
+	cek, _ := NewP256KeyPair()
 	req := EvidenceRequest{FreshnessKind: FreshnessKindPresentNonce, FreshnessHandle: testNonce,
 		BoundKey: cek.Public(), BoundKeyUse: BoundKeyUseEncrypt, Target: "t"}
 	if _, err := p.GenerateEvidence(req); err != nil {
@@ -213,7 +213,7 @@ func TestSEVSNPAttestationPublicKeyIsTheKeyTheReportNames(t *testing.T) {
 }
 
 func TestSEVSNPRefusesTamperedReportAndOtherProviders(t *testing.T) {
-	cek, _ := generateP256()
+	cek, _ := NewP256KeyPair()
 	req := EvidenceRequest{FreshnessKind: FreshnessKindPresentNonce, FreshnessHandle: testNonce,
 		BoundKey: cek.Public(), BoundKeyUse: BoundKeyUseEncrypt, Target: "t"}
 	p, _ := NewSEVSNP(WithTSMClient(&mockSNP{provider: snpProvider, tamper: true}))
@@ -239,7 +239,7 @@ func TestTDXEvidenceAllFreshnessKinds(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cek, _ := generateP256()
+	cek, _ := NewP256KeyPair()
 	for _, c := range []struct {
 		kind     FreshnessKind
 		handle   []byte
@@ -273,7 +273,7 @@ func TestTDXEvidenceAllFreshnessKinds(t *testing.T) {
 }
 
 func TestTDXRefusesTamperedQuoteAndOtherProviders(t *testing.T) {
-	cek, _ := generateP256()
+	cek, _ := NewP256KeyPair()
 	req := EvidenceRequest{FreshnessKind: FreshnessKindPresentNonce, FreshnessHandle: testNonce,
 		BoundKey: cek.Public(), BoundKeyUse: BoundKeyUseEncrypt, Target: "t"}
 	p, _ := NewTDX(WithTSMClient(&mockSNP{provider: tdxProvider, tdx: true, tamper: true}))
