@@ -6,5 +6,6 @@ use (
 	./est
 	./gen/go
 	./platform
+	./platform/sim
 	./server
 )

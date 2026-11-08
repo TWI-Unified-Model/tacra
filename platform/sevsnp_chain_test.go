@@ -12,7 +12,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/go-sev-guest/kds"
 	"github.com/google/go-sev-guest/verify/trust"
 )
 
@@ -43,19 +42,19 @@ func table(t *testing.T, entries map[string][]byte, order ...string) []byte {
 }
 
 func TestCompleteCertTable(t *testing.T) {
-	milanVlekASVK, milanARK, err := kds.ParseProductCertChain(trust.AskArkMilanVlekBytes)
+	chains, err := loadAMDChains("")
 	if err != nil {
 		t.Fatal(err)
 	}
-	genoaASK, genoaARK, err := kds.ParseProductCertChain(trust.AskArkGenoaVcekBytes)
-	if err != nil {
-		t.Fatal(err)
-	}
+	milanVLEK, _ := chains.chain("SEV-VLEK-Milan")
+	milanVlekASVK, milanARK := milanVLEK.ask, milanVLEK.ark
+	genoa, _ := chains.chain("SEV-Genoa")
+	genoaASK, genoaARK := genoa.ask, genoa.ark
 	vlek := leafIssuedBy(t, "SEV-VLEK-Milan")
 	vcekGenoa := leafIssuedBy(t, "SEV-Genoa")
 
 	t.Run("AWS: VLEK only gets the Milan ASVK and ARK", func(t *testing.T) {
-		out, added, err := completeCertTable(table(t, map[string][]byte{guidVLEK: vlek}, guidVLEK))
+		out, added, err := completeCertTable(table(t, map[string][]byte{guidVLEK: vlek}, guidVLEK), chains)
 		if err != nil || !added {
 			t.Fatalf("added=%v err=%v", added, err)
 		}
@@ -69,12 +68,13 @@ func TestCompleteCertTable(t *testing.T) {
 		}
 	})
 	t.Run("VLEK on Turin gets the Turin ASVK and ARK", func(t *testing.T) {
-		turinASVK, turinARK, err := kds.ParseProductCertChain(bytes.TrimSpace(trust.AskArkTurinVlekBytes))
-		if err != nil {
-			t.Fatal(err)
+		turin, ok := chains.chain("SEV-VLEK-Turin")
+		if !ok {
+			t.Fatal("no Turin VLEK chain")
 		}
+		turinASVK, turinARK := turin.ask, turin.ark
 		vlekTurin := leafIssuedBy(t, "SEV-VLEK-Turin")
-		out, added, err := completeCertTable(table(t, map[string][]byte{guidVLEK: vlekTurin}, guidVLEK))
+		out, added, err := completeCertTable(table(t, map[string][]byte{guidVLEK: vlekTurin}, guidVLEK), chains)
 		if err != nil || !added {
 			t.Fatalf("added=%v err=%v", added, err)
 		}
@@ -84,7 +84,7 @@ func TestCompleteCertTable(t *testing.T) {
 		}
 	})
 	t.Run("VCEK only gets the Genoa ASK and ARK", func(t *testing.T) {
-		out, added, err := completeCertTable(table(t, map[string][]byte{guidVCEK: vcekGenoa}, guidVCEK))
+		out, added, err := completeCertTable(table(t, map[string][]byte{guidVCEK: vcekGenoa}, guidVCEK), chains)
 		if err != nil || !added {
 			t.Fatalf("added=%v err=%v", added, err)
 		}
@@ -95,14 +95,14 @@ func TestCompleteCertTable(t *testing.T) {
 	})
 	t.Run("GCP: a complete table is left as delivered", func(t *testing.T) {
 		in := table(t, map[string][]byte{guidVCEK: vcekGenoa, guidASK: genoaASK, guidARK: genoaARK}, guidVCEK, guidASK, guidARK)
-		out, added, err := completeCertTable(in)
+		out, added, err := completeCertTable(in, chains)
 		if err != nil || added || !bytes.Equal(out, in) {
 			t.Fatalf("added=%v err=%v changed=%v", added, err, !bytes.Equal(out, in))
 		}
 	})
 	t.Run("an issuer that names no known product line is left as delivered", func(t *testing.T) {
-		in := table(t, map[string][]byte{guidVCEK: leafIssuedBy(t, "fake VCEK")}, guidVCEK)
-		out, added, err := completeCertTable(in)
+		in := table(t, map[string][]byte{guidVCEK: leafIssuedBy(t, "mock VCEK")}, guidVCEK)
+		out, added, err := completeCertTable(in, chains)
 		if err != nil || added || !bytes.Equal(out, in) {
 			t.Fatalf("added=%v err=%v", added, err)
 		}
@@ -110,17 +110,28 @@ func TestCompleteCertTable(t *testing.T) {
 }
 
 func TestAMDChainsAreKeyedByTheirASKName(t *testing.T) {
-	for name, chain := range amdChains {
-		ask, _, err := parseAMDChain(chain)
-		if err != nil {
-			t.Fatalf("%s: %v", name, err)
-		}
-		c, err := x509.ParseCertificate(ask)
+	chains, err := loadAMDChains("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, chain := range chains.byIssuer {
+		c, err := x509.ParseCertificate(chain.ask)
 		if err != nil {
 			t.Fatal(err)
 		}
 		if c.Subject.CommonName != name {
 			t.Fatalf("chain under %q has the ASK or ASVK %q", name, c.Subject.CommonName)
+		}
+		if _, err := x509.ParseCertificate(chain.ark); err != nil {
+			t.Fatalf("%s: ARK: %v", name, err)
+		}
+	}
+	// the copies this package ships are the bundles go-sev-guest embeds, byte for byte
+	for issuer, bundle := range map[string][]byte{"SEV-Milan": trust.AskArkMilanVcekBytes, "SEV-VLEK-Turin": trust.AskArkTurinVlekBytes} {
+		ch, _ := chains.chain(issuer)
+		raw, err := shippedAMDChains.ReadFile("amdchains/" + ch.file)
+		if err != nil || !bytes.Equal(raw, bundle) {
+			t.Fatalf("%s: the shipped copy differs from the bundle of go-sev-guest", ch.file)
 		}
 	}
 }

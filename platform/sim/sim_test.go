@@ -1,6 +1,8 @@
-package platform
+package sim
 
 import (
+	"github.com/TWI-Unified-Model/tacra/platform"
+
 	"bytes"
 	"crypto"
 	"crypto/ecdsa"
@@ -20,42 +22,42 @@ func TestSimulatedRetrieveEvidence(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cek, err := p.GenerateCEK(EncryptionAlgorithmECDHP256)
+	cek, err := p.GenerateCEK(platform.EncryptionAlgorithmECDHP256)
 	if err != nil {
 		t.Fatal(err)
 	}
 	ec, ok := cek.Public().(*ecdsa.PublicKey)
 	if !ok || ec.Curve != elliptic.P256() {
-		t.Fatalf("CEK %T, want P-256 ECDSA", cek.Public())
+		t.Fatalf("CEK %T, expected P-256 ECDSA", cek.Public())
 	}
 
 	handle := bytes.Repeat([]byte{0x11}, 32)
-	ev, err := p.GenerateEvidence(EvidenceRequest{
+	evidence, err := p.GenerateEvidence(platform.EvidenceRequest{
 		FreshnessHandle: handle,
 		BoundKey:        cek.Public(),
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	assertCOSESign1(t, ev.Token)
-	if ev.MediaType != MediaTypeEATProfile {
-		t.Fatalf("media type %q", ev.MediaType)
+	assertCOSESign1(t, evidence.Token)
+	if evidence.MediaType != MediaTypeEATProfile {
+		t.Fatalf("media type %q", evidence.MediaType)
 	}
 
-	claims, err := ev.Verify(p.AttestationPublicKey())
+	claims, err := Verify(evidence, p.AttestationPublicKey())
 	if err != nil {
 		t.Fatal(err)
 	}
 	assertNonce(t, claims, handle)
-	if claims.BoundKeyUse != BoundKeyUseEncrypt {
-		t.Fatalf("bound key use %d, want encrypt", claims.BoundKeyUse)
+	if claims.BoundKeyUse != platform.BoundKeyUseEncrypt {
+		t.Fatalf("bound key use %d, expected encrypt", claims.BoundKeyUse)
 	}
 	if len(claims.CSR) != 0 {
 		t.Fatalf("CSR present in retrieve evidence: %d bytes", len(claims.CSR))
 	}
 	assertBoundKey(t, claims, cek.Public())
 	assertStandardEAT(t, claims)
-	assertVeraisonEatDecode(t, ev.Claims, handle)
+	assertVeraisonEatDecode(t, evidence.Claims, handle)
 }
 
 func TestGenerateCEKRejectsUnspecified(t *testing.T) {
@@ -63,8 +65,8 @@ func TestGenerateCEKRejectsUnspecified(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := p.GenerateCEK(EncryptionAlgorithmUnspecified); !errors.Is(err, ErrUnsupportedEncryptionAlgorithm) {
-		t.Fatalf("got %v, want ErrUnsupportedEncryptionAlgorithm", err)
+	if _, err := p.GenerateCEK(platform.EncryptionAlgorithmUnspecified); !errors.Is(err, platform.ErrUnsupportedEncryptionAlgorithm) {
+		t.Fatalf("got %v, expected platform.ErrUnsupportedEncryptionAlgorithm", err)
 	}
 }
 
@@ -73,13 +75,13 @@ func TestGenerateCEKRSA(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cek, err := p.GenerateCEK(EncryptionAlgorithmRSA2048)
+	cek, err := p.GenerateCEK(platform.EncryptionAlgorithmRSA2048)
 	if err != nil {
 		t.Fatal(err)
 	}
 	pub, ok := cek.Public().(*rsa.PublicKey)
 	if !ok {
-		t.Fatalf("CEK %T, want *rsa.PublicKey", cek.Public())
+		t.Fatalf("CEK %T, expected *rsa.PublicKey", cek.Public())
 	}
 	if pub.N.BitLen() != 2048 {
 		t.Fatalf("RSA bits %d", pub.N.BitLen())
@@ -87,23 +89,23 @@ func TestGenerateCEKRSA(t *testing.T) {
 }
 
 func TestSimulatedEnrollEvidence(t *testing.T) {
-	ak, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	attestationKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
 		t.Fatal(err)
 	}
-	p, err := NewSimulated(WithAttestationKey(ak), WithIssuer("tacra-test"))
+	p, err := NewSimulated(WithAttestationKey(attestationKey), WithIssuer("tacra-test"))
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	csk, err := p.GenerateCSK(SigningAlgorithmECDSAP256)
+	csk, err := p.GenerateCSK(platform.SigningAlgorithmECDSAP256)
 	if err != nil {
 		t.Fatal(err)
 	}
 	csr := []byte("dummy-pkcs10-csr")
 	handle := bytes.Repeat([]byte{0x22}, 16)
 
-	ev, err := p.GenerateEvidence(EvidenceRequest{
+	evidence, err := p.GenerateEvidence(platform.EvidenceRequest{
 		FreshnessHandle: handle,
 		BoundKey:        csk.Public(),
 		CSR:             csr,
@@ -112,15 +114,15 @@ func TestSimulatedEnrollEvidence(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	claims, err := VerifyEvidence(ev.Token, &ak.PublicKey)
+	claims, err := VerifyEvidence(evidence.Token, &attestationKey.PublicKey)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if claims.Issuer != "tacra-test" {
 		t.Fatalf("issuer %q", claims.Issuer)
 	}
-	if claims.BoundKeyUse != BoundKeyUseSign {
-		t.Fatalf("bound key use %d, want sign", claims.BoundKeyUse)
+	if claims.BoundKeyUse != platform.BoundKeyUseSign {
+		t.Fatalf("bound key use %d, expected sign", claims.BoundKeyUse)
 	}
 	if !bytes.Equal(claims.CSR, csr) {
 		t.Fatalf("CSR mismatch")
@@ -134,7 +136,7 @@ func TestEvidenceRejectsBadFreshnessHandle(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cek, err := p.GenerateCEK(EncryptionAlgorithmECDHP256)
+	cek, err := p.GenerateCEK(platform.EncryptionAlgorithmECDHP256)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -145,9 +147,9 @@ func TestEvidenceRejectsBadFreshnessHandle(t *testing.T) {
 		bytes.Repeat([]byte{0x01}, 65),
 	}
 	for _, ch := range cases {
-		_, err := p.GenerateEvidence(EvidenceRequest{FreshnessHandle: ch, BoundKey: cek.Public()})
-		if !errors.Is(err, ErrInvalidFreshnessHandle) {
-			t.Errorf("freshness handle len %d: got %v, want ErrInvalidFreshnessHandle", len(ch), err)
+		_, err := p.GenerateEvidence(platform.EvidenceRequest{FreshnessHandle: ch, BoundKey: cek.Public()})
+		if !errors.Is(err, platform.ErrInvalidFreshnessHandle) {
+			t.Errorf("freshness handle len %d: got %v, expected platform.ErrInvalidFreshnessHandle", len(ch), err)
 		}
 	}
 }
@@ -157,15 +159,15 @@ func TestEvidenceOmitsNonceWhenHandleAbsent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cek, err := p.GenerateCEK(EncryptionAlgorithmECDHP256)
+	cek, err := p.GenerateCEK(platform.EncryptionAlgorithmECDHP256)
 	if err != nil {
 		t.Fatal(err)
 	}
-	ev, err := p.GenerateEvidence(EvidenceRequest{BoundKey: cek.Public()})
+	evidence, err := p.GenerateEvidence(platform.EvidenceRequest{BoundKey: cek.Public()})
 	if err != nil {
 		t.Fatal(err)
 	}
-	claims, err := ev.Verify(p.AttestationPublicKey())
+	claims, err := Verify(evidence, p.AttestationPublicKey())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -184,17 +186,17 @@ func TestEvidenceRejectsBadKey(t *testing.T) {
 	}
 	ch := bytes.Repeat([]byte{0x33}, 8)
 
-	_, err = p.GenerateEvidence(EvidenceRequest{FreshnessHandle: ch})
-	if !errors.Is(err, ErrMissingBoundKey) {
+	_, err = p.GenerateEvidence(platform.EvidenceRequest{FreshnessHandle: ch})
+	if !errors.Is(err, platform.ErrMissingBoundKey) {
 		t.Fatalf("nil key: %v", err)
 	}
 
-	rsaKey, err := rsa.GenerateKey(rand.Reader, 1024)
+	rsaKey, err := rsa.GenerateKey(rand.Reader, 1024) //nolint:gosec // a key too small, which the plug-in must refuse
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = p.GenerateEvidence(EvidenceRequest{FreshnessHandle: ch, BoundKey: &rsaKey.PublicKey})
-	if !errors.Is(err, ErrUnsupportedKey) {
+	_, err = p.GenerateEvidence(platform.EvidenceRequest{FreshnessHandle: ch, BoundKey: &rsaKey.PublicKey})
+	if !errors.Is(err, platform.ErrUnsupportedKey) {
 		t.Fatalf("short RSA key: %v", err)
 	}
 
@@ -202,8 +204,8 @@ func TestEvidenceRejectsBadKey(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = p.GenerateEvidence(EvidenceRequest{FreshnessHandle: ch, BoundKey: &p384.PublicKey})
-	if !errors.Is(err, ErrUnsupportedKey) {
+	_, err = p.GenerateEvidence(platform.EvidenceRequest{FreshnessHandle: ch, BoundKey: &p384.PublicKey})
+	if !errors.Is(err, platform.ErrUnsupportedKey) {
 		t.Fatalf("p384 key: %v", err)
 	}
 }
@@ -213,23 +215,23 @@ func TestEvidenceRSABoundKey(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	csk, err := p.GenerateCSK(SigningAlgorithmRSA2048)
+	csk, err := p.GenerateCSK(platform.SigningAlgorithmRSA2048)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if _, ok := csk.Public().(*rsa.PublicKey); !ok {
-		t.Fatalf("CSK %T, want RSA", csk.Public())
+		t.Fatalf("CSK %T, expected RSA", csk.Public())
 	}
 	handle := bytes.Repeat([]byte{0x66}, 8)
-	ev, err := p.GenerateEvidence(EvidenceRequest{
+	evidence, err := p.GenerateEvidence(platform.EvidenceRequest{
 		FreshnessHandle: handle,
 		BoundKey:        csk.Public(),
-		BoundKeyUse:     BoundKeyUseSign,
+		BoundKeyUse:     platform.BoundKeyUseSign,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	claims, err := ev.Verify(p.AttestationPublicKey())
+	claims, err := Verify(evidence, p.AttestationPublicKey())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -241,19 +243,19 @@ func TestTamperedEvidenceFailsVerify(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cek, err := p.GenerateCEK(EncryptionAlgorithmECDHP256)
+	cek, err := p.GenerateCEK(platform.EncryptionAlgorithmECDHP256)
 	if err != nil {
 		t.Fatal(err)
 	}
-	ev, err := p.GenerateEvidence(EvidenceRequest{
+	evidence, err := p.GenerateEvidence(platform.EvidenceRequest{
 		FreshnessHandle: bytes.Repeat([]byte{0x44}, 8),
 		BoundKey:        cek.Public(),
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	ev.Token[len(ev.Token)-1] ^= 0xff
-	if _, err := ev.Verify(p.AttestationPublicKey()); err == nil {
+	evidence.Token[len(evidence.Token)-1] ^= 0xff
+	if _, err := Verify(evidence, p.AttestationPublicKey()); err == nil {
 		t.Fatal("expected signature failure")
 	}
 }
@@ -263,11 +265,11 @@ func TestWrongAKFailsVerify(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cek, err := p.GenerateCEK(EncryptionAlgorithmECDHP256)
+	cek, err := p.GenerateCEK(platform.EncryptionAlgorithmECDHP256)
 	if err != nil {
 		t.Fatal(err)
 	}
-	ev, err := p.GenerateEvidence(EvidenceRequest{
+	evidence, err := p.GenerateEvidence(platform.EvidenceRequest{
 		FreshnessHandle: bytes.Repeat([]byte{0x55}, 8),
 		BoundKey:        cek.Public(),
 	})
@@ -278,7 +280,7 @@ func TestWrongAKFailsVerify(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := VerifyEvidence(ev.Token, &other.PublicKey); err == nil {
+	if _, err := VerifyEvidence(evidence.Token, &other.PublicKey); err == nil {
 		t.Fatal("expected verification failure with wrong AK")
 	}
 }
@@ -288,23 +290,23 @@ func TestKeyPairEncodings(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	kp, err := p.GenerateCSK(SigningAlgorithmECDSAP256)
+	csk, err := p.GenerateCSK(platform.SigningAlgorithmECDSAP256)
 	if err != nil {
 		t.Fatal(err)
 	}
-	pkix, err := kp.PublicPKIX()
+	pkix, err := csk.PublicPKIX()
 	if err != nil || len(pkix) == 0 {
 		t.Fatalf("PKIX: %v", err)
 	}
-	pkcs8, err := kp.PrivatePKCS8()
+	pkcs8, err := csk.PrivatePKCS8()
 	if err != nil || len(pkcs8) == 0 {
 		t.Fatalf("PKCS8: %v", err)
 	}
-	signer, err := kp.Signer()
+	signer, err := csk.Signer()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !publicKeysEqual(signer.Public(), kp.Public()) {
+	if !publicKeysEqual(signer.Public(), csk.Public()) {
 		t.Fatal("signer public key mismatch")
 	}
 	if _, err := p.AttestationPublicPKIX(); err != nil {
@@ -313,7 +315,7 @@ func TestKeyPairEncodings(t *testing.T) {
 }
 
 func TestPluginInterface(t *testing.T) {
-	var _ Plugin = (*Simulated)(nil)
+	var _ platform.Plugin = (*Simulated)(nil)
 }
 
 func TestWithUEIDRejectsInvalid(t *testing.T) {
@@ -334,7 +336,7 @@ func assertCOSESign1(t *testing.T, token []byte) {
 	}
 	ct, ok := msg.Headers.Protected[cose.HeaderLabelContentType]
 	if !ok || ct != MediaTypeEAT {
-		t.Fatalf("content type %v, want %s", ct, MediaTypeEAT)
+		t.Fatalf("content type %v, expected %s", ct, MediaTypeEAT)
 	}
 }
 
@@ -345,24 +347,24 @@ func firstByte(b []byte) byte {
 	return b[0]
 }
 
-func assertNonce(t *testing.T, c *Claims, want []byte) {
+func assertNonce(t *testing.T, c *Claims, expected []byte) {
 	t.Helper()
 	if c.Nonce == nil || c.Nonce.Len() != 1 {
 		t.Fatalf("nonce missing")
 	}
 	got := c.Nonce.GetI(0)
-	if !bytes.Equal(got, want) {
-		t.Fatalf("nonce %x, want %x", got, want)
+	if !bytes.Equal(got, expected) {
+		t.Fatalf("nonce %x, expected %x", got, expected)
 	}
 }
 
-func assertBoundKey(t *testing.T, c *Claims, want crypto.PublicKey) {
+func assertBoundKey(t *testing.T, c *Claims, expected crypto.PublicKey) {
 	t.Helper()
 	got, err := c.Cnf.BoundPublicKey()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !publicKeysEqual(got, want) {
+	if !publicKeysEqual(got, expected) {
 		t.Fatal("cnf public key mismatch")
 	}
 }

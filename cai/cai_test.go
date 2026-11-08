@@ -15,6 +15,7 @@ import (
 
 	caapiv1 "github.com/TWI-Unified-Model/tacra/gen/go/caapi/v1"
 	"github.com/TWI-Unified-Model/tacra/platform"
+	"github.com/TWI-Unified-Model/tacra/platform/sim"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -47,9 +48,9 @@ func (f *fakeCAAPI) RetrieveCredential(ctx context.Context, in *caapiv1.Retrieve
 	return nil, status.Error(codes.Unimplemented, "retrieve")
 }
 
-func newTestCAI(t *testing.T, fake *fakeCAAPI) (*Client, *platform.Simulated) {
+func newTestCAI(t *testing.T, fake *fakeCAAPI) (*Client, *sim.Simulated) {
 	t.Helper()
-	p, err := platform.NewSimulated()
+	p, err := sim.NewSimulated()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -83,7 +84,7 @@ func TestAcquireCredentialRetrieveECDH(t *testing.T) {
 			if in.GetEncryptionAlgorithm() != EncryptionAlgorithmECDHP256 {
 				t.Fatalf("encryption algorithm %s", in.GetEncryptionAlgorithm())
 			}
-			claims, err := platform.ParseEvidence(in.GetEvidence())
+			claims, err := sim.ParseEvidence(in.GetEvidence())
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -150,7 +151,7 @@ func TestAcquireCredentialEnroll(t *testing.T) {
 			if csr.Subject.CommonName != "https://ca.example" {
 				t.Fatalf("CN %q", csr.Subject.CommonName)
 			}
-			claims, err := platform.ParseEvidence(in.GetEvidence())
+			claims, err := sim.ParseEvidence(in.GetEvidence())
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -220,7 +221,7 @@ func TestAcquireCredentialEnrollRSA(t *testing.T) {
 			if _, ok := csr.PublicKey.(*rsa.PublicKey); !ok {
 				t.Fatalf("CSR key %T, want *rsa.PublicKey", csr.PublicKey)
 			}
-			claims, err := platform.ParseEvidence(in.GetEvidence())
+			claims, err := sim.ParseEvidence(in.GetEvidence())
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -294,7 +295,7 @@ func TestAcquireCredentialRetrieveRSA(t *testing.T) {
 			if in.GetEncryptionAlgorithm() != EncryptionAlgorithmRSA2048 {
 				t.Fatalf("encryption algorithm %s", in.GetEncryptionAlgorithm())
 			}
-			claims, err := platform.ParseEvidence(in.GetEvidence())
+			claims, err := sim.ParseEvidence(in.GetEvidence())
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -380,7 +381,7 @@ func TestAcquireCredentialValidation(t *testing.T) {
 	if _, err := New(nil, &fakeCAAPI{}); !errors.Is(err, ErrNilPlugin) {
 		t.Fatalf("nil plugin: %v", err)
 	}
-	p, _ := platform.NewSimulated()
+	p, _ := sim.NewSimulated()
 	if _, err := New(p, nil); !errors.Is(err, ErrNilCAAPI) {
 		t.Fatalf("nil caapi: %v", err)
 	}
@@ -430,7 +431,7 @@ func TestAcquireCredentialFreshness(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			p, err := platform.NewSimulated()
+			p, err := sim.NewSimulated()
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -444,7 +445,7 @@ func TestAcquireCredentialFreshness(t *testing.T) {
 					}, nil
 				},
 				retrieve: func(_ context.Context, in *caapiv1.RetrieveCredentialRequest) (*caapiv1.RetrieveCredentialResponse, error) {
-					claims, err := platform.ParseEvidence(in.GetEvidence())
+					claims, err := sim.ParseEvidence(in.GetEvidence())
 					if err != nil {
 						t.Fatal(err)
 					}

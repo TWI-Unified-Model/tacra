@@ -1,4 +1,4 @@
-package platform
+package sim
 
 import "github.com/fxamacker/cbor/v2"
 
