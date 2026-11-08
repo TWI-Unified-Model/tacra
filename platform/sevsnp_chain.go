@@ -26,8 +26,9 @@ type certEntry struct {
 // completeCertTable returns the certificate table of the host with the AMD ASK (or ASVK) and ARK appended when the host
 // left them out, as AWS does, from the chains given. The table is not covered by the report signature; the Verifier
 // checks the chain up to the ARK it holds as trust anchor, so a wrong certificate here can only make the Evidence
-// fail. added reports whether anything was appended. A table that already has both, or whose VCEK or VLEK is missing,
-// unreadable or issued for a product line the chains do not cover, is returned unchanged for the Verifier to judge.
+// fail. The second result, added, is true when anything was appended. A table that already has both, or whose VCEK
+// or VLEK is missing, unreadable or issued for a product line the chains do not cover, is returned unchanged for the
+// Verifier to judge.
 func completeCertTable(table []byte, chains *amdChains) (out []byte, added bool, err error) {
 	entries, err := certTableEntries(table)
 	if err != nil {

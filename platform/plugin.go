@@ -16,14 +16,14 @@ type Plugin interface {
 	Name() string
 
 	// GenerateCEK creates an asymmetric Credential Encryption Key used in
-	// Retrieval mode. alg is the CEK algorithm from
-	// Initiate-Credential-Acquisition. The public half is bound into
+	// Retrieval mode, with the CEK algorithm alg that
+	// Initiate-Credential-Acquisition named. The public half is bound into
 	// Evidence; the private half unwraps the credential the CAS returns.
 	GenerateCEK(alg EncryptionAlgorithm) (*KeyPair, error)
 
 	// GenerateCSK creates an asymmetric Credential Signing Key used in
-	// Enrollment mode. alg is the CSK algorithm from
-	// Initiate-Credential-Acquisition. The public half is bound into
+	// Enrollment mode, with the CSK algorithm alg that
+	// Initiate-Credential-Acquisition named. The public half is bound into
 	// Evidence; the private half signs the CSR.
 	GenerateCSK(alg SigningAlgorithm) (*KeyPair, error)
 

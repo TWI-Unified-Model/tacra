@@ -23,7 +23,7 @@ import (
 	sgtest "github.com/google/go-sev-guest/testing"
 )
 
-// Fixed inputs of the Evidence tests. testNow is the clock, 2026-09-28T12:53:20Z, so that the absent-timestamp
+// Fixed inputs of the Evidence tests. The clock, testNow, is 2026-09-28T12:53:20Z, so that the absent-timestamp
 // element is known in advance.
 var (
 	testNow   = time.Date(2026, time.September, 28, 12, 53, 20, 0, time.UTC)
