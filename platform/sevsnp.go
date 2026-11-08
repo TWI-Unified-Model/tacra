@@ -30,7 +30,7 @@ const (
 )
 
 // snpProvider is the configfs-tsm provider name of an SEV-SNP guest. The report
-// layout and the certificate-table GUIDs come from the abi package of go-sev-guest.
+// layout and the certificate-table GUIDs come from the ABI package of go-sev-guest.
 const snpProvider = "sev_guest"
 
 // Names under which ParseSNPCertTable returns the certificates of the host.
@@ -226,7 +226,7 @@ func (p *SEVSNP) AttestationPublicKey() *ecdsa.PublicKey {
 // FreshnessElement returns the value bound as the freshness element for req:
 // the Handle for the present kinds, the local epoch (which the CAI passes as
 // the Handle) for absent-epoch, eight octets of Unix time for absent-timestamp
-// (the Handle of the request when it carries them, else the clock), and nothing for
+// (the Handle of the request when it carries them, the clock when it does not), and nothing for
 // absent-none.
 func (p *tsmConfig) FreshnessElement(req EvidenceRequest) ([]byte, error) {
 	switch req.FreshnessKind {
@@ -254,8 +254,8 @@ func (p *tsmConfig) FreshnessElement(req EvidenceRequest) ([]byte, error) {
 }
 
 // Subject returns the binding subject: the DER CSR for Enrollment, CEKpub for
-// Retrieval (CEKPub: the encapsulation key itself for MLKEM768-P256, else the
-// DER SubjectPublicKeyInfo of the bound key).
+// Retrieval (CEKPub: the encapsulation key itself for MLKEM768-P256, the DER
+// SubjectPublicKeyInfo of the bound key for any other key).
 func Subject(req EvidenceRequest) ([]byte, error) {
 	if ResolveKeyUse(req) == BoundKeyUseSign {
 		if len(req.CSR) == 0 {
@@ -370,7 +370,7 @@ func tsmEvidence(req EvidenceRequest, elem []byte, bv [sha512.Size]byte, rep tsm
 	return &Evidence{Token: token, MediaType: TSMReportMediaTypeCBOR, Claims: claims}, nil
 }
 
-// ParseSNPCertTable splits the certificate table of the host, as the abi package of go-sev-guest
+// ParseSNPCertTable splits the certificate table of the host, as the ABI package of go-sev-guest
 // reads it, into the certificates keyed by the SNPCert names; unknown GUIDs are
 // kept under their GUID string.
 func ParseSNPCertTable(buf []byte) (map[string][]byte, error) {

@@ -9,7 +9,7 @@ import (
 	"github.com/google/go-sev-guest/verify/trust"
 )
 
-// Certificate table GUIDs as the host writes them: the abi constants of
+// Certificate table GUIDs as the host writes them: the ABI constants of
 // go-sev-guest, in hex without the dashes (see snpCertGUIDs).
 var (
 	guidVCEK = strings.ReplaceAll(abi.VcekGUID, "-", "")
@@ -83,7 +83,7 @@ func certTableEntries(table []byte) ([]certEntry, error) {
 	return entries, nil
 }
 
-// encodeCertTable writes the entries in the abi layout of go-sev-guest, ended
+// encodeCertTable writes the entries in the ABI layout of go-sev-guest, ended
 // by an all-zero entry, with the certificates after the header.
 func encodeCertTable(entries []certEntry) []byte {
 	head := make([]byte, abi.CertTableEntrySize*(len(entries)+1))

@@ -53,7 +53,7 @@ type KeyPair struct {
 }
 
 // Public returns the public half of the key pair: an hpke.PublicKey for an
-// MLKEM768-P256 CEK, else the public key of the crypto.Signer.
+// MLKEM768-P256 CEK, and the public key of the crypto.Signer for any other key.
 func (k *KeyPair) Public() crypto.PublicKey {
 	if k != nil {
 		if h, ok := k.Private.(hpke.PrivateKey); ok {
@@ -203,7 +203,8 @@ var (
 )
 
 // ResolveKeyUse is the use of the bound key of a request: the one the request
-// names, else sign when it carries a CSR and encrypt otherwise.
+// names; when it names none, sign for a request that carries a CSR and encrypt
+// for one that does not.
 func ResolveKeyUse(req EvidenceRequest) BoundKeyUse {
 	if req.BoundKeyUse != BoundKeyUseUnspecified {
 		return req.BoundKeyUse
