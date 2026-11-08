@@ -67,9 +67,10 @@ func (k *KeyPair) Public() crypto.PublicKey {
 	return s.Public()
 }
 
-// CEKPub is CEKpub as the binding input carries it and the Secret Vault receives it: for an MLKEM768-P256 key
-// (an hpke.PublicKey) the 1249-octet encapsulation key itself, which has no SubjectPublicKeyInfo form here; for
-// any other key its DER SubjectPublicKeyInfo.
+// CEKPub marshals the public Credential Encryption Key as the binding input
+// carries it and the Secret Vault receives it: for an MLKEM768-P256 key (an
+// hpke.PublicKey) the 1249-octet encapsulation key itself, which has no
+// SubjectPublicKeyInfo form; for any other key its DER SubjectPublicKeyInfo.
 func CEKPub(pub crypto.PublicKey) ([]byte, error) {
 	if h, ok := pub.(hpke.PublicKey); ok {
 		return h.Bytes(), nil

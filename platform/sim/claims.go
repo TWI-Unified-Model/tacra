@@ -15,7 +15,8 @@ import (
 	"github.com/veraison/go-cose"
 )
 
-// EAT profile URI identifying this PoC's simulated-platform token.
+// The EAT profile URI that identifies the token of the simulated platform of
+// this proof of concept.
 const ProfileURI = "https://twi.confidentialcomputing.io/tacra-sim/1.0.0"
 
 // MediaTypeEAT is the COSE protected-header content type.

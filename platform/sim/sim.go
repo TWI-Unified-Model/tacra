@@ -31,12 +31,12 @@ const (
 // keys in process and signs platform.Evidence with an in-memory Attestation Key.
 // It does not talk to TDX, SEV-SNP, or any other hardware ABI.
 type Simulated struct {
-	ak       *ecdsa.PrivateKey
-	ueid     eat.UEID
-	hwModel  []byte
-	bootSeed []byte
-	issuer   string
-	swName   string
+	attestationKey *ecdsa.PrivateKey // the Attestation Key of the simulated platform, which signs the Evidence
+	ueid           eat.UEID
+	hwModel        []byte
+	bootSeed       []byte
+	issuer         string
+	swName         string
 }
 
 // SimOption configures a Simulated plug-in.
@@ -48,7 +48,7 @@ func WithAttestationKey(key *ecdsa.PrivateKey) SimOption {
 		if key == nil || key.Curve != elliptic.P256() {
 			return fmt.Errorf("sim: attestation key must be a P-256 ECDSA private key")
 		}
-		s.ak = key
+		s.attestationKey = key
 		return nil
 	}
 }
@@ -102,16 +102,16 @@ func NewSimulated(opts ...SimOption) (*Simulated, error) {
 			return nil, err
 		}
 	}
-	if s.ak == nil {
-		kp, err := platform.NewP256KeyPair()
+	if s.attestationKey == nil {
+		attestationKeyPair, err := platform.NewP256KeyPair()
 		if err != nil {
 			return nil, err
 		}
-		priv, ok := kp.Private.(*ecdsa.PrivateKey)
+		priv, ok := attestationKeyPair.Private.(*ecdsa.PrivateKey)
 		if !ok {
-			return nil, fmt.Errorf("sim: attestation key is %T, want P-256 ECDSA", kp.Private)
+			return nil, fmt.Errorf("sim: attestation key is %T, not a P-256 ECDSA key", attestationKeyPair.Private)
 		}
-		s.ak = priv
+		s.attestationKey = priv
 	}
 	if len(s.ueid) == 0 {
 		ueid, err := generateUEID()
@@ -168,10 +168,10 @@ func (s *Simulated) LocalEpoch() []byte {
 
 // AttestationPublicKey implements platform.Plugin.
 func (s *Simulated) AttestationPublicKey() *ecdsa.PublicKey {
-	if s == nil || s.ak == nil {
+	if s == nil || s.attestationKey == nil {
 		return nil
 	}
-	return &s.ak.PublicKey
+	return &s.attestationKey.PublicKey
 }
 
 // AttestationPublicPKIX returns the PKIX encoding of the AK, for CoRIM
@@ -181,13 +181,13 @@ func (s *Simulated) AttestationPublicPKIX() ([]byte, error) {
 	if pub == nil {
 		return nil, platform.ErrNilPlugin
 	}
-	kp := &platform.KeyPair{Private: s.ak}
-	return kp.PublicPKIX()
+	attestationKeyPair := &platform.KeyPair{Private: s.attestationKey}
+	return attestationKeyPair.PublicPKIX()
 }
 
 // GenerateEvidence implements platform.Plugin.
 func (s *Simulated) GenerateEvidence(req platform.EvidenceRequest) (*platform.Evidence, error) {
-	if s == nil || s.ak == nil {
+	if s == nil || s.attestationKey == nil {
 		return nil, platform.ErrNilPlugin
 	}
 	if err := validateFreshnessHandle(req.FreshnessHandle); err != nil {
@@ -258,8 +258,8 @@ func (s *Simulated) GenerateEvidence(req platform.EvidenceRequest) (*platform.Ev
 }
 
 func (s *Simulated) signEAT(claims []byte) ([]byte, error) {
-	kid := kidFromPublic(&s.ak.PublicKey)
-	signer, err := cose.NewSigner(cose.AlgorithmES256, s.ak)
+	kid := kidFromPublic(&s.attestationKey.PublicKey)
+	signer, err := cose.NewSigner(cose.AlgorithmES256, s.attestationKey)
 	if err != nil {
 		return nil, fmt.Errorf("sim: COSE signer: %w", err)
 	}

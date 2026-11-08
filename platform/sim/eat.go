@@ -34,13 +34,15 @@ func ParseEvidence(token []byte) (*Claims, error) {
 	return claims, nil
 }
 
-// VerifyEvidence checks the COSE_Sign1 signature with ak and returns the claims.
-func VerifyEvidence(token []byte, ak crypto.PublicKey) (*Claims, error) {
+// VerifyEvidence checks the COSE_Sign1 signature of the token with the public
+// Attestation Key of the simulated platform, the key the simulated plug-in signs
+// its Evidence with, and returns the claims.
+func VerifyEvidence(token []byte, attestationKey crypto.PublicKey) (*Claims, error) {
 	msg, err := unmarshalSign1(token)
 	if err != nil {
 		return nil, err
 	}
-	verifier, err := cose.NewVerifier(cose.AlgorithmES256, ak)
+	verifier, err := cose.NewVerifier(cose.AlgorithmES256, attestationKey)
 	if err != nil {
 		return nil, fmt.Errorf("sim: COSE verifier: %w", err)
 	}
@@ -54,10 +56,11 @@ func VerifyEvidence(token []byte, ak crypto.PublicKey) (*Claims, error) {
 	return claims, nil
 }
 
-// Verify verifies the Token of the Evidence with ak and returns the claims.
-func Verify(e *platform.Evidence, ak crypto.PublicKey) (*Claims, error) {
+// Verify verifies the Token of the Evidence with the public Attestation Key of
+// the simulated platform and returns the claims.
+func Verify(e *platform.Evidence, attestationKey crypto.PublicKey) (*Claims, error) {
 	if e == nil {
 		return nil, fmt.Errorf("sim: nil evidence")
 	}
-	return VerifyEvidence(e.Token, ak)
+	return VerifyEvidence(e.Token, attestationKey)
 }

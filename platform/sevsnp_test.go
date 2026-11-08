@@ -122,8 +122,8 @@ func certTable(t *testing.T) ([]byte, *ecdsa.PublicKey) {
 
 func TestSEVSNPEvidenceAllFreshnessKinds(t *testing.T) {
 	aux, vcek := certTable(t)
-	fake := &mockSNP{provider: snpProvider, aux: aux}
-	p, err := NewSEVSNP(WithTSMClient(fake), WithClock(testClock), WithLocalEpoch(testEpoch))
+	mock := &mockSNP{provider: snpProvider, aux: aux}
+	p, err := NewSEVSNP(WithTSMClient(mock), WithClock(testClock), WithLocalEpoch(testEpoch))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -187,9 +187,9 @@ func TestSEVSNPEvidenceAllFreshnessKinds(t *testing.T) {
 
 func TestSEVSNPAttestationPublicKeyIsTheKeyTheReportNames(t *testing.T) {
 	vcek, vlek := leafIssuedBy(t, "SEV-Milan"), leafIssuedBy(t, "SEV-VLEK-Milan")
-	fake := &mockSNP{provider: snpProvider, signer: abi.VlekReportSigner,
+	mock := &mockSNP{provider: snpProvider, signer: abi.VlekReportSigner,
 		aux: table(t, map[string][]byte{guidVCEK: vcek, guidVLEK: vlek}, guidVCEK, guidVLEK)}
-	p, err := NewSEVSNP(WithTSMClient(fake), WithoutChainCompletion())
+	p, err := NewSEVSNP(WithTSMClient(mock), WithoutChainCompletion())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -203,7 +203,7 @@ func TestSEVSNPAttestationPublicKeyIsTheKeyTheReportNames(t *testing.T) {
 	if pub := p.AttestationPublicKey(); pub == nil || !pub.Equal(c.PublicKey) {
 		t.Fatal("AttestationPublicKey is not the VLEK the report names, with a VCEK also in the table")
 	}
-	fake.aux = nil
+	mock.aux = nil
 	if _, err := p.GenerateEvidence(req); err != nil {
 		t.Fatal(err)
 	}
