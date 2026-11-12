@@ -39,6 +39,7 @@ export DEPLOY_CONFIG_DIR="$PWD/deploy/config/local"
 ├── cai                         # Credential Acquisition Interface (CAI) implementation
 │   └── cmd/sidecar/            # CAI Sidecar implementation
 ├── client/                     # PoC Client
+├── constants/                  # Constants of TACRA that every implementation imports
 ├── deploy/
 │   ├── components.sh           # Main deployment dispatcher script
 │   ├── init-local-est-config.sh             # Local EST config generator
