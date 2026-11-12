@@ -23,9 +23,6 @@ const (
 	CredentialTypeAPIKey CredentialType = "api-key"
 	// CredentialTypePSK is a pre-shared symmetric key.
 	CredentialTypePSK CredentialType = "psk"
-	// CredentialTypePrivateKey is a private key shared by the instances of a
-	// replicated service.
-	CredentialTypePrivateKey CredentialType = "private-key"
 )
 
 // CredentialTypes returns the Credential Types of TACRA in a slice that the
@@ -38,7 +35,6 @@ func CredentialTypes() []CredentialType {
 		CredentialTypeJWT,
 		CredentialTypeAPIKey,
 		CredentialTypePSK,
-		CredentialTypePrivateKey,
 	}
 }
 

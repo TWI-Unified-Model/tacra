@@ -20,7 +20,6 @@ func TestNames(t *testing.T) {
 		{string(constants.CredentialTypeJWT), "jwt"},
 		{string(constants.CredentialTypeAPIKey), "api-key"},
 		{string(constants.CredentialTypePSK), "psk"},
-		{string(constants.CredentialTypePrivateKey), "private-key"},
 		{string(constants.FreshnessKindPresentNonce), "present-nonce"},
 		{string(constants.FreshnessKindPresentEpoch), "present-epoch"},
 		{string(constants.FreshnessKindAbsentTimestamp), "absent-timestamp"},
@@ -50,7 +49,6 @@ func TestCredentialTypes(t *testing.T) {
 		constants.CredentialTypeJWT,
 		constants.CredentialTypeAPIKey,
 		constants.CredentialTypePSK,
-		constants.CredentialTypePrivateKey,
 	}
 	credentialTypes := constants.CredentialTypes()
 	if !slices.Equal(credentialTypes, expected) {
