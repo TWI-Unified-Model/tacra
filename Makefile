@@ -10,9 +10,9 @@ CAI_BIN    := $(BIN_DIR)/cai
 PROTO_FILES := $(shell find $(PROTO_DIR) -name '*.proto')
 PROTO_SRCS  := $(patsubst $(PROTO_DIR)/%,%,$(PROTO_FILES))
 
-.PHONY: all proto install-tools clean help client server platform cai
+.PHONY: all proto install-tools clean help client server constants platform cai
 
-all: proto platform cai client server
+all: proto constants platform cai client server
 
 ## proto: Compiles all .proto files into Go code
 proto:
@@ -25,6 +25,11 @@ proto:
 		--go-grpc_opt=paths=source_relative \
 		$(PROTO_SRCS)
 	@echo "Successfully compiled proto files to $(OUT_DIR)"
+
+## constants: Builds the constants of TACRA that every implementation imports
+constants:
+	cd constants && go build ./...
+	@echo "Successfully built constants library"
 
 ## platform: Builds the platform plug-in library
 platform:
