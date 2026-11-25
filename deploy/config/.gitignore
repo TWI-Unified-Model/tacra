@@ -1,2 +1,4 @@
 # Generated local-development configuration, certificates, keys, tokens, and passwords.
 local/
+# The same for the demonstration in simulation (deploy/demo.sh).
+demo/

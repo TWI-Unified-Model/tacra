@@ -4,6 +4,11 @@ The TACRA deployment dispatcher reads runtime configuration from `--config-dir`
 or `DEPLOY_CONFIG_DIR`. Its default is `tacra/deploy/config/local`, which is
 ignored by Git through `.gitignore`.
 
+The demonstration in simulation (`deploy/demo.sh`, see
+[readme_demo_simulation.md](../../readme_demo_simulation.md)) writes its own
+configuration to `tacra/deploy/config/demo`, also ignored by Git, and removes
+it with `demo.sh down`. It reads nothing from `config/local`.
+
 Keep real configuration, keys, certificates, and passwords outside the source
 tree or in an ignored local directory. The expected layout is:
 

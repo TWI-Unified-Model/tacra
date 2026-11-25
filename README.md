@@ -27,6 +27,7 @@ export DEPLOY_CONFIG_DIR="$PWD/deploy/config/local"
 | **Understand TACRA** | This PoC implements the Trustworthy Credential Acquisition using Remote Attestion (TACRA) architecture | [TACRA Informational Draft](https://github.com/TheBankster/rats-tacra/) |
 | **Installation Prerequisites** | Install Go compiler, Protobuf compiler (protoc), and build tools required to compile TACRA schemas from source. **Start here** if setting up a new development environment. | [readme_install_prereq.md](readme_install_prereq.md) |
 | **Docker Build & Deployment** | Build Docker images from source for all TWI stack components (globalsign-est, hashicorp-vault, spiffe-spire, step-ca, veraison-services) and deploy them locally or to remote hosts. Covers `components.sh` usage, configuration management, component-specific Dockerfiles, and the `init-local-est-config.sh` script for local development setup. | [readme_docker_build_deploy.md](readme_docker_build_deploy.md) |
+| **Demonstration in Simulation** | Both steps of the demonstration on one computer, in Docker, without confidential hardware: the Client acquires an X.509 certificate and a JWT through SPIRE, then through EST, and authenticates with both to the Server. One command builds, starts, runs and removes it. | [readme_demo_simulation.md](readme_demo_simulation.md) |
 | **Configuration Structure** | Runtime configuration directory layout, certificate/key requirements, and component-specific config examples. | [deploy/config/README.md](deploy/config/README.md) |
 | **Sequence Diagrams** | Visual flow diagrams showing acquire, initiate, retrieve, and enroll operations across the stack. | [proto/*.mmd](proto/*.mmd) |
 | **CAI Schema** | Protobuf message definitions and gRPC service contracts for CAI. | [proto/cai/v1/cai.proto](proto/cai/v1/cai.proto) |
@@ -44,6 +45,7 @@ export DEPLOY_CONFIG_DIR="$PWD/deploy/config/local"
 ├── container/                  # The hpke-base container that carries a released credential
 ├── deploy/
 │   ├── components.sh           # Main deployment dispatcher script
+│   ├── demo.sh                 # The demonstration in simulation: build, up, step1, step2, refusals, down
 │   ├── init-local-est-config.sh             # Local EST config generator
 │   ├── init-local-hashicorp-vault-config.sh # Local HashiCorp Vault config generator
 │   ├── init-local-rup-config.sh             # Local demo RUP TLS identity + rup.json generator
@@ -71,6 +73,7 @@ export DEPLOY_CONFIG_DIR="$PWD/deploy/config/local"
 │   └── retrieve.mmd            # CAAPI: RetrieveCredential flow
 ├── Makefile                    # Build automation
 ├── README.md                   # This file
+├── readme_demo_simulation.md   # The demonstration in simulation
 ├── readme_docker_build_deploy.md # Docker deployment guide
 ├── readme_install_prereq.md    # Installation prerequisites
 └── server/                     # Demo RATS-unaware Relying Party (RUP); see server/README.md
