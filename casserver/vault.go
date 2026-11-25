@@ -29,9 +29,29 @@ type secretVaultKind interface {
 	Name() string
 	// Validate checks the configuration of a Secret Vault of the kind.
 	Validate(c *SecretVaultConfig) error
+	// Store reports whether the Server reads a Secret Vault of the kind
+	// itself: it then originates the Freshness Handle, appraises the Evidence
+	// and seals the credential, and the Secret Vault only holds the credential.
+	Store() bool
 	// New builds the Secret Vault of the kind, with the TLS configuration the
-	// Server calls it with.
-	New(c *SecretVaultConfig, tc *tls.Config) (secretVault, error)
+	// Server calls it with: a secretVault that the Server forwards the flow to,
+	// or a secretStore that it reads.
+	New(c *SecretVaultConfig, tc *tls.Config) (secretVault, secretStore, error)
+}
+
+// A secretStore is a Secret Vault that holds credentials and does nothing
+// else of the flow. The Server reads the credential for a Target from it
+// after it appraised the Evidence.
+type secretStore interface {
+	Read(ctx context.Context, path string) (*storedCredential, error)
+}
+
+// storedCredential is a credential as a secretStore holds it.
+type storedCredential struct {
+	Type    constants.CredentialType
+	Format  string
+	Value   []byte
+	Version string
 }
 
 // A secretVault is the configured Secret Vault of the Targets in retrieve
@@ -44,8 +64,10 @@ type secretVault interface {
 	Retrieve(ctx context.Context, req *vaultRetrieval) ([]byte, error)
 }
 
-// secretVaultKinds lists the kinds: json, the one kind for now.
-var secretVaultKinds = []secretVaultKind{jsonVaultKind{}}
+// secretVaultKinds lists the kinds: json, the TACRA calls forwarded to a
+// Secret Vault that appraises and seals, and hashicorp, a HashiCorp Vault
+// that this Server reads.
+var secretVaultKinds = []secretVaultKind{jsonVaultKind{}, hashicorpVaultKind{}}
 
 // defaultSecretVaultKind is used in the absence of configuration.
 const defaultSecretVaultKind = "json"
@@ -70,13 +92,13 @@ func secretVaultKindNames() string {
 }
 
 // newSecretVault builds the configured Secret Vault by its kind, or none.
-func newSecretVault(c *Config) (secretVault, error) {
+func newSecretVault(c *Config) (secretVault, secretStore, error) {
 	if c.SecretVault == nil {
-		return nil, nil
+		return nil, nil, nil
 	}
 	kind, ok := secretVaultKindNamed(c.SecretVault.SecretVaultKind)
 	if !ok {
-		return nil, fmt.Errorf("secret_vault: kind %q is not one of %s", c.SecretVault.SecretVaultKind, secretVaultKindNames())
+		return nil, nil, fmt.Errorf("secret_vault: kind %q is not one of %s", c.SecretVault.SecretVaultKind, secretVaultKindNames())
 	}
 	certPath, keyPath := c.ClientCertPath, c.ClientKeyPath
 	if c.SecretVault.ClientCertPath != "" || c.SecretVault.ClientKeyPath != "" {
@@ -84,7 +106,7 @@ func newSecretVault(c *Config) (secretVault, error) {
 	}
 	tc, err := clientTLS(c.SecretVault.CAPath, certPath, keyPath)
 	if err != nil {
-		return nil, fmt.Errorf("secret_vault: %w", err)
+		return nil, nil, fmt.Errorf("secret_vault: %w", err)
 	}
 	return kind.New(c.SecretVault, tc)
 }
@@ -141,11 +163,13 @@ func (jsonVaultKind) Validate(c *SecretVaultConfig) error {
 	return nil
 }
 
-func (jsonVaultKind) New(c *SecretVaultConfig, tc *tls.Config) (secretVault, error) {
+func (jsonVaultKind) Store() bool { return false }
+
+func (jsonVaultKind) New(c *SecretVaultConfig, tc *tls.Config) (secretVault, secretStore, error) {
 	return &jsonVault{
 		url:    strings.TrimRight(c.URL, "/"),
 		client: &http.Client{Timeout: 60 * time.Second, Transport: &http.Transport{TLSClientConfig: tc}},
-	}, nil
+	}, nil, nil
 }
 
 // jsonVault is a Secret Vault of kind json.

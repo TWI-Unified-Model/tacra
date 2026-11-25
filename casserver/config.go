@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/TWI-Unified-Model/tacra/constants"
+	"github.com/TWI-Unified-Model/tacra/container"
 )
 
 // The Credential Types Enrollment mints.
@@ -116,6 +117,19 @@ type TargetConfig struct {
 	// AllowAnyMeasurement admits any affirming Attestation Results whatever
 	// the launch measurement. For bring-up only.
 	AllowAnyMeasurement bool `hcl:"allow_any_measurement" json:"allow_any_measurement,omitempty"`
+	// RetrieveCredentialTypes lists, for a Target in enroll mode, the
+	// Credential Types that the same Target releases by Retrieval, under the
+	// Verifiers and the launch measurements of the Target. A Workload that
+	// names one of them at initiation is answered in retrieve mode. The Secret
+	// Vault must be one that this Server reads itself.
+	RetrieveCredentialTypes []constants.CredentialType `hcl:"retrieve_credential_types" json:"retrieve_credential_types,omitempty"`
+	// SecretPath is, in a Secret Vault that this Server reads itself, the path
+	// of the credential that Retrieval releases for the Target.
+	SecretPath string `hcl:"secret_path" json:"secret_path,omitempty"`
+	// AcceptableCEK lists the suites of the hpke-base container that this
+	// Server seals a retrieved credential under, when it reads the Secret
+	// Vault itself. The default is both suites of the container.
+	AcceptableCEK []string `hcl:"acceptable_cek" json:"acceptable_cek,omitempty"`
 }
 
 // VerifierConfig is one RATS Verifier.
@@ -174,6 +188,12 @@ type SecretVaultConfig struct {
 	// the verifiers.
 	ClientCertPath string `hcl:"client_cert_path" json:"client_cert_path,omitempty"`
 	ClientKeyPath  string `hcl:"client_key_path" json:"client_key_path,omitempty"`
+	// Mount is, for the kind hashicorp, the mount of the key-value secrets
+	// engine, version 2; the default is secret.
+	Mount string `hcl:"mount" json:"mount,omitempty"`
+	// TokenPath is, for the kind hashicorp, the file holding the token this
+	// Server presents to the Secret Vault. The Server reads it at each call.
+	TokenPath string `hcl:"token_path" json:"token_path,omitempty"`
 }
 
 // Policy is the parsed policy of one Target.
@@ -188,6 +208,13 @@ type Policy struct {
 	Measurements        [][]byte
 	AllowAnyMeasurement bool
 	RATSModel           constants.RATSModel
+	// SecretPath and AcceptableCEK are those of a policy in retrieve mode
+	// whose Secret Vault this Server reads itself.
+	SecretPath    string
+	AcceptableCEK []string
+	// Retrieve is, for a Target in enroll mode, the policy under which the same
+	// Target releases other Credential Types by Retrieval, or nil.
+	Retrieve *Policy
 }
 
 // Validate returns the parsed policies of a correct configuration, and the
@@ -302,9 +329,73 @@ func (t *TargetConfig) policy(name string, c *Config) (*Policy, error) {
 		if len(p.Measurements) == 0 && !p.AllowAnyMeasurement {
 			return fail("measurements is required, or allow_any_measurement for bring-up")
 		}
+		if len(t.RetrieveCredentialTypes) > 0 {
+			if !c.readsSecretVault() {
+				return fail("retrieve_credential_types needs a secret_vault that this Server reads itself")
+			}
+			retrieve := &Policy{
+				Name:                name,
+				Mode:                constants.CredentialAcquisitionModeRetrieve,
+				CredentialTypes:     t.RetrieveCredentialTypes,
+				FreshnessKind:       constants.FreshnessKindPresentNonce,
+				Verifiers:           p.Verifiers,
+				Measurements:        p.Measurements,
+				AllowAnyMeasurement: p.AllowAnyMeasurement,
+			}
+			for _, ct := range retrieve.CredentialTypes {
+				if !slices.Contains(constants.CredentialTypes(), ct) {
+					return fail("Credential Type %q is not defined by TACRA", ct)
+				}
+				if slices.Contains(p.CredentialTypes, ct) {
+					return fail("Credential Type %q is enrolled for the Target and cannot be retrieved as well", ct)
+				}
+			}
+			if err := t.storePolicy(retrieve); err != nil {
+				return fail("%v", err)
+			}
+			p.Retrieve = retrieve
+		}
 	case constants.CredentialAcquisitionModeRetrieve:
 		if c.SecretVault == nil {
 			return fail("retrieve mode needs a secret_vault")
+		}
+		if c.readsSecretVault() {
+			// The Server appraises and releases itself: the policy names the
+			// Verifiers and the launch measurements, as for enrollment.
+			if t.RATSModel != "" {
+				return fail("rats_model does not apply to a secret_vault that this Server reads itself")
+			}
+			if len(p.Verifiers) == 0 {
+				return fail("at least one Verifier must be configured")
+			}
+			for _, v := range p.Verifiers {
+				if _, ok := c.Verifier[v]; !ok {
+					return fail("Verifier %q is not configured", v)
+				}
+			}
+			for _, m := range t.Measurements {
+				b, err := decodeHex(m)
+				if err != nil {
+					return fail("measurement %q is not hex", m)
+				}
+				p.Measurements = append(p.Measurements, b)
+			}
+			if len(p.Measurements) == 0 && !p.AllowAnyMeasurement {
+				return fail("measurements is required, or allow_any_measurement for bring-up")
+			}
+			for _, ct := range p.CredentialTypes {
+				if !slices.Contains(constants.CredentialTypes(), ct) {
+					return fail("Credential Type %q is not defined by TACRA", ct)
+				}
+			}
+			if p.FreshnessKind != "" && p.FreshnessKind != constants.FreshnessKindPresentNonce {
+				return fail("freshness_kind %q is not supported; this Server issues present-nonce Handles", p.FreshnessKind)
+			}
+			p.FreshnessKind = constants.FreshnessKindPresentNonce
+			if err := t.storePolicy(p); err != nil {
+				return fail("%v", err)
+			}
+			break
 		}
 		switch t.RATSModel {
 		case "", constants.RATSModelBackgroundCheck:
@@ -344,7 +435,40 @@ func (t *TargetConfig) policy(name string, c *Config) (*Policy, error) {
 		return fail("expires_in %s is below the minimum of %s that TACRA recommends for a Freshness Handle", expiresIn, time.Minute)
 	}
 	p.ExpiresIn = expiresIn
+	if p.Retrieve != nil {
+		p.Retrieve.ExpiresIn = expiresIn
+	}
 	return p, nil
+}
+
+// readsSecretVault reports whether the Secret Vault is of a kind that this
+// Server reads itself.
+func (c *Config) readsSecretVault() bool {
+	if c.SecretVault == nil {
+		return false
+	}
+	kind, ok := secretVaultKindNamed(c.SecretVault.SecretVaultKind)
+	return ok && kind.Store()
+}
+
+// storePolicy fills what a policy in retrieve mode needs when this Server
+// reads the Secret Vault itself: the path of the credential and the suites it
+// seals under.
+func (t *TargetConfig) storePolicy(p *Policy) error {
+	if t.SecretPath == "" {
+		return errors.New("secret_path is required")
+	}
+	p.SecretPath = t.SecretPath
+	p.AcceptableCEK = slices.Clone(t.AcceptableCEK)
+	if len(p.AcceptableCEK) == 0 {
+		p.AcceptableCEK = []string{container.AcceptableMLKEM768P256, container.AcceptableDHKEMP256}
+	}
+	for _, suite := range p.AcceptableCEK {
+		if _, ok := container.SuiteOf(suite); !ok {
+			return fmt.Errorf("acceptable_cek %q is not a suite of the hpke-base container", suite)
+		}
+	}
+	return nil
 }
 
 func parseDuration(s string, def time.Duration) (time.Duration, error) {

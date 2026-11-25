@@ -33,6 +33,7 @@ type Acquirer struct {
 	sessions  *sessions
 	verifiers map[string]verifierClient
 	vault     secretVault
+	store     secretStore // a Secret Vault that this Server reads itself, in place of vault
 	platform  *PlatformRule
 }
 
@@ -49,7 +50,7 @@ func New(c *Config, log logrus.FieldLogger) (*Acquirer, error) {
 	if err != nil {
 		return nil, fmt.Errorf("credential_acquisition: %w", err)
 	}
-	vault, err := newSecretVault(c)
+	vault, store, err := newSecretVault(c)
 	if err != nil {
 		return nil, fmt.Errorf("credential_acquisition: %w", err)
 	}
@@ -64,6 +65,7 @@ func New(c *Config, log logrus.FieldLogger) (*Acquirer, error) {
 		}
 	}
 	a := newAcquirer(log, policies, c.AcceptableEvidence, verifiers, vault, time.Now)
+	a.store = store
 	a.platform = rule
 	for name, v := range verifiers {
 		log.WithFields(logrus.Fields{
@@ -124,6 +126,10 @@ func (a *Acquirer) Initiate(ctx context.Context, in Initiation) (*InitiationResu
 	if err != nil {
 		return nil, err
 	}
+	// A Target in enroll mode may release other Credential Types by Retrieval.
+	if p.Retrieve != nil && in.CredentialType != "" && slices.Contains(p.Retrieve.CredentialTypes, in.CredentialType) {
+		p = p.Retrieve
+	}
 	if err := p.servesCredentialType(in.CredentialType); err != nil {
 		return nil, err
 	}
@@ -152,6 +158,22 @@ func (a *Acquirer) Initiate(ctx context.Context, in Initiation) (*InitiationResu
 			AcceptableEvidence: slices.Clone(a.evidence),
 		}, nil
 	default:
+		if a.store != nil {
+			// The Server reads the Secret Vault itself, so it originates the Handle.
+			ss.expires = a.sessions.now().Add(p.ExpiresIn)
+			handle, err := a.sessions.mint(ss)
+			if err != nil {
+				return nil, status.Errorf(codes.Internal, "%v", err)
+			}
+			return &InitiationResult{
+				Mode:               constants.CredentialAcquisitionModeRetrieve,
+				FreshnessKind:      constants.FreshnessKindPresentNonce,
+				Handle:             handle,
+				ExpiresInSeconds:   uint32(p.ExpiresIn / time.Second), //nolint:gosec // bounded by the configuration
+				AcceptableCEK:      slices.Clone(p.AcceptableCEK),
+				AcceptableEvidence: slices.Clone(a.evidence),
+			}, nil
+		}
 		if a.vault == nil {
 			return nil, status.Error(codes.Unavailable, "no Secret Vault is configured")
 		}
@@ -281,7 +303,7 @@ type Retrieval struct {
 func (a *Acquirer) Retrieve(ctx context.Context, in Retrieval) ([]byte, error) {
 	// A Server without a Secret Vault serves no Target in retrieve mode, as
 	// Validate refuses such a configuration; the guard comes first all the same.
-	if a.vault == nil {
+	if a.vault == nil && a.store == nil {
 		return nil, status.Error(codes.Unavailable, "no Secret Vault is configured")
 	}
 	p, err := a.policy(in.Target, constants.CredentialAcquisitionModeRetrieve)
@@ -301,6 +323,9 @@ func (a *Acquirer) Retrieve(ctx context.Context, in Retrieval) ([]byte, error) {
 	// The request is well formed: the single-use Handle is consumed only now.
 	if err := a.consumeSession(in.FreshnessKind, in.FreshnessElement, in.Target, in.CredentialType, in.CredentialHint, in.EntryID, in.AgentID); err != nil {
 		return nil, err
+	}
+	if a.store != nil {
+		return a.release(ctx, p, in, profile)
 	}
 	retrieval := &vaultRetrieval{
 		FreshnessKind:  in.FreshnessKind,
@@ -350,6 +375,9 @@ func (a *Acquirer) policy(target string, mode constants.CredentialAcquisitionMod
 	p, ok := a.policies[target]
 	if !ok {
 		return nil, status.Errorf(codes.NotFound, "unsupported Target %q", target)
+	}
+	if mode == constants.CredentialAcquisitionModeRetrieve && p.Mode != mode && p.Retrieve != nil {
+		return p.Retrieve, nil
 	}
 	if mode != "" && p.Mode != mode {
 		// Enroll for a Target in retrieve mode, or Retrieve in enroll mode, is a
