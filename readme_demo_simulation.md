@@ -148,7 +148,7 @@ of the platform:
 - the measurement against the Reference Value.
 
 A step fails when one of these checks does not hold. The time at the end of
-a call is how long the CAS Client took to answer it. Nothing secret crosses
+a call is the time in which the CAS Client answered it. Nothing secret crosses
 CAAPI: the keys of the Client never leave the sidecar, a certificate is
 public, and the JWT travels sealed. `--raw` prints the lines of the logs of
 the servers as they are.

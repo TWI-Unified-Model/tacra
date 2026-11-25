@@ -519,7 +519,7 @@ endorse_platform() {
         --entrypoint /usr/local/bin/tacra-sim-platform "${cai}" \
         endorsements -key /platform/attestation-key.pem -measurement "${MEASUREMENT}" -out /endorsements ||
         fail "the simulated platform did not write its Endorsements"
-    # Veraison takes Endorsements as a CoRIM. Its own cocli builds the CoRIM
+    # Veraison accepts Endorsements as a CoRIM. Its own cocli builds the CoRIM
     # from the templates and submits it: the trust anchor is the Attestation
     # Key, the Reference Value is the measurement.
     chmod 777 "${CONFIG_DIR}/veraison/endorsements"

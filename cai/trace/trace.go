@@ -56,7 +56,7 @@ type Record struct {
 	Request      json.RawMessage `json:"request"`            // the request, in the JSON form of Protocol Buffers
 	Response     json.RawMessage `json:"response,omitempty"` // the response; absent when the call failed
 	Error        string          `json:"error,omitempty"`    // the refusal, as the CAS Client returned it
-	Milliseconds float64         `json:"milliseconds"`       // how long the CAS Client took to answer
+	Milliseconds float64         `json:"milliseconds"`       // the time in which the CAS Client answered
 }
 
 // Interceptor returns a client interceptor that writes one file into dir for

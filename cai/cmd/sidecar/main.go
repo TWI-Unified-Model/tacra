@@ -52,9 +52,9 @@ func main() {
 
 	dialOptions := []grpc.DialOption{
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		// The sidecar takes no service configuration from DNS. Without this option
-		// the first call to a CAS Client named by host waits for a TXT lookup that
-		// a resolver may take half a second to refuse.
+		// The sidecar reads no service configuration from DNS. Without this option
+		// the first call to a CAS Client named by host waits for a TXT lookup, and
+		// a resolver may need half a second to refuse it.
 		grpc.WithDisableServiceConfig(),
 	}
 	if dir := os.Getenv("CAI_TRACE_DIR"); dir != "" {
