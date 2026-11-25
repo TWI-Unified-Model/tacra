@@ -198,6 +198,9 @@ const (
 	EncryptionAlgorithm_ENCRYPTION_ALGORITHM_UNSPECIFIED EncryptionAlgorithm = 0
 	EncryptionAlgorithm_ENCRYPTION_ALGORITHM_ECDH_P256   EncryptionAlgorithm = 1
 	EncryptionAlgorithm_ENCRYPTION_ALGORITHM_RSA_2048    EncryptionAlgorithm = 2
+	// The hybrid KEM of the hpke-base container. CEKpub is the 1249-octet
+	// MLKEM768-P256 encapsulation key itself, not a SubjectPublicKeyInfo.
+	EncryptionAlgorithm_ENCRYPTION_ALGORITHM_MLKEM768_P256 EncryptionAlgorithm = 3
 )
 
 // Enum value maps for EncryptionAlgorithm.
@@ -206,11 +209,13 @@ var (
 		0: "ENCRYPTION_ALGORITHM_UNSPECIFIED",
 		1: "ENCRYPTION_ALGORITHM_ECDH_P256",
 		2: "ENCRYPTION_ALGORITHM_RSA_2048",
+		3: "ENCRYPTION_ALGORITHM_MLKEM768_P256",
 	}
 	EncryptionAlgorithm_value = map[string]int32{
-		"ENCRYPTION_ALGORITHM_UNSPECIFIED": 0,
-		"ENCRYPTION_ALGORITHM_ECDH_P256":   1,
-		"ENCRYPTION_ALGORITHM_RSA_2048":    2,
+		"ENCRYPTION_ALGORITHM_UNSPECIFIED":   0,
+		"ENCRYPTION_ALGORITHM_ECDH_P256":     1,
+		"ENCRYPTION_ALGORITHM_RSA_2048":      2,
+		"ENCRYPTION_ALGORITHM_MLKEM768_P256": 3,
 	}
 )
 
@@ -310,6 +315,9 @@ type InitiateCredentialAcquistionRequest struct {
 	Target string `protobuf:"bytes,1,opt,name=target,proto3" json:"target,omitempty"`
 	// Which credential type does the workload with to use?
 	CredentialType CredentialType `protobuf:"varint,2,opt,name=credential_type,json=credentialType,proto3,enum=caapi.v1.CredentialType" json:"credential_type,omitempty"`
+	// The Credential Hint, optional. With the Freshness Kind present-nonce the
+	// second call repeats a hint named here.
+	CredentialHint string `protobuf:"bytes,3,opt,name=credential_hint,json=credentialHint,proto3" json:"credential_hint,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -356,6 +364,13 @@ func (x *InitiateCredentialAcquistionRequest) GetCredentialType() CredentialType
 		return x.CredentialType
 	}
 	return CredentialType_CREDENTIAL_TYPE_UNSPECIFIED
+}
+
+func (x *InitiateCredentialAcquistionRequest) GetCredentialHint() string {
+	if x != nil {
+		return x.CredentialHint
+	}
+	return ""
 }
 
 type InitiateCredentialAcquisitionResponse struct {
@@ -453,8 +468,19 @@ type EnrollCredentialRequest struct {
 	Csr []byte `protobuf:"bytes,5,opt,name=csr,proto3" json:"csr,omitempty"`
 	// CSK algorithm from Initiate-Credential-Acquisition.
 	SigningAlgorithm *SigningAlgorithm `protobuf:"varint,6,opt,name=signing_algorithm,json=signingAlgorithm,proto3,enum=caapi.v1.SigningAlgorithm,oneof" json:"signing_algorithm,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	// Freshness Kind from Initiate-Credential-Acquisition.
+	FreshnessKind FreshnessKind `protobuf:"varint,7,opt,name=freshness_kind,json=freshnessKind,proto3,enum=caapi.v1.FreshnessKind" json:"freshness_kind,omitempty"`
+	// The freshness element that the Evidence binds: the Freshness Handle
+	// (present-nonce, present-epoch), the local epoch marker (absent-epoch),
+	// or eight octets of the time of the Attester (absent-timestamp). Absent
+	// for absent-none. The Evidence carries only the binding value over it,
+	// so the CAS forwards the element itself.
+	FreshnessElement []byte `protobuf:"bytes,8,opt,name=freshness_element,json=freshnessElement,proto3,oneof" json:"freshness_element,omitempty"`
+	// Media type of the Evidence, for example
+	// application/vnd.veraison.tsm-report+cbor.
+	EvidenceProfile *string `protobuf:"bytes,9,opt,name=evidence_profile,json=evidenceProfile,proto3,oneof" json:"evidence_profile,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *EnrollCredentialRequest) Reset() {
@@ -529,6 +555,27 @@ func (x *EnrollCredentialRequest) GetSigningAlgorithm() SigningAlgorithm {
 	return SigningAlgorithm_SIGNING_ALGORITHM_UNSPECIFIED
 }
 
+func (x *EnrollCredentialRequest) GetFreshnessKind() FreshnessKind {
+	if x != nil {
+		return x.FreshnessKind
+	}
+	return FreshnessKind_FRESHNESS_KIND_UNSPECIFIED
+}
+
+func (x *EnrollCredentialRequest) GetFreshnessElement() []byte {
+	if x != nil {
+		return x.FreshnessElement
+	}
+	return nil
+}
+
+func (x *EnrollCredentialRequest) GetEvidenceProfile() string {
+	if x != nil && x.EvidenceProfile != nil {
+		return *x.EvidenceProfile
+	}
+	return ""
+}
+
 type EnrollCredentialResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// TODO: explore utilizing existing types (protobuf representation of certificates etc.)
@@ -584,8 +631,19 @@ type RetrieveCredentialRequest struct {
 	Evidence []byte `protobuf:"bytes,4,opt,name=evidence,proto3" json:"evidence,omitempty"`
 	// CEK algorithm from Initiate-Credential-Acquisition.
 	EncryptionAlgorithm *EncryptionAlgorithm `protobuf:"varint,5,opt,name=encryption_algorithm,json=encryptionAlgorithm,proto3,enum=caapi.v1.EncryptionAlgorithm,oneof" json:"encryption_algorithm,omitempty"`
-	unknownFields       protoimpl.UnknownFields
-	sizeCache           protoimpl.SizeCache
+	// Freshness Kind from Initiate-Credential-Acquisition.
+	FreshnessKind FreshnessKind `protobuf:"varint,6,opt,name=freshness_kind,json=freshnessKind,proto3,enum=caapi.v1.FreshnessKind" json:"freshness_kind,omitempty"`
+	// The freshness element that the Evidence binds, as for Enrollment.
+	FreshnessElement []byte `protobuf:"bytes,7,opt,name=freshness_element,json=freshnessElement,proto3,oneof" json:"freshness_element,omitempty"`
+	// Media type of the Evidence.
+	EvidenceProfile *string `protobuf:"bytes,8,opt,name=evidence_profile,json=evidenceProfile,proto3,oneof" json:"evidence_profile,omitempty"`
+	// CEKpub: the DER SubjectPublicKeyInfo of the key, or, for
+	// ENCRYPTION_ALGORITHM_MLKEM768_P256, the encapsulation key itself. The
+	// Evidence carries only the binding value over CEKpub, so the Secret
+	// Vault receives the key here.
+	CekPub        []byte `protobuf:"bytes,9,opt,name=cek_pub,json=cekPub,proto3" json:"cek_pub,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *RetrieveCredentialRequest) Reset() {
@@ -653,6 +711,34 @@ func (x *RetrieveCredentialRequest) GetEncryptionAlgorithm() EncryptionAlgorithm
 	return EncryptionAlgorithm_ENCRYPTION_ALGORITHM_UNSPECIFIED
 }
 
+func (x *RetrieveCredentialRequest) GetFreshnessKind() FreshnessKind {
+	if x != nil {
+		return x.FreshnessKind
+	}
+	return FreshnessKind_FRESHNESS_KIND_UNSPECIFIED
+}
+
+func (x *RetrieveCredentialRequest) GetFreshnessElement() []byte {
+	if x != nil {
+		return x.FreshnessElement
+	}
+	return nil
+}
+
+func (x *RetrieveCredentialRequest) GetEvidenceProfile() string {
+	if x != nil && x.EvidenceProfile != nil {
+		return *x.EvidenceProfile
+	}
+	return ""
+}
+
+func (x *RetrieveCredentialRequest) GetCekPub() []byte {
+	if x != nil {
+		return x.CekPub
+	}
+	return nil
+}
+
 type RetrieveCredentialResponse struct {
 	state             protoimpl.MessageState `protogen:"open.v1"`
 	WrappedCredential []byte                 `protobuf:"bytes,1,opt,name=wrapped_credential,json=wrappedCredential,proto3" json:"wrapped_credential,omitempty"`
@@ -701,10 +787,11 @@ var File_caapi_v1_caapi_proto protoreflect.FileDescriptor
 
 const file_caapi_v1_caapi_proto_rawDesc = "" +
 	"\n" +
-	"\x14caapi/v1/caapi.proto\x12\bcaapi.v1\"\x80\x01\n" +
+	"\x14caapi/v1/caapi.proto\x12\bcaapi.v1\"\xa9\x01\n" +
 	"#InitiateCredentialAcquistionRequest\x12\x16\n" +
 	"\x06target\x18\x01 \x01(\tR\x06target\x12A\n" +
-	"\x0fcredential_type\x18\x02 \x01(\x0e2\x18.caapi.v1.CredentialTypeR\x0ecredentialType\"\xb9\x03\n" +
+	"\x0fcredential_type\x18\x02 \x01(\x0e2\x18.caapi.v1.CredentialTypeR\x0ecredentialType\x12'\n" +
+	"\x0fcredential_hint\x18\x03 \x01(\tR\x0ecredentialHint\"\xb9\x03\n" +
 	"%InitiateCredentialAcquisitionResponse\x127\n" +
 	"\x04mode\x18\x01 \x01(\x0e2#.caapi.v1.CredentialAcquisitionModeR\x04mode\x12>\n" +
 	"\x0efreshness_kind\x18\x02 \x01(\x0e2\x17.caapi.v1.FreshnessKindR\rfreshnessKind\x12.\n" +
@@ -713,26 +800,37 @@ const file_caapi_v1_caapi_proto_rawDesc = "" +
 	"\x14encryption_algorithm\x18\x05 \x01(\x0e2\x1d.caapi.v1.EncryptionAlgorithmH\x02R\x13encryptionAlgorithm\x88\x01\x01B\x13\n" +
 	"\x11_freshness_handleB\x14\n" +
 	"\x12_signing_algorithmB\x17\n" +
-	"\x15_encryption_algorithm\"\xc8\x02\n" +
+	"\x15_encryption_algorithm\"\x95\x04\n" +
 	"\x17EnrollCredentialRequest\x12\x16\n" +
 	"\x06target\x18\x01 \x01(\tR\x06target\x12A\n" +
 	"\x0fcredential_type\x18\x02 \x01(\x0e2\x18.caapi.v1.CredentialTypeR\x0ecredentialType\x12,\n" +
 	"\x0fcredential_hint\x18\x03 \x01(\tH\x00R\x0ecredentialHint\x88\x01\x01\x12\x1a\n" +
 	"\bevidence\x18\x04 \x01(\fR\bevidence\x12\x10\n" +
 	"\x03csr\x18\x05 \x01(\fR\x03csr\x12L\n" +
-	"\x11signing_algorithm\x18\x06 \x01(\x0e2\x1a.caapi.v1.SigningAlgorithmH\x01R\x10signingAlgorithm\x88\x01\x01B\x12\n" +
+	"\x11signing_algorithm\x18\x06 \x01(\x0e2\x1a.caapi.v1.SigningAlgorithmH\x01R\x10signingAlgorithm\x88\x01\x01\x12>\n" +
+	"\x0efreshness_kind\x18\a \x01(\x0e2\x17.caapi.v1.FreshnessKindR\rfreshnessKind\x120\n" +
+	"\x11freshness_element\x18\b \x01(\fH\x02R\x10freshnessElement\x88\x01\x01\x12.\n" +
+	"\x10evidence_profile\x18\t \x01(\tH\x03R\x0fevidenceProfile\x88\x01\x01B\x12\n" +
 	"\x10_credential_hintB\x14\n" +
-	"\x12_signing_algorithm\"M\n" +
+	"\x12_signing_algorithmB\x14\n" +
+	"\x12_freshness_elementB\x13\n" +
+	"\x11_evidence_profile\"M\n" +
 	"\x18EnrollCredentialResponse\x121\n" +
-	"\x14plaintext_credential\x18\x01 \x01(\fR\x13plaintextCredential\"\xc4\x02\n" +
+	"\x14plaintext_credential\x18\x01 \x01(\fR\x13plaintextCredential\"\xaa\x04\n" +
 	"\x19RetrieveCredentialRequest\x12\x16\n" +
 	"\x06target\x18\x01 \x01(\tR\x06target\x12A\n" +
 	"\x0fcredential_type\x18\x02 \x01(\x0e2\x18.caapi.v1.CredentialTypeR\x0ecredentialType\x12,\n" +
 	"\x0fcredential_hint\x18\x03 \x01(\tH\x00R\x0ecredentialHint\x88\x01\x01\x12\x1a\n" +
 	"\bevidence\x18\x04 \x01(\fR\bevidence\x12U\n" +
-	"\x14encryption_algorithm\x18\x05 \x01(\x0e2\x1d.caapi.v1.EncryptionAlgorithmH\x01R\x13encryptionAlgorithm\x88\x01\x01B\x12\n" +
+	"\x14encryption_algorithm\x18\x05 \x01(\x0e2\x1d.caapi.v1.EncryptionAlgorithmH\x01R\x13encryptionAlgorithm\x88\x01\x01\x12>\n" +
+	"\x0efreshness_kind\x18\x06 \x01(\x0e2\x17.caapi.v1.FreshnessKindR\rfreshnessKind\x120\n" +
+	"\x11freshness_element\x18\a \x01(\fH\x02R\x10freshnessElement\x88\x01\x01\x12.\n" +
+	"\x10evidence_profile\x18\b \x01(\tH\x03R\x0fevidenceProfile\x88\x01\x01\x12\x17\n" +
+	"\acek_pub\x18\t \x01(\fR\x06cekPubB\x12\n" +
 	"\x10_credential_hintB\x17\n" +
-	"\x15_encryption_algorithm\"K\n" +
+	"\x15_encryption_algorithmB\x14\n" +
+	"\x12_freshness_elementB\x13\n" +
+	"\x11_evidence_profile\"K\n" +
 	"\x1aRetrieveCredentialResponse\x12-\n" +
 	"\x12wrapped_credential\x18\x01 \x01(\fR\x11wrappedCredential*j\n" +
 	"\x19CredentialAcquisitionMode\x12\x1b\n" +
@@ -749,11 +847,12 @@ const file_caapi_v1_caapi_proto_rawDesc = "" +
 	"\x10SigningAlgorithm\x12!\n" +
 	"\x1dSIGNING_ALGORITHM_UNSPECIFIED\x10\x00\x12 \n" +
 	"\x1cSIGNING_ALGORITHM_ECDSA_P256\x10\x01\x12\x1e\n" +
-	"\x1aSIGNING_ALGORITHM_RSA_2048\x10\x02*\x82\x01\n" +
+	"\x1aSIGNING_ALGORITHM_RSA_2048\x10\x02*\xaa\x01\n" +
 	"\x13EncryptionAlgorithm\x12$\n" +
 	" ENCRYPTION_ALGORITHM_UNSPECIFIED\x10\x00\x12\"\n" +
 	"\x1eENCRYPTION_ALGORITHM_ECDH_P256\x10\x01\x12!\n" +
-	"\x1dENCRYPTION_ALGORITHM_RSA_2048\x10\x02*\xcf\x01\n" +
+	"\x1dENCRYPTION_ALGORITHM_RSA_2048\x10\x02\x12&\n" +
+	"\"ENCRYPTION_ALGORITHM_MLKEM768_P256\x10\x03*\xcf\x01\n" +
 	"\x0eCredentialType\x12\x1f\n" +
 	"\x1bCREDENTIAL_TYPE_UNSPECIFIED\x10\x00\x12\x17\n" +
 	"\x13CREDENTIAL_TYPE_JWT\x10\x01\x12\x17\n" +
@@ -802,19 +901,21 @@ var file_caapi_v1_caapi_proto_depIdxs = []int32{
 	3,  // 4: caapi.v1.InitiateCredentialAcquisitionResponse.encryption_algorithm:type_name -> caapi.v1.EncryptionAlgorithm
 	4,  // 5: caapi.v1.EnrollCredentialRequest.credential_type:type_name -> caapi.v1.CredentialType
 	2,  // 6: caapi.v1.EnrollCredentialRequest.signing_algorithm:type_name -> caapi.v1.SigningAlgorithm
-	4,  // 7: caapi.v1.RetrieveCredentialRequest.credential_type:type_name -> caapi.v1.CredentialType
-	3,  // 8: caapi.v1.RetrieveCredentialRequest.encryption_algorithm:type_name -> caapi.v1.EncryptionAlgorithm
-	5,  // 9: caapi.v1.CredentialAcquisitionService.InitiateRemoteAttestation:input_type -> caapi.v1.InitiateCredentialAcquistionRequest
-	7,  // 10: caapi.v1.CredentialAcquisitionService.EnrollCredential:input_type -> caapi.v1.EnrollCredentialRequest
-	9,  // 11: caapi.v1.CredentialAcquisitionService.RetrieveCredential:input_type -> caapi.v1.RetrieveCredentialRequest
-	6,  // 12: caapi.v1.CredentialAcquisitionService.InitiateRemoteAttestation:output_type -> caapi.v1.InitiateCredentialAcquisitionResponse
-	8,  // 13: caapi.v1.CredentialAcquisitionService.EnrollCredential:output_type -> caapi.v1.EnrollCredentialResponse
-	10, // 14: caapi.v1.CredentialAcquisitionService.RetrieveCredential:output_type -> caapi.v1.RetrieveCredentialResponse
-	12, // [12:15] is the sub-list for method output_type
-	9,  // [9:12] is the sub-list for method input_type
-	9,  // [9:9] is the sub-list for extension type_name
-	9,  // [9:9] is the sub-list for extension extendee
-	0,  // [0:9] is the sub-list for field type_name
+	1,  // 7: caapi.v1.EnrollCredentialRequest.freshness_kind:type_name -> caapi.v1.FreshnessKind
+	4,  // 8: caapi.v1.RetrieveCredentialRequest.credential_type:type_name -> caapi.v1.CredentialType
+	3,  // 9: caapi.v1.RetrieveCredentialRequest.encryption_algorithm:type_name -> caapi.v1.EncryptionAlgorithm
+	1,  // 10: caapi.v1.RetrieveCredentialRequest.freshness_kind:type_name -> caapi.v1.FreshnessKind
+	5,  // 11: caapi.v1.CredentialAcquisitionService.InitiateRemoteAttestation:input_type -> caapi.v1.InitiateCredentialAcquistionRequest
+	7,  // 12: caapi.v1.CredentialAcquisitionService.EnrollCredential:input_type -> caapi.v1.EnrollCredentialRequest
+	9,  // 13: caapi.v1.CredentialAcquisitionService.RetrieveCredential:input_type -> caapi.v1.RetrieveCredentialRequest
+	6,  // 14: caapi.v1.CredentialAcquisitionService.InitiateRemoteAttestation:output_type -> caapi.v1.InitiateCredentialAcquisitionResponse
+	8,  // 15: caapi.v1.CredentialAcquisitionService.EnrollCredential:output_type -> caapi.v1.EnrollCredentialResponse
+	10, // 16: caapi.v1.CredentialAcquisitionService.RetrieveCredential:output_type -> caapi.v1.RetrieveCredentialResponse
+	14, // [14:17] is the sub-list for method output_type
+	11, // [11:14] is the sub-list for method input_type
+	11, // [11:11] is the sub-list for extension type_name
+	11, // [11:11] is the sub-list for extension extendee
+	0,  // [0:11] is the sub-list for field type_name
 }
 
 func init() { file_caapi_v1_caapi_proto_init() }
