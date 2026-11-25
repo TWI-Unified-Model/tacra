@@ -4,6 +4,7 @@ use (
 	./cai
 	./client
 	./constants
+	./container
 	./est
 	./gen/go
 	./platform
