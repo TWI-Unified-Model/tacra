@@ -8,6 +8,8 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha256"
+	"crypto/x509"
+	"encoding/pem"
 	"errors"
 	"os"
 	"testing"
@@ -425,5 +427,27 @@ func TestPluginInterface(t *testing.T) {
 	var p platform.Plugin = newTestPlugin(t)
 	if p.Name() != "simulated" {
 		t.Fatalf("name %q", p.Name())
+	}
+}
+
+func TestAttestationPublicKey(t *testing.T) {
+	key, err := NewAttestationKey()
+	if err != nil {
+		t.Fatal(err)
+	}
+	encoded, err := MarshalAttestationPublicKey(&key.PublicKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	block, rest := pem.Decode(encoded)
+	if block == nil || block.Type != "PUBLIC KEY" || len(rest) != 0 {
+		t.Fatalf("the public Attestation Key is not one PEM block of type PUBLIC KEY: %q", encoded)
+	}
+	parsed, err := x509.ParsePKIXPublicKey(block.Bytes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !key.PublicKey.Equal(parsed) {
+		t.Fatal("the public key read from PEM is not the public half of the Attestation Key")
 	}
 }

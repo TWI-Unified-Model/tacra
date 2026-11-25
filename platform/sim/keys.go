@@ -111,6 +111,17 @@ func MarshalAttestationKey(key *ecdsa.PrivateKey) ([]byte, error) {
 	return pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: der}), nil
 }
 
+// MarshalAttestationPublicKey encodes the public half of an Attestation Key
+// as a PEM block of SubjectPublicKeyInfo: what a party that verifies the
+// Evidence of the platform holds.
+func MarshalAttestationPublicKey(key *ecdsa.PublicKey) ([]byte, error) {
+	der, err := x509.MarshalPKIXPublicKey(key)
+	if err != nil {
+		return nil, fmt.Errorf("sim: public Attestation Key: %w", err)
+	}
+	return pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: der}), nil
+}
+
 // ParseAttestationKey decodes an Attestation Key from a PEM block of PKCS #8.
 func ParseAttestationKey(pemBytes []byte) (*ecdsa.PrivateKey, error) {
 	block, _ := pem.Decode(pemBytes)

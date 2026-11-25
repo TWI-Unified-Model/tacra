@@ -22,6 +22,8 @@ import (
 const usage = `Usage:
   tacra-sim-platform keygen -key FILE
       Create the Attestation Key of a simulated platform. An existing file is kept.
+  tacra-sim-platform public -key FILE -out FILE
+      Write the public half of the Attestation Key, for a party that verifies the Evidence.
   tacra-sim-platform measure PROGRAM
       Print the measurement of a program: the SHA-256 of its file, in hex.
   tacra-sim-platform endorsements -key FILE -measurement HEX -out DIR
@@ -40,6 +42,8 @@ func main() {
 	switch os.Args[1] {
 	case "keygen":
 		err = keygen(os.Args[2:])
+	case "public":
+		err = public(os.Args[2:])
 	case "measure":
 		err = measure(os.Args[2:])
 	case "endorsements":
@@ -94,6 +98,27 @@ func measure(args []string) error {
 	}
 	fmt.Println(hex.EncodeToString(measurement))
 	return nil
+}
+
+func public(args []string) error {
+	flags := flag.NewFlagSet("public", flag.ContinueOnError)
+	path := flags.String("key", "", "file of the Attestation Key")
+	out := flags.String("out", "", "file for the public key")
+	if err := flags.Parse(args); err != nil {
+		return err
+	}
+	if *path == "" || *out == "" {
+		return errors.New("public needs -key and -out")
+	}
+	key, err := readKey(*path)
+	if err != nil {
+		return err
+	}
+	encoded, err := sim.MarshalAttestationPublicKey(&key.PublicKey)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(*out, encoded, 0o644)
 }
 
 func readKey(path string) (*ecdsa.PrivateKey, error) {
