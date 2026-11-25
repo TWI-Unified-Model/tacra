@@ -13,22 +13,27 @@
 # simulated: its Evidence is a PSA attestation token signed with a software
 # key, and Veraison appraises that token as it appraises any other PSA token.
 #
-# Nothing here is a production default. Every key, certificate and token is
-# created for one run, kept in a directory that Git ignores, and removed by
-# "down". No port is published on the host.
+# The demonstration runs everything itself, Veraison included, on a network of
+# its own, and publishes no port on the host. Nothing here is a production
+# default: every key, certificate and token is created for one run, kept in a
+# directory that Git ignores, and removed by "down", which leaves nothing.
 set -euo pipefail
 
 readonly SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 readonly TACRA_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
 readonly WORKSPACE_ROOT="$(cd -- "${SCRIPT_DIR}/../.." && pwd)"
-readonly VERAISON_DIR="${WORKSPACE_ROOT}/veraison-services/deployments/docker"
 
 readonly NETWORK="twi-demo"
-readonly VERAISON_NETWORK="veraison-net"
+# The name under which the configuration and the certificate of Veraison know
+# its verification service; the service answers to it on the network above.
 readonly VERAISON_VERIFIER="verification-service"
 readonly LABEL="twi.demo=simulation"
 readonly MARKER=".twi-demo"
 
+readonly C_KEYCLOAK="twi-demo-veraison-keycloak"
+readonly C_VTS="twi-demo-veraison-vts"
+readonly C_PROVISIONING="twi-demo-veraison-provisioning"
+readonly C_VERIFICATION="twi-demo-veraison-verification"
 readonly C_STEP_CA="twi-demo-step-ca"
 readonly C_VAULT="twi-demo-vault"
 readonly C_EST_SERVER="twi-demo-est-server"
@@ -39,7 +44,10 @@ readonly C_SERVER="twi-demo-server"
 readonly C_CAI_SPIRE="twi-demo-cai-spire"
 readonly C_CAI_EST="twi-demo-cai-est"
 readonly C_CLIENT="twi-demo-client"
-readonly SERVICES="${C_STEP_CA} ${C_VAULT} ${C_EST_SERVER} ${C_EST_CLIENT} ${C_SPIRE_SERVER} ${C_SPIRE_AGENT} ${C_SERVER} ${C_CAI_SPIRE} ${C_CAI_EST}"
+readonly SERVICES="${C_KEYCLOAK} ${C_VTS} ${C_PROVISIONING} ${C_VERIFICATION} ${C_STEP_CA} ${C_VAULT} ${C_EST_SERVER} ${C_EST_CLIENT} ${C_SPIRE_SERVER} ${C_SPIRE_AGENT} ${C_SERVER} ${C_CAI_SPIRE} ${C_CAI_EST}"
+# The images that the demonstration runs. The four services of Veraison and its
+# manager, which carries cocli, are the images of the Veraison deployment.
+readonly IMAGE_NAMES="veraison-keycloak veraison-vts veraison-provisioning veraison-verification veraison-manager step-ca hashicorp-vault globalsign-est spiffe-spire-server spiffe-spire-agent tacra-cai tacra-client tacra-server"
 
 # The Server is reached under this name on the network of the demonstration.
 # The name is the Target of both steps and the audience of the JWT.
@@ -60,6 +68,9 @@ ACTION=""
 CONFIG_DIR="${DEMO_CONFIG_DIR:-${SCRIPT_DIR}/config/demo}"
 PLATFORM=""
 LOG_COMPONENT=""
+RAW=false
+IMAGES=""
+IMAGE_TAG="${DEMO_IMAGE_TAG:-demo}"
 UP_STARTED=false
 UP_DONE=false
 MEASUREMENT=""
@@ -68,9 +79,11 @@ NOT_REFUSED=0
 usage() {
     cat <<'EOF'
 Usage:
-  tacra/deploy/demo.sh <build|up|step1|step2|refusals|status|logs|down> [options]
+  tacra/deploy/demo.sh <workspace|build|up|step1|step2|refusals|all|status|logs|down|push> [options]
 
 Commands:
+  workspace  Clone the other repositories of the workspace beside tacra. A
+           repository that is already there is left as it is.
   build    Build the images of the workspace (components.sh build) and the
            images of the Client, the CAI sidecar and the Server.
   up       Create the configuration and start everything. A demonstration
@@ -80,14 +93,24 @@ Commands:
   step2    Step 2: the same through EST.
   refusals Show what is refused: a CAI sidecar with another measurement, a
            platform that the Verifier does not know, and the JWT alone.
+  all      build, up, step1, step2 and refusals, one after the other.
+           With --images there is nothing to build.
   status   Show the state of every container.
   logs     Print the log of one component, for example: logs spire-server
   down     Remove the containers, volumes, network and configuration.
+  push     Tag the images that this workspace built under the prefix of
+           --images and push them there, for others to run with --images.
 
 Options:
   --config-dir PATH    Directory of the generated configuration
                        (default: tacra/deploy/config/demo, ignored by Git).
   --platform PLATFORM  Docker platform, such as linux/arm64 (default: this host).
+  --images PREFIX      Run images that were built elsewhere and pushed under
+                       PREFIX (see push) instead of images built here: up
+                       pulls them, and no workspace and no build are needed.
+  --tag TAG            The tag of those images (default: demo).
+  --raw                In step1, step2 and refusals, print the lines of the
+                       logs as they are instead of one line for each record.
   -h, --help           Show this help.
 EOF
 }
@@ -111,6 +134,20 @@ require_docker() {
 }
 
 image_tag() { printf 'twi/%s:local-%s' "$1" "${PLATFORM//\//-}"; }
+
+# image NAME prints the reference of an image of the demonstration: the image
+# that this workspace built or, with --images, the image of that name and of
+# this platform under the prefix.
+image() {
+    if [[ -n "${IMAGES}" ]]; then
+        printf '%s/%s:%s-%s' "${IMAGES}" "$1" "${IMAGE_TAG}" "${PLATFORM//\//-}"
+        return
+    fi
+    case "$1" in
+        veraison-*) printf 'veraison/%s' "${1#veraison-}" ;;
+        *) image_tag "$1" ;;
+    esac
+}
 image_exists() { docker image inspect "$1" >/dev/null 2>&1; }
 is_running() { [[ "$(docker inspect -f '{{.State.Running}}' "$1" 2>/dev/null || true)" == true ]]; }
 
@@ -159,25 +196,41 @@ tool() {
     local script
     script="$(cat)"
     docker run --rm "$@" --user "$(id -u):$(id -g)" -e HOME=/tmp -e STEPPATH=/tmp/step \
-        -v "${CONFIG_DIR}:/demo" -w /demo --entrypoint /bin/bash "$(image_tag step-ca)" -euo pipefail -c "${script}"
+        -v "${CONFIG_DIR}:/demo" -w /demo --entrypoint /bin/bash "$(image step-ca)" -euo pipefail -c "${script}"
 }
 
 # json_field FILE FILTER prints one field of a JSON file of the configuration
 # directory, with the jq of the step-ca image.
 json_field() {
     docker run --rm --user "$(id -u):$(id -g)" -v "${CONFIG_DIR}:/demo:ro" -w /demo \
-        --entrypoint jq "$(image_tag step-ca)" -r "$2" "$1"
+        --entrypoint jq "$(image step-ca)" -r "$2" "$1"
 }
 
 # log_lines prints how many lines the log of a container has, so that a later
 # call can print only what the container wrote after this point.
 log_lines() { docker logs "$1" 2>&1 | wc -l | tr -d ' '; }
 
+# field KEY LINE prints the value of KEY in a log line of key=value pairs, the
+# format in which the CAS Servers write their logs.
+field() {
+    printf '%s\n' "$2" |
+        sed -n -E 's/.*[[:space:]]'"$1"'=("(([^"\\]|\\.)*)"|([^[:space:]"]*)).*/\2\4/p' |
+        sed 's/\\"/"/g'
+}
+
+# told ACTOR TEXT [MORE] prints one line of the account of a step: who, and what.
+told() {
+    printf '   %-14s %s\n' "$1" "$2"
+    if [[ -n "${3:-}" ]]; then
+        printf '   %-14s %s\n' "" "$3"
+    fi
+}
+
 # manager runs a command of the Veraison manager image, the image behind the
 # cocli command of the Veraison deployment, with the Endorsements at /endorsements.
 manager() {
-    docker run --rm --network "${VERAISON_NETWORK}" \
-        -v "${CONFIG_DIR}/veraison/endorsements:/endorsements" veraison/manager "$@"
+    docker run --rm --network "${NETWORK}" \
+        -v "${CONFIG_DIR}/veraison/endorsements:/endorsements" "$(image veraison-manager)" "$@"
 }
 
 vault_cli() { docker exec -e VAULT_ADDR=http://127.0.0.1:8200 -e VAULT_TOKEN "${C_VAULT}" vault "$@"; }
@@ -194,19 +247,25 @@ vault_answers() {
 }
 
 require_images() {
-    local image
-    for image in step-ca hashicorp-vault globalsign-est spiffe-spire-server spiffe-spire-agent tacra-cai tacra-client tacra-server; do
-        image_exists "$(image_tag "${image}")" || fail "missing image: $(image_tag "${image}"); run: ${0} build"
+    local name
+    if [[ -n "${IMAGES}" ]]; then
+        say "Images from ${IMAGES}"
+    fi
+    for name in ${IMAGE_NAMES}; do
+        if [[ -n "${IMAGES}" ]]; then
+            quiet docker pull "$(image "${name}")" || fail "cannot pull $(image "${name}")"
+            note "$(image "${name}")"
+        else
+            image_exists "$(image "${name}")" || fail "missing image: $(image "${name}"); run: ${0} build"
+        fi
     done
-    image_exists veraison/manager || fail "missing image: veraison/manager; run: ${0} build"
-    docker container inspect "${VERAISON_VERIFIER}" >/dev/null 2>&1 || fail "Veraison is not deployed; run: ${0} build"
-    docker run --rm --entrypoint /bin/sh "$(image_tag globalsign-est)" -c 'test -x /usr/local/bin/estcasclient' ||
-        fail "the image $(image_tag globalsign-est) holds no EST Client: check out the branch of the demonstration in globalsign-est, then run: ${0} build"
+    docker run --rm --entrypoint /bin/sh "$(image globalsign-est)" -c 'test -x /usr/local/bin/estcasclient' ||
+        fail "the image $(image globalsign-est) holds no EST Client: check out the branch of the demonstration in globalsign-est, then run: ${0} build"
 }
 
 require_running() {
     local container
-    for container in ${SERVICES} "${VERAISON_VERIFIER}"; do
+    for container in ${SERVICES}; do
         is_running "${container}" || fail "${container} is not running; run: ${0} up"
     done
     [[ -f "${CONFIG_DIR}/client/server-ca.pem" ]] || fail "no configuration in ${CONFIG_DIR}; run: ${0} up"
@@ -220,6 +279,37 @@ print_sources() {
         revision="$(git -C "${WORKSPACE_ROOT}/${repository}" log -1 --format='%h %cd' --date=short 2>/dev/null || true)"
         note "$(printf '%-18s %s (%s)' "${repository}" "${revision:-unknown}" "$(git -C "${WORKSPACE_ROOT}/${repository}" rev-parse --abbrev-ref HEAD 2>/dev/null || true)")"
     done
+}
+
+# cmd_workspace clones the repositories that the demonstration builds from,
+# beside tacra and from the place that tacra itself was cloned from. Where a
+# repository has a branch of the same name as the branch of tacra, that branch
+# is cloned: a demonstration that is not merged yet spans several repositories.
+cmd_workspace() {
+    command -v git >/dev/null 2>&1 || fail "git is required"
+    local origin branch repository directory
+    origin="$(git -C "${TACRA_ROOT}" remote get-url origin 2>/dev/null || true)"
+    origin="${origin%.git}"
+    origin="${origin%/tacra}"
+    [[ -n "${origin}" ]] || origin="https://github.com/TWI-Unified-Model"
+    branch="$(git -C "${TACRA_ROOT}" rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
+    say "The repositories of the workspace, in ${WORKSPACE_ROOT}"
+    for repository in globalsign-est hashicorp-vault spiffe-spire step-ca veraison-services; do
+        directory="${WORKSPACE_ROOT}/${repository}"
+        if [[ -e "${directory}" ]]; then
+            note "$(printf '%-18s is there, left as it is' "${repository}")"
+            continue
+        fi
+        if [[ -n "${branch}" && "${branch}" != HEAD ]] &&
+            git ls-remote --exit-code --heads "${origin}/${repository}.git" "${branch}" >/dev/null 2>&1; then
+            git clone --quiet --depth 1 --branch "${branch}" "${origin}/${repository}.git" "${directory}" ||
+                fail "cloning ${repository} failed"
+        else
+            git clone --quiet --depth 1 "${origin}/${repository}.git" "${directory}" || fail "cloning ${repository} failed"
+        fi
+        note "$(printf '%-18s cloned, %s' "${repository}" "$(git -C "${directory}" rev-parse --abbrev-ref HEAD)")"
+    done
+    printf '\nNext: %s build\n' "${0}"
 }
 
 cmd_build() {
@@ -243,7 +333,7 @@ new_config_dir() {
     : > "${CONFIG_DIR}/${MARKER}"
     local directory
     for directory in veraison/endorsements step-ca issuer hashicorp-vault/config platform tls est-server est-client \
-        spire-server spire-agent rup/certs rup/trust client; do
+        spire-server spire-agent rup/certs rup/trust client trace; do
         mkdir -p "${CONFIG_DIR}/${directory}"
     done
 }
@@ -251,28 +341,50 @@ new_config_dir() {
 # veraison_key asks the Verifier for the key that verifies its Attestation
 # Results; the Verifier publishes that key once it is ready.
 veraison_key() {
-    tool --network "${VERAISON_NETWORK}" -e VERIFIER="${VERAISON_VERIFIER}" <<'EOS'
+    tool --network "${NETWORK}" -e VERIFIER="${VERAISON_VERIFIER}" <<'EOS'
 curl -fsS --cacert veraison/ca.pem "https://${VERIFIER}:8443/.well-known/veraison/verification" > veraison/discovery.json
 jq -e -c 'select(."service-state" == "READY") | ."ear-verification-key"' veraison/discovery.json > veraison/ear-verification-key.jwk
 EOS
 }
 
+# veraison_service SERVICE CONTAINER [OPTION...] starts one service of Veraison
+# as the deployment of Veraison creates it (deployments/docker/Makefile):
+# under the host name that its configuration and its certificate carry, here
+# on the network of the demonstration.
+veraison_service() {
+    local service="$1" container="$2"
+    shift 2
+    docker run -d --tty --name "${container}" --label "${LABEL}" --hostname "${service}-service" \
+        --network "${NETWORK}" --network-alias "${service}-service" \
+        -v twi-demo-veraison-logs:/opt/veraison/logs "$@" "$(image "veraison-${service}")" >/dev/null
+}
+
+# start_veraison runs a Veraison of its own for the demonstration, from the
+# images of the Veraison deployment and with stores of its own: a deployment
+# of Veraison that runs beside it is not touched.
 start_veraison() {
     say "Veraison, the Verifier"
-    docker network inspect "${VERAISON_NETWORK}" >/dev/null 2>&1 || fail "the network ${VERAISON_NETWORK} of Veraison is missing; run: ${0} build"
-    if ! is_running "${VERAISON_VERIFIER}"; then
-        : > "${CONFIG_DIR}/veraison/started-by-this-demonstration"
-    fi
-    quiet "${VERAISON_DIR}/veraison" start || fail "Veraison did not start"
-    cp "${VERAISON_DIR}/src/certs/rootCA.crt" "${CONFIG_DIR}/veraison/ca.pem"
-    wait_for 120 veraison_key || give_up "${VERAISON_VERIFIER}" "the Verifier did not become ready"
+    docker volume create --label "${LABEL}" twi-demo-veraison-stores >/dev/null
+    docker volume create --label "${LABEL}" twi-demo-veraison-logs >/dev/null
+    # The services write their logs as the user veraison, and a new volume belongs to root.
+    docker run --rm --user 0 -v twi-demo-veraison-logs:/opt/veraison/logs --entrypoint /bin/chown \
+        "$(image veraison-vts)" veraison:veraison /opt/veraison/logs || fail "cannot prepare the log volume of Veraison"
+    veraison_service keycloak "${C_KEYCLOAK}" -e KEYCLOAK_ADMIN=admin -e KEYCLOAK_ADMIN_PASSWORD=admin
+    veraison_service vts "${C_VTS}" -v twi-demo-veraison-stores:/opt/veraison/stores
+    sleep 1 # as the veraison command does: the other services look for vts when they start
+    veraison_service provisioning "${C_PROVISIONING}"
+    veraison_service verification "${C_VERIFICATION}"
+    # The CA of the certificates of these services, as the manager image carries it.
+    docker run --rm --entrypoint /bin/cat "$(image veraison-manager)" /usr/local/share/ca-certificates/veraison-ca.crt \
+        > "${CONFIG_DIR}/veraison/ca.pem" || fail "the manager image of Veraison holds no CA certificate"
+    wait_for 180 veraison_key || give_up "${C_VERIFICATION}" "the Verifier did not become ready"
     note "ready; the key of its Attestation Results is in veraison/ear-verification-key.jwk"
 }
 
 start_step_ca() {
     say "step-ca, the Credential Authority behind the EST Server"
     local image
-    image="$(image_tag step-ca)"
+    image="$(image step-ca)"
     docker volume create --label "${LABEL}" twi-demo-step-ca >/dev/null
     # As init-local-step-ca-config.sh does: the image creates its CA at the first start.
     quiet docker run --rm -v twi-demo-step-ca:/home/step \
@@ -355,7 +467,7 @@ EOF
     docker run -d --name "${C_VAULT}" --label "${LABEL}" --network "${NETWORK}" -e SKIP_CHOWN=1 -e SKIP_SETCAP=1 \
         -v "${CONFIG_DIR}/hashicorp-vault/config:/vault/config:ro" \
         -v twi-demo-vault-file:/vault/file -v twi-demo-vault-logs:/vault/logs \
-        "$(image_tag hashicorp-vault)" server >/dev/null
+        "$(image hashicorp-vault)" server >/dev/null
     wait_for 60 vault_answers || give_up "${C_VAULT}" "HashiCorp Vault did not start"
 
     # One unseal key and the root token; both stay in the configuration directory.
@@ -389,10 +501,14 @@ EOS
 endorse_platform() {
     say "The simulated platform of the Client and its Endorsements"
     local cai output
-    cai="$(image_tag tacra-cai)"
+    cai="$(image tacra-cai)"
     quiet docker run --rm --user "$(id -u):$(id -g)" -v "${CONFIG_DIR}/platform:/platform" \
         --entrypoint /usr/local/bin/tacra-sim-platform "${cai}" keygen -key /platform/attestation-key.pem ||
         fail "the simulated platform did not create its Attestation Key"
+    # The public half, for whoever verifies the Evidence: here, the report of the calls of CAAPI.
+    quiet docker run --rm --user "$(id -u):$(id -g)" -v "${CONFIG_DIR}/platform:/platform:ro" -v "${CONFIG_DIR}/trace:/trace" \
+        --entrypoint /usr/local/bin/tacra-sim-platform "${cai}" public -key /platform/attestation-key.pem \
+        -out /trace/attestation-public-key.pem || fail "the simulated platform did not write its public Attestation Key"
     # The measurement of the simulated platform is the SHA-256 of the program
     # that asks for Evidence: the CAI sidecar of this image.
     MEASUREMENT="$(docker run --rm "${cai}" -measurement)"
@@ -415,7 +531,7 @@ endorse_platform() {
         --comid /endorsements/comid-reference-values.cbor --comid /endorsements/comid-trust-anchor.cbor \
         --output /endorsements/corim.cbor || fail "cocli did not create the CoRIM"
     [[ -s "${CONFIG_DIR}/veraison/endorsements/corim.cbor" ]] || fail "cocli did not create the CoRIM"
-    if ! wait_for 60 manager cocli corim submit --corim-file /endorsements/corim.cbor --media-type "${ENDORSEMENT_MEDIA_TYPE}"; then
+    if ! wait_for 180 manager cocli corim submit --corim-file /endorsements/corim.cbor --media-type "${ENDORSEMENT_MEDIA_TYPE}"; then
         manager cocli corim submit --corim-file /endorsements/corim.cbor --media-type "${ENDORSEMENT_MEDIA_TYPE}" >&2 || true
         fail "Veraison did not accept the Endorsements"
     fi
@@ -481,16 +597,14 @@ start_est() {
 EOF
     share est-server
     share est-client
-    docker create --name "${C_EST_SERVER}" --label "${LABEL}" --network "${NETWORK}" \
-        -v "${directory}:/etc/est:ro" "$(image_tag globalsign-est)" >/dev/null
-    docker network connect "${VERAISON_NETWORK}" "${C_EST_SERVER}"
-    docker start "${C_EST_SERVER}" >/dev/null
+    docker run -d --name "${C_EST_SERVER}" --label "${LABEL}" --network "${NETWORK}" \
+        -v "${directory}:/etc/est:ro" "$(image globalsign-est)" >/dev/null
     wait_for 30 listens "${C_EST_SERVER}" 8443 || give_up "${C_EST_SERVER}" "the EST Server did not start"
     docker run -d --name "${C_EST_CLIENT}" --label "${LABEL}" --network "${NETWORK}" \
         -e EST_CLIENT_LISTEN=:9090 -e EST_SERVER="${C_EST_SERVER}:8443" \
         -e EST_SERVER_CA=/etc/est-client/est-server-ca.pem \
         -v "${CONFIG_DIR}/est-client:/etc/est-client:ro" \
-        --entrypoint /usr/local/bin/estcasclient "$(image_tag globalsign-est)" >/dev/null
+        --entrypoint /usr/local/bin/estcasclient "$(image globalsign-est)" >/dev/null
     wait_for 30 listens "${C_EST_CLIENT}" 9090 || give_up "${C_EST_CLIENT}" "the EST Client did not start"
     note "the EST Server appraises through Veraison, has step-ca issue the certificate and releases the JWT from HashiCorp Vault"
 }
@@ -565,11 +679,9 @@ plugins {
 EOF
     share spire-server
     docker volume create --label "${LABEL}" twi-demo-spire-server-data >/dev/null
-    docker create --name "${C_SPIRE_SERVER}" --label "${LABEL}" --network "${NETWORK}" \
+    docker run -d --name "${C_SPIRE_SERVER}" --label "${LABEL}" --network "${NETWORK}" \
         -v "${directory}:/etc/spire/server:ro" -v twi-demo-spire-server-data:/var/lib/spire/server \
-        "$(image_tag spiffe-spire-server)" -config /etc/spire/server/server.conf >/dev/null
-    docker network connect "${VERAISON_NETWORK}" "${C_SPIRE_SERVER}"
-    docker start "${C_SPIRE_SERVER}" >/dev/null
+        "$(image spiffe-spire-server)" -config /etc/spire/server/server.conf >/dev/null
     wait_for 60 spire_server healthcheck || give_up "${C_SPIRE_SERVER}" "the SPIRE Server did not start"
 
     # The Agent starts from the bundle of the Server and a join token. The same
@@ -613,7 +725,7 @@ EOF
     docker run -d --name "${C_SPIRE_AGENT}" --label "${LABEL}" --network "${NETWORK}" \
         -v "${CONFIG_DIR}/spire-agent:/etc/spire/agent:ro" -v twi-demo-spire-agent-data:/var/lib/spire/agent \
         -v twi-demo-spire-agent-socket:/tmp/spire-agent/public \
-        "$(image_tag spiffe-spire-agent)" -config /etc/spire/agent/agent.conf -joinToken "${token}" >/dev/null
+        "$(image spiffe-spire-agent)" -config /etc/spire/agent/agent.conf -joinToken "${token}" >/dev/null
     wait_for 60 spire_agent healthcheck -socketPath "${AGENT_SOCKET}" || give_up "${C_SPIRE_AGENT}" "the SPIRE Agent did not start"
 
     # The Workload of the registration entry is the CAI sidecar: a process of
@@ -664,7 +776,7 @@ EOF
     share client
     docker run -d --name "${C_SERVER}" --label "${LABEL}" --network "${NETWORK}" --network-alias "${SERVER_NAME}" \
         -e RUP_CONFIG=/etc/rup/rup.json -e HTTPS_ADDR=:8443 \
-        -v "${CONFIG_DIR}/rup:/etc/rup:ro" "$(image_tag tacra-server)" >/dev/null
+        -v "${CONFIG_DIR}/rup:/etc/rup:ro" "$(image tacra-server)" >/dev/null
     wait_for 30 listens "${C_SERVER}" 8443 || give_up "${C_SERVER}" "the Server did not start"
     note "${TARGET}: accepts a certificate together with the JWT"
 }
@@ -677,8 +789,12 @@ EOF
 start_sidecar() {
     local name="$1" cas_client="$2" platform="$3" altered="${4:-}"
     local -a run
+    # The sidecar records every call of CAAPI that it makes: nothing secret crosses CAAPI.
+    rm -rf "${CONFIG_DIR}/trace/${name}"
+    mkdir -p "${CONFIG_DIR}/trace/${name}"
     run=(docker run -d --name "${name}" --label "${LABEL}" --network "${NETWORK}"
         -e CAI_LISTEN=:50051 -e CAI_PLATFORM=simulated -e CAI_SIM_ATTESTATION_KEY=/etc/platform/attestation-key.pem
+        -e CAI_TRACE_DIR=/trace -v "${CONFIG_DIR}/trace/${name}:/trace"
         -v "${CONFIG_DIR}/${platform}:/etc/platform:ro")
     case "${cas_client}" in
         # The SPIRE Agent attests its Workload by the process that calls it:
@@ -689,9 +805,9 @@ start_sidecar() {
         *) fail "unknown CAS Client: ${cas_client}" ;;
     esac
     if [[ "${altered}" == altered ]]; then
-        run+=(--entrypoint /bin/sh "$(image_tag tacra-cai)" -c 'cp /root/cai /tmp/cai && printf x >> /tmp/cai && exec /tmp/cai')
+        run+=(--entrypoint /bin/sh "$(image tacra-cai)" -c 'cp /root/cai /tmp/cai && printf x >> /tmp/cai && exec /tmp/cai')
     else
-        run+=("$(image_tag tacra-cai)")
+        run+=("$(image tacra-cai)")
     fi
     "${run[@]}" >/dev/null
     wait_for 30 listens "${name}" 50051 || give_up "${name}" "the CAI sidecar ${name} did not start"
@@ -725,6 +841,10 @@ cmd_up() {
     fi
     UP_STARTED=true
     new_config_dir
+    # The steps that follow run the images that this "up" ran.
+    if [[ -n "${IMAGES}" ]]; then
+        printf '%s\n%s\n' "${IMAGES}" "${IMAGE_TAG}" > "${CONFIG_DIR}/images"
+    fi
     docker network create --label "${LABEL}" "${NETWORK}" >/dev/null
     start_veraison
     start_step_ca
@@ -754,20 +874,95 @@ Next:
 EOF
 }
 
-# run_client runs the Client once against a CAI sidecar; its status is the status of the Client.
+# run_client runs the Client once against a CAI sidecar and prints what it
+# prints; its status is the status of the Client.
 run_client() {
     local sidecar="$1"
     docker rm -f "${C_CLIENT}" >/dev/null 2>&1 || true
     docker run --rm --name "${C_CLIENT}" --label "${LABEL}" --network "${NETWORK}" \
         -e CAI_ADDR="${sidecar}:50051" -e RUP_CA_FILE=/etc/client/server-ca.pem \
-        -v "${CONFIG_DIR}/client:/etc/client:ro" "$(image_tag tacra-client)" "${TARGET}"
+        -v "${CONFIG_DIR}/client:/etc/client:ro" "$(image tacra-client)" "${TARGET}" 2>&1 |
+        while IFS= read -r line; do
+            if [[ -n "${line}" ]]; then
+                told Client "${line}"
+            fi
+        done
 }
 
-# record CONTAINER LINES prints what a CAS Server wrote to its log after the
-# first LINES lines about acquisitions: what it issued, released or refused.
+# calls SIDECAR prints how many calls of CAAPI a sidecar has recorded.
+calls() {
+    local n=0 file
+    for file in "${CONFIG_DIR}/trace/$1"/*.json; do
+        if [[ -e "${file}" ]]; then
+            n=$((n + 1))
+        fi
+    done
+    printf '%s' "${n}"
+}
+
+# wire SIDECAR AFTER prints what crossed CAAPI in the calls that a sidecar made
+# after its first AFTER calls, and checks it from the outside: the signature
+# of the Evidence under the Attestation Key of the platform, and the nonce of
+# the Evidence against the binding value computed from the request. Its status
+# says whether the checks held.
+wire() {
+    told CAAPI "the calls of the CAI sidecar to its CAS Client, as the sidecar recorded them"
+    docker run --rm -v "${CONFIG_DIR}/trace:/trace:ro" --entrypoint /usr/local/bin/caapi-trace "$(image tacra-cai)" \
+        -after "$2" -attestation-key /trace/attestation-public-key.pem \
+        -reference-measurement "$(cat "${CONFIG_DIR}/platform/measurement")" \
+        -indent "                  " "/trace/$1"
+}
+
+# record NAME CONTAINER LINES prints what a CAS Server wrote to its log after
+# the first LINES lines about acquisitions: what it issued, released or
+# refused, one line for each record. With --raw the lines are printed as the
+# CAS Server wrote them.
 record() {
-    docker logs "$1" 2>&1 | tail -n "+$(($2 + 1))" |
-        grep -E 'Enrolled an attested X509-SVID|Certificate issued by the Credential Authority|Credential released from the Secret Vault|Attestation Results refused|remote attestation failed' || true
+    local name="$1" container="$2" lines="$3" line measurement shown=""
+    docker logs "${container}" 2>&1 | tail -n "+$((lines + 1))" |
+        grep -E 'Enrolled an attested X509-SVID|Certificate issued by the Credential Authority|Credential released from the Secret Vault|Attestation Results refused|remote attestation failed' |
+        while IFS= read -r line; do
+            if [[ "${RAW}" == true ]]; then
+                printf '%s\n' "${line}"
+                continue
+            fi
+            # The measurement of the Evidence, once for each step.
+            measurement="$(field measurement "${line}")"
+            if [[ -n "${measurement}" && "${measurement}" != "${shown}" ]]; then
+                shown="${measurement}"
+                measurement="measurement ${measurement}"
+            else
+                measurement=""
+            fi
+            case "${line}" in
+                *'Enrolled an attested X509-SVID'*)
+                    told "${name}" "Evidence affirmed by $(field verifier "${line}"); X509-SVID issued, valid until $(field expiration "${line}")" "${measurement}" ;;
+                *'Certificate issued by the Credential Authority'*)
+                    told "${name}" "Evidence affirmed by $(field verifier "${line}"); certificate issued by the Credential Authority for $(field name "${line}")" "${measurement}" ;;
+                *'Credential released from the Secret Vault'*)
+                    told "${name}" "Evidence affirmed by $(field verifier "${line}"); $(field type "${line}") released from the Secret Vault" "${measurement}" ;;
+                *'Attestation Results refused'*)
+                    told "${name}" "refused: $(field error "${line}")" ;;
+                *'remote attestation failed'*)
+                    : ;; # the same refusal as the API of the SPIRE Server logs it
+                *)
+                    printf '%s\n' "${line}" ;;
+            esac
+        done || true
+}
+
+# server_record LINES prints what the Server wrote to its log after the first LINES lines.
+server_record() {
+    local line
+    docker logs "${C_SERVER}" 2>&1 | tail -n "+$(($1 + 1))" |
+        while IFS= read -r line; do
+            if [[ "${RAW}" == true ]]; then
+                printf '%s\n' "${line}"
+            else
+                told Server "$(printf '%s\n' "${line}" |
+                    sed -E 's/^Received authenticated request\. Formats: (\[[^]]*\]), subject: "([^"]*)".*/accepted the request: formats \1, subject \2/')"
+            fi
+        done || true
 }
 
 # run_step runs the Client once and prints what the CAS Server and the Server
@@ -776,16 +971,17 @@ run_step() {
     local number="$1" title="$2" sidecar="$3" cas_server="$4" cas_server_name="$5"
     require_running
     say "Step ${number}: ${title}"
-    local rc=0 cas_server_lines server_lines
+    local rc=0 checked=0 cas_server_lines server_lines before
     cas_server_lines="$(log_lines "${cas_server}")"
     server_lines="$(log_lines "${C_SERVER}")"
-    printf -- '-- the Client (%s %s)\n' "$(image_tag tacra-client)" "${TARGET}"
+    before="$(calls "${sidecar}")"
+    printf '\n'
     run_client "${sidecar}" || rc=$?
-    printf -- '-- the record of the %s\n' "${cas_server_name}"
-    record "${cas_server}" "${cas_server_lines}"
-    printf -- '-- the record of the Server\n'
-    docker logs "${C_SERVER}" 2>&1 | tail -n "+$((server_lines + 1))"
+    wire "${sidecar}" "${before}" || checked=$?
+    record "${cas_server_name}" "${cas_server}" "${cas_server_lines}"
+    server_record "${server_lines}"
     [[ ${rc} -eq 0 ]] || fail "step ${number} did not pass: the Client ended with status ${rc}"
+    [[ ${checked} -eq 0 ]] || fail "step ${number} did not pass: a check of the recorded calls did not hold"
     printf '\nStep %s passed.\n' "${number}"
 }
 
@@ -793,12 +989,14 @@ run_step() {
 # one CAS Server, and counts a Client that got its credentials as a failure.
 refused() {
     local sidecar="$1" cas_server="$2" cas_server_name="$3"
-    local rc=0 cas_server_lines
+    local rc=0 cas_server_lines before
     cas_server_lines="$(log_lines "${cas_server}")"
-    printf -- '-- the Client, through the %s\n' "${cas_server_name}"
+    before="$(calls "${sidecar}")"
+    printf '\n'
     run_client "${sidecar}" || rc=$?
-    printf -- '-- the record of the %s\n' "${cas_server_name}"
-    record "${cas_server}" "${cas_server_lines}"
+    # The report says what in the Evidence is not as the Verifier holds it; here that is the point.
+    wire "${sidecar}" "${before}" 2>/dev/null || true
+    record "${cas_server_name}" "${cas_server}" "${cas_server_lines}"
     if [[ ${rc} -eq 0 ]]; then
         NOT_REFUSED=$((NOT_REFUSED + 1))
         printf 'NOT REFUSED: the Client got its credentials.\n'
@@ -831,7 +1029,7 @@ cmd_refusals() {
     rm -rf "${CONFIG_DIR}/platform-unknown"
     mkdir -p "${CONFIG_DIR}/platform-unknown"
     quiet docker run --rm --user "$(id -u):$(id -g)" -v "${CONFIG_DIR}/platform-unknown:/platform" \
-        --entrypoint /usr/local/bin/tacra-sim-platform "$(image_tag tacra-cai)" keygen -key /platform/attestation-key.pem ||
+        --entrypoint /usr/local/bin/tacra-sim-platform "$(image tacra-cai)" keygen -key /platform/attestation-key.pem ||
         fail "the simulated platform did not create an Attestation Key"
     share platform-unknown
     start_sidecar twi-demo-refusal-spire spire platform-unknown
@@ -843,7 +1041,8 @@ cmd_refusals() {
 
     say "Refusal 3: the JWT alone. A request to the Server with the JWT and no certificate"
     status="$(jwt_alone)" || status="no answer"
-    printf -- '-- the Server answered: HTTP %s\n' "${status}"
+    printf '\n'
+    told Server "answered HTTP ${status}"
     if [[ "${status}" == 200 ]]; then
         NOT_REFUSED=$((NOT_REFUSED + 1))
         printf 'NOT REFUSED: the Server accepted the JWT alone.\n'
@@ -853,9 +1052,27 @@ cmd_refusals() {
     printf '\nAll 5 requests were refused.\n'
 }
 
+# cmd_push tags the images that this workspace built under the prefix of
+# --images, for this platform, and pushes them: whoever runs "up --images" with
+# the same prefix gets the demonstration with no workspace and no build.
+cmd_push() {
+    [[ -n "${IMAGES}" ]] || fail "push needs --images PREFIX: where the images go"
+    local name source prefix="${IMAGES}"
+    say "Images to ${prefix}"
+    for name in ${IMAGE_NAMES}; do
+        IMAGES=""
+        source="$(image "${name}")"
+        IMAGES="${prefix}"
+        image_exists "${source}" || fail "missing image: ${source}; run: ${0} build"
+        docker tag "${source}" "$(image "${name}")"
+        quiet docker push "$(image "${name}")" || fail "cannot push $(image "${name}")"
+        note "$(image "${name}")"
+    done
+}
+
 cmd_status() {
     local container state
-    for container in ${SERVICES} vts-service provisioning-service "${VERAISON_VERIFIER}"; do
+    for container in ${SERVICES}; do
         state="$(docker inspect -f '{{.State.Status}}' "${container}" 2>/dev/null || true)"
         printf '%-24s %s\n' "${container}" "${state:-not created}"
     done
@@ -881,15 +1098,18 @@ cmd_down() {
     if docker network inspect "${NETWORK}" >/dev/null 2>&1; then
         docker network rm "${NETWORK}" >/dev/null
     fi
-    # Veraison is stopped only if this demonstration started it. Its stores keep
-    # the Endorsements of the simulated platform.
-    if [[ -f "${CONFIG_DIR}/veraison/started-by-this-demonstration" ]]; then
-        quiet "${VERAISON_DIR}/veraison" stop || true
-    fi
     if [[ -f "${CONFIG_DIR}/${MARKER}" ]]; then
         rm -rf "${CONFIG_DIR}"
     fi
     printf 'The demonstration is removed.\n'
+}
+
+step1() {
+    run_step 1 "the Client acquires an X.509 certificate and a JWT through SPIRE" "${C_CAI_SPIRE}" "${C_SPIRE_SERVER}" "SPIRE Server"
+}
+
+step2() {
+    run_step 2 "the Client acquires an X.509 certificate and a JWT through EST" "${C_CAI_EST}" "${C_EST_SERVER}" "EST Server"
 }
 
 parse_args() {
@@ -903,6 +1123,9 @@ parse_args() {
         case "$1" in
             --config-dir) CONFIG_DIR="${2:?missing value for --config-dir}"; shift 2 ;;
             --platform) PLATFORM="${2:?missing value for --platform}"; shift 2 ;;
+            --raw) RAW=true; shift ;;
+            --images) IMAGES="${2:?missing value for --images}"; IMAGES="${IMAGES%/}"; shift 2 ;;
+            --tag) IMAGE_TAG="${2:?missing value for --tag}"; shift 2 ;;
             -h|--help) usage; exit 0 ;;
             -*) fail "unknown option: $1" ;;
             *)
@@ -910,21 +1133,43 @@ parse_args() {
                 LOG_COMPONENT="$1"; shift ;;
         esac
     done
-    case "${ACTION}" in build|up|step1|step2|refusals|status|logs|down) ;; *) fail "unknown command: ${ACTION}" ;; esac
+    case "${ACTION}" in workspace|build|up|step1|step2|refusals|all|status|logs|down|push) ;; *) fail "unknown command: ${ACTION}" ;; esac
     [[ "${CONFIG_DIR}" == /* ]] || fail "the configuration directory must be an absolute path: ${CONFIG_DIR}"
 }
 
 main() {
     parse_args "$@"
     detect_platform
+    if [[ "${ACTION}" == workspace ]]; then
+        cmd_workspace
+        return
+    fi
     require_docker
     trap on_exit EXIT
     case "${ACTION}" in
+        step1|step2|refusals)
+            if [[ -z "${IMAGES}" && -f "${CONFIG_DIR}/images" ]]; then
+                IMAGES="$(sed -n 1p "${CONFIG_DIR}/images")"
+                IMAGE_TAG="$(sed -n 2p "${CONFIG_DIR}/images")"
+            fi
+            ;;
+    esac
+    case "${ACTION}" in
         build) cmd_build ;;
         up) cmd_up ;;
-        step1) run_step 1 "the Client acquires an X.509 certificate and a JWT through SPIRE" "${C_CAI_SPIRE}" "${C_SPIRE_SERVER}" "SPIRE Server" ;;
-        step2) run_step 2 "the Client acquires an X.509 certificate and a JWT through EST" "${C_CAI_EST}" "${C_EST_SERVER}" "EST Server" ;;
+        step1) step1 ;;
+        step2) step2 ;;
         refusals) cmd_refusals ;;
+        all)
+            if [[ -z "${IMAGES}" ]]; then
+                cmd_build
+            fi
+            cmd_up
+            step1
+            step2
+            cmd_refusals
+            ;;
+        push) cmd_push ;;
         status) cmd_status ;;
         logs) cmd_logs ;;
         down) cmd_down ;;
