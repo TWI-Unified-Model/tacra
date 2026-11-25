@@ -14,6 +14,8 @@ ENV GOWORK=off GOFLAGS=-mod=mod CGO_ENABLED=0 GOOS=linux
 
 WORKDIR /src/cai
 RUN go build -ldflags="-w -s" -o /cai ./cmd/sidecar
+# The reporter of the calls of CAAPI that the sidecar records (CAI_TRACE_DIR).
+RUN go build -ldflags="-w -s" -o /caapi-trace ./cmd/caapi-trace
 
 # The tool of the simulated platform: it creates the Attestation Key and writes
 # the Endorsements of that key and of the measurement of the sidecar.
@@ -24,5 +26,6 @@ FROM alpine:latest
 WORKDIR /root/
 COPY --from=builder /cai .
 COPY --from=builder /tacra-sim-platform /usr/local/bin/tacra-sim-platform
+COPY --from=builder /caapi-trace /usr/local/bin/caapi-trace
 EXPOSE 50051
 ENTRYPOINT ["./cai"]

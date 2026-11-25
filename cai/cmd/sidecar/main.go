@@ -8,6 +8,9 @@
 //	CAI_PLATFORM             "simulated" (default), "sev-snp" or "tdx"
 //	CAI_SIM_ATTESTATION_KEY  file of the Attestation Key of the simulated platform, PEM;
 //	                         without it the sidecar generates a key that no Verifier holds
+//	CAI_TRACE_DIR            directory in which the sidecar records every call of CAAPI
+//	                         that it makes, one file for each; nothing secret crosses
+//	                         CAAPI, and the command caapi-trace reports the records
 //
 // With the argument -measurement the sidecar prints the measurement that the
 // simulated platform reports for this program, and exits.
@@ -23,6 +26,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 
 	"github.com/TWI-Unified-Model/tacra/cai"
+	"github.com/TWI-Unified-Model/tacra/cai/trace"
 	caiv1 "github.com/TWI-Unified-Model/tacra/gen/go/cai/v1"
 	"github.com/TWI-Unified-Model/tacra/platform"
 	"github.com/TWI-Unified-Model/tacra/platform/sim"
@@ -46,7 +50,22 @@ func main() {
 		fail("platform plug-in: %v", err)
 	}
 
-	inner, conn, err := cai.Dial(caapiAddr, plugin, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	dialOptions := []grpc.DialOption{
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		// The sidecar takes no service configuration from DNS. Without this option
+		// the first call to a CAS Client named by host waits for a TXT lookup that
+		// a resolver may take half a second to refuse.
+		grpc.WithDisableServiceConfig(),
+	}
+	if dir := os.Getenv("CAI_TRACE_DIR"); dir != "" {
+		record, err := trace.Interceptor(dir)
+		if err != nil {
+			fail("CAI_TRACE_DIR: %v", err)
+		}
+		dialOptions = append(dialOptions, grpc.WithChainUnaryInterceptor(record))
+		fmt.Printf("the calls of CAAPI are recorded in %s\n", dir)
+	}
+	inner, conn, err := cai.Dial(caapiAddr, plugin, dialOptions...)
 	if err != nil {
 		fail("CAAPI dial %s: %v", caapiAddr, err)
 	}
