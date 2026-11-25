@@ -59,6 +59,11 @@ type Config struct {
 
 	// SecretVault is the Secret Vault behind the Targets in retrieve mode.
 	SecretVault *SecretVaultConfig `hcl:"secret_vault" json:"secret_vault,omitempty"`
+	// CredentialAuthority is the Credential Authority that mints the
+	// certificates of Enrollment for a host of this Server that has no CA of
+	// its own. A host with its own CA configures none and mints from the result
+	// of Enroll.
+	CredentialAuthority *CredentialAuthorityConfig `hcl:"credential_authority" json:"credential_authority,omitempty"`
 
 	// PlatformRulePath is the file holding the platform rule applied to
 	// affirming Attestation Results of every Target: the machine, the product
@@ -130,6 +135,33 @@ type TargetConfig struct {
 	// Server seals a retrieved credential under, when it reads the Secret
 	// Vault itself. The default is both suites of the container.
 	AcceptableCEK []string `hcl:"acceptable_cek" json:"acceptable_cek,omitempty"`
+	// CertificateName is the name that the configured Credential Authority
+	// certifies for a Workload enrolled for the Target: the common name and the
+	// DNS name of the certificate. The Credential Authority assigns the name;
+	// the CSR does not choose it.
+	CertificateName string `hcl:"certificate_name" json:"certificate_name,omitempty"`
+	// CertificateValidity is how long such a certificate is valid: a duration
+	// with its unit, for example 1h; the default is 1h.
+	CertificateValidity string `hcl:"certificate_validity" json:"certificate_validity,omitempty"`
+}
+
+// CredentialAuthorityConfig is the Credential Authority of the Targets in
+// enroll mode.
+type CredentialAuthorityConfig struct {
+	// CredentialAuthorityKind is the kind of Credential Authority: step-ca,
+	// the default and the one kind for now.
+	CredentialAuthorityKind string `hcl:"kind" json:"kind,omitempty"`
+	// URL is the base URL of the Credential Authority.
+	URL string `hcl:"url" json:"url,omitempty"`
+	// CAPath is the file holding the root certificate under which the
+	// Credential Authority serves TLS.
+	CAPath string `hcl:"ca_path" json:"ca_path,omitempty"`
+	// Provisioner, for the kind step-ca, is the name of the JWK provisioner
+	// that this Server requests certificates as.
+	Provisioner string `hcl:"provisioner" json:"provisioner,omitempty"`
+	// ProvisionerKeyPath, for the kind step-ca, is the file holding the
+	// private key of that provisioner: an EC P-256 JWK.
+	ProvisionerKeyPath string `hcl:"provisioner_key_path" json:"provisioner_key_path,omitempty"`
 }
 
 // VerifierConfig is one RATS Verifier.
@@ -215,6 +247,10 @@ type Policy struct {
 	// Retrieve is, for a Target in enroll mode, the policy under which the same
 	// Target releases other Credential Types by Retrieval, or nil.
 	Retrieve *Policy
+	// CertificateName and CertificateValidity are what the configured
+	// Credential Authority certifies for the Target.
+	CertificateName     string
+	CertificateValidity time.Duration
 }
 
 // Validate returns the parsed policies of a correct configuration, and the
@@ -257,6 +293,11 @@ func (c *Config) Validate() (map[string]*Policy, error) {
 		}
 	}
 
+	if c.CredentialAuthority != nil {
+		if err := validateCredentialAuthority(c.CredentialAuthority); err != nil {
+			return nil, fmt.Errorf("credential_acquisition: credential_authority: %w", err)
+		}
+	}
 	policies := make(map[string]*Policy, len(c.Target))
 	for name, t := range c.Target {
 		p, err := t.policy(name, c)
@@ -329,6 +370,15 @@ func (t *TargetConfig) policy(name string, c *Config) (*Policy, error) {
 		if len(p.Measurements) == 0 && !p.AllowAnyMeasurement {
 			return fail("measurements is required, or allow_any_measurement for bring-up")
 		}
+		if c.CredentialAuthority != nil && t.CertificateName == "" {
+			return fail("certificate_name is required: the credential_authority assigns the name of the certificate")
+		}
+		p.CertificateName = t.CertificateName
+		validity, err := parseDuration(t.CertificateValidity, time.Hour)
+		if err != nil {
+			return fail("certificate_validity: %v", err)
+		}
+		p.CertificateValidity = validity
 		if len(t.RetrieveCredentialTypes) > 0 {
 			if !c.readsSecretVault() {
 				return fail("retrieve_credential_types needs a secret_vault that this Server reads itself")

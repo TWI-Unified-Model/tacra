@@ -34,6 +34,7 @@ type Acquirer struct {
 	verifiers map[string]verifierClient
 	vault     secretVault
 	store     secretStore // a Secret Vault that this Server reads itself, in place of vault
+	authority credentialAuthority
 	platform  *PlatformRule
 }
 
@@ -66,6 +67,11 @@ func New(c *Config, log logrus.FieldLogger) (*Acquirer, error) {
 	}
 	a := newAcquirer(log, policies, c.AcceptableEvidence, verifiers, vault, time.Now)
 	a.store = store
+	if c.CredentialAuthority != nil {
+		if a.authority, err = newCredentialAuthority(c.CredentialAuthority); err != nil {
+			return nil, fmt.Errorf("credential_acquisition: credential_authority: %w", err)
+		}
+	}
 	a.platform = rule
 	for name, v := range verifiers {
 		log.WithFields(logrus.Fields{
@@ -235,6 +241,10 @@ type EnrollmentResult struct {
 	// Waived is what the platform rule admitted the Attestation Results
 	// without, one line per named waiver it applied, for the record.
 	Waived []string
+	// CertificateName and CertificateValidity are what the policy for the
+	// Target has the configured Credential Authority certify.
+	CertificateName     string
+	CertificateValidity time.Duration
 }
 
 // Enroll checks the binding parameters, the Evidence format, the CSR, the
@@ -277,6 +287,9 @@ func (a *Acquirer) Enroll(ctx context.Context, in Enrollment) (*EnrollmentResult
 		Measurement: res.Measurement,
 		IssuedAt:    res.IssuedAt,
 		Waived:      res.waived,
+
+		CertificateName:     p.CertificateName,
+		CertificateValidity: p.CertificateValidity,
 	}, nil
 }
 
