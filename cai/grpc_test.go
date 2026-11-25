@@ -10,7 +10,6 @@ import (
 
 	caapiv1 "github.com/TWI-Unified-Model/tacra/gen/go/caapi/v1"
 	caiv1 "github.com/TWI-Unified-Model/tacra/gen/go/cai/v1"
-	"github.com/TWI-Unified-Model/tacra/platform/sim"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
@@ -40,19 +39,7 @@ func TestGRPCAcquireCredential(t *testing.T) {
 			return &caapiv1.EnrollCredentialResponse{PlaintextCredential: []byte("dummy-cert")}, nil
 		},
 		retrieve: func(_ context.Context, in *caapiv1.RetrieveCredentialRequest) (*caapiv1.RetrieveCredentialResponse, error) {
-			claims, err := sim.ParseEvidence(in.GetEvidence())
-			if err != nil {
-				t.Fatal(err)
-			}
-			pub, err := claims.Cnf.BoundPublicKey()
-			if err != nil {
-				t.Fatal(err)
-			}
-			wrapped, err := wrapCEK(pub, []byte("hdr.payload.sig"))
-			if err != nil {
-				t.Fatal(err)
-			}
-			return &caapiv1.RetrieveCredentialResponse{WrappedCredential: wrapped}, nil
+			return &caapiv1.RetrieveCredentialResponse{WrappedCredential: seal(t, in, []byte("hdr.payload.sig"), nil)}, nil
 		},
 	}
 

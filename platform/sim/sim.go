@@ -1,99 +1,110 @@
 // Package sim is the simulated TACRA Platform Plug-In: it runs without
-// hardware, generates P-256 keys in process and signs its Evidence, an RFC 9711
-// Entity Attestation Token as a tagged COSE_Sign1, with an in-memory
-// Attestation Key. It is a module of its own, so that the hardware back-ends
-// of the platform module bring no dependency of the simulator to the Workloads
-// that import them.
+// confidential hardware. Its Evidence is a PSA attestation token, a COSE_Sign1
+// that the Attestation Key of the simulated platform signs, with the binding
+// value of TACRA as the nonce. A Verifier appraises the token as the token of
+// any PSA Root of Trust: the signature under the Attestation Key that the
+// operator of the Verifier endorsed for the platform, and the measurement of
+// the software against a Reference Value.
+//
+// The simulated platform protects nothing. Its Attestation Key is an ordinary
+// key in memory or in a file, and the measurement is the SHA-256 that the
+// plug-in computes of the program that holds it. The plug-in exists to run the
+// protocol on a computer without a TEE.
+//
+// It is a module of its own, so that the hardware back-ends of the platform
+// module bring no dependency of the simulator to the Workloads that import
+// them.
 package sim
 
 import (
-	"github.com/TWI-Unified-Model/tacra/platform"
-
 	"crypto/ecdsa"
 	"crypto/elliptic"
-	"crypto/rand"
-	_ "crypto/sha256" // SHA-256 for COSE ES256
-	"encoding/hex"
+	"errors"
 	"fmt"
 	"time"
 
-	"github.com/veraison/eat"
+	"github.com/fxamacker/cbor/v2"
 	"github.com/veraison/go-cose"
+	"github.com/veraison/psatoken"
+
+	"github.com/TWI-Unified-Model/tacra/platform"
 )
 
-const (
-	defaultIssuer = "tacra-sim"
-	defaultSWName = "tacra-sim"
-	defaultHW     = "tacra-sim"
-)
+// ProfileName is the profile of the PSA attestation token that the simulated
+// platform emits.
+const ProfileName = psatoken.Profile2Name
 
-// Simulated is a software Platform Plug-In for the PoC. It generates P-256
-// keys in process and signs platform.Evidence with an in-memory Attestation Key.
-// It does not talk to TDX, SEV-SNP, or any other hardware ABI.
+// MediaTypePSAToken is the media type of the Evidence of the simulated
+// platform.
+const MediaTypePSAToken = "application/psa-attestation-token"
+
+// MeasurementType labels the one software component of the token: the program
+// that holds the plug-in.
+const MeasurementType = "Workload"
+
+// clientID is the PSA Client ID of the caller of the attestation service: a
+// positive value, the range of the secure partitions.
+const clientID = 1
+
+// componentVersion is the version that the token reports for its software
+// component. The simulated platform knows no version of the measured program;
+// the measurement alone identifies the program, and the psa-iot scheme of
+// Veraison reads the field of every component.
+const componentVersion = "0.0.0"
+
+// ErrMeasurement is returned for a measurement that is not a SHA-256 digest.
+var ErrMeasurement = errors.New("sim: the measurement must be 32 octets")
+
+// Simulated is the software Platform Plug-In. It does not talk to TDX,
+// SEV-SNP or any other hardware ABI.
 type Simulated struct {
-	attestationKey *ecdsa.PrivateKey // the Attestation Key of the simulated platform, which signs the Evidence
-	ueid           eat.UEID
-	hwModel        []byte
-	bootSeed       []byte
-	issuer         string
-	swName         string
+	attestationKey *ecdsa.PrivateKey // signs the Evidence
+	instanceID     []byte            // names the Attestation Key in the token
+	signerID       []byte            // the signer of the measured software in the token
+	measurement    []byte            // SHA-256 of the measured program
+	bootSeed       []byte            // random for each instance of the plug-in
+	clock          func() time.Time
 }
 
-// SimOption configures a Simulated plug-in.
-type SimOption func(*Simulated) error
+// Option configures a Simulated plug-in.
+type Option func(*Simulated) error
 
-// WithAttestationKey uses a caller-supplied AK instead of generating one.
-func WithAttestationKey(key *ecdsa.PrivateKey) SimOption {
+// WithAttestationKey uses the given Attestation Key instead of a new one. The
+// operator of a Verifier endorses the public half for the platform, so a
+// platform that a Verifier is to appraise keeps its key.
+func WithAttestationKey(key *ecdsa.PrivateKey) Option {
 	return func(s *Simulated) error {
 		if key == nil || key.Curve != elliptic.P256() {
-			return fmt.Errorf("sim: attestation key must be a P-256 ECDSA private key")
+			return errors.New("sim: the Attestation Key must be an ECDSA P-256 private key")
 		}
 		s.attestationKey = key
 		return nil
 	}
 }
 
-// WithUEID sets a pre-provisioned EAT UEID (must pass eat.UEID.Validate).
-func WithUEID(ueid []byte) SimOption {
+// WithMeasurement sets the measurement that the token reports, 32 octets, in
+// place of the SHA-256 of the running program.
+func WithMeasurement(measurement []byte) Option {
 	return func(s *Simulated) error {
-		u := eat.UEID(ueid)
-		if err := u.Validate(); err != nil {
-			return fmt.Errorf("sim: UEID: %w", err)
+		if len(measurement) != MeasurementSize {
+			return ErrMeasurement
 		}
-		s.ueid = u
+		s.measurement = append([]byte(nil), measurement...)
 		return nil
 	}
 }
 
-// WithHardwareModel sets the EAT hwmodel claim.
-func WithHardwareModel(model []byte) SimOption {
+// WithClock sets the clock used for the absent-timestamp freshness element.
+func WithClock(clock func() time.Time) Option {
 	return func(s *Simulated) error {
-		if len(model) == 0 {
-			return fmt.Errorf("sim: hardware model must not be empty")
-		}
-		s.hwModel = append([]byte(nil), model...)
+		s.clock = clock
 		return nil
 	}
 }
 
-// WithIssuer sets the CWT iss claim.
-func WithIssuer(iss string) SimOption {
-	return func(s *Simulated) error {
-		if iss == "" {
-			return fmt.Errorf("sim: issuer must not be empty")
-		}
-		s.issuer = iss
-		return nil
-	}
-}
-
-// NewSimulated constructs a software-simulated platform plug-in.
-func NewSimulated(opts ...SimOption) (*Simulated, error) {
-	s := &Simulated{
-		hwModel: []byte(defaultHW),
-		issuer:  defaultIssuer,
-		swName:  defaultSWName,
-	}
+// NewSimulated constructs the simulated Platform Plug-In.
+func NewSimulated(opts ...Option) (*Simulated, error) {
+	s := &Simulated{clock: time.Now}
 	for _, opt := range opts {
 		if opt == nil {
 			continue
@@ -103,29 +114,30 @@ func NewSimulated(opts ...SimOption) (*Simulated, error) {
 		}
 	}
 	if s.attestationKey == nil {
-		attestationKeyPair, err := platform.NewP256KeyPair()
+		pair, err := platform.NewP256KeyPair()
 		if err != nil {
 			return nil, err
 		}
-		priv, ok := attestationKeyPair.Private.(*ecdsa.PrivateKey)
+		key, ok := pair.Private.(*ecdsa.PrivateKey)
 		if !ok {
-			return nil, fmt.Errorf("sim: attestation key is %T, not a P-256 ECDSA key", attestationKeyPair.Private)
+			return nil, fmt.Errorf("sim: the Attestation Key is %T, not an ECDSA P-256 key", pair.Private)
 		}
-		s.attestationKey = priv
+		s.attestationKey = key
 	}
-	if len(s.ueid) == 0 {
-		ueid, err := generateUEID()
-		if err != nil {
+	var err error
+	if s.instanceID, err = InstanceID(&s.attestationKey.PublicKey); err != nil {
+		return nil, err
+	}
+	if s.signerID, err = SignerID(&s.attestationKey.PublicKey); err != nil {
+		return nil, err
+	}
+	if s.measurement == nil {
+		if s.measurement, err = MeasureProgram(); err != nil {
 			return nil, err
 		}
-		s.ueid = ueid
 	}
-	if len(s.bootSeed) == 0 {
-		seed, err := generateBootSeed()
-		if err != nil {
-			return nil, err
-		}
-		s.bootSeed = seed
+	if s.bootSeed, err = randomOctets(bootSeedSize); err != nil {
+		return nil, err
 	}
 	return s, nil
 }
@@ -138,6 +150,8 @@ func (s *Simulated) GenerateCEK(alg platform.EncryptionAlgorithm) (*platform.Key
 	switch alg {
 	case platform.EncryptionAlgorithmECDHP256:
 		return platform.NewP256KeyPair()
+	case platform.EncryptionAlgorithmMLKEM768P256:
+		return platform.NewMLKEM768P256KeyPair()
 	case platform.EncryptionAlgorithmRSA2048:
 		return platform.NewRSA2048KeyPair()
 	default:
@@ -157,8 +171,8 @@ func (s *Simulated) GenerateCSK(alg platform.SigningAlgorithm) (*platform.KeyPai
 	}
 }
 
-// LocalEpoch implements platform.Plugin. The simulated platform uses the boot seed
-// as a locally held epoch identifier.
+// LocalEpoch implements platform.Plugin. The simulated platform uses its boot
+// seed as the epoch identifier that it holds.
 func (s *Simulated) LocalEpoch() []byte {
 	if s == nil || len(s.bootSeed) == 0 {
 		return nil
@@ -174,118 +188,91 @@ func (s *Simulated) AttestationPublicKey() *ecdsa.PublicKey {
 	return &s.attestationKey.PublicKey
 }
 
-// AttestationPublicPKIX returns the PKIX encoding of the AK, for CoRIM
-// trust-anchor provisioning.
-func (s *Simulated) AttestationPublicPKIX() ([]byte, error) {
-	pub := s.AttestationPublicKey()
-	if pub == nil {
-		return nil, platform.ErrNilPlugin
-	}
-	attestationKeyPair := &platform.KeyPair{Private: s.attestationKey}
-	return attestationKeyPair.PublicPKIX()
+// Measurement returns the measurement that the token reports.
+func (s *Simulated) Measurement() []byte {
+	return append([]byte(nil), s.measurement...)
 }
 
-// GenerateEvidence implements platform.Plugin.
+// GenerateEvidence implements platform.Plugin. The nonce of the token is the
+// binding value over the freshness element, the Target and the subject (the
+// CSR, or CEKpub). Claims carries, unsigned, what the Relying Party needs to
+// recompute the binding value, under the same keys as the hardware back-ends.
 func (s *Simulated) GenerateEvidence(req platform.EvidenceRequest) (*platform.Evidence, error) {
 	if s == nil || s.attestationKey == nil {
 		return nil, platform.ErrNilPlugin
 	}
-	if err := validateFreshnessHandle(req.FreshnessHandle); err != nil {
-		return nil, err
-	}
-	coseKey, err := encodeCOSEKey(req.BoundKey)
+	element, err := platform.FreshnessElement(req, s.clock())
 	if err != nil {
 		return nil, err
 	}
-
-	var nonce *eat.Nonce
-	if len(req.FreshnessHandle) > 0 {
-		n := eat.Nonce{}
-		if err := n.Add(req.FreshnessHandle); err != nil {
-			return nil, fmt.Errorf("sim: nonce: %w", err)
-		}
-		nonce = &n
-	}
-
-	profile, err := eat.NewProfile(ProfileURI)
-	if err != nil {
-		return nil, fmt.Errorf("sim: eat profile: %w", err)
-	}
-
-	var sw eat.StringOrURI
-	if err := sw.FromString(s.swName); err != nil {
-		return nil, fmt.Errorf("sim: software name: %w", err)
-	}
-
-	oemBoot := true
-	dbg := eat.Debug(eat.DebugDisabledSinceBoot)
-	bootCount := uint(1)
-	use := platform.ResolveKeyUse(req)
-
-	claims := &Claims{
-		Issuer:        s.issuer,
-		Subject:       hex.EncodeToString(s.ueid),
-		IssuedAt:      time.Now().Unix(),
-		Cnf:           &Confirmation{COSEKey: coseKey},
-		Nonce:         nonce,
-		UEID:          s.ueid,
-		HardwareModel: s.hwModel,
-		OemBoot:       &oemBoot,
-		DebugStatus:   &dbg,
-		Profile:       profile,
-		BootCount:     &bootCount,
-		BootSeed:      s.bootSeed,
-		SoftwareName:  &sw,
-		CSR:           append([]byte(nil), req.CSR...),
-		BoundKeyUse:   use,
-	}
-
-	payload, err := encodeClaims(claims)
-	if err != nil {
-		return nil, fmt.Errorf("sim: encode EAT claims: %w", err)
-	}
-
-	token, err := s.signEAT(payload)
+	subject, err := platform.Subject(req)
 	if err != nil {
 		return nil, err
 	}
+	bindingValue := platform.BindingValue(element, req.Target, subject)
 
-	return &platform.Evidence{
-		Token:     token,
-		MediaType: MediaTypeEATProfile,
-		Claims:    payload,
-	}, nil
+	token, err := s.sign(bindingValue[:])
+	if err != nil {
+		return nil, err
+	}
+	claims, err := cbor.Marshal(map[string]any{
+		platform.TSMClaimFreshnessKind:    int32(req.FreshnessKind),
+		platform.TSMClaimFreshnessElement: element,
+		platform.TSMClaimTarget:           req.Target,
+		platform.TSMClaimBindingValue:     bindingValue[:],
+	})
+	if err != nil {
+		return nil, fmt.Errorf("sim: claims CBOR: %w", err)
+	}
+	return &platform.Evidence{Token: token, MediaType: MediaTypePSAToken, Claims: claims}, nil
 }
 
-func (s *Simulated) signEAT(claims []byte) ([]byte, error) {
-	kid := kidFromPublic(&s.attestationKey.PublicKey)
+// sign builds the PSA attestation token with the given nonce and signs it with
+// the Attestation Key.
+func (s *Simulated) sign(nonce []byte) ([]byte, error) {
+	component := &psatoken.SwComponent{}
+	if err := component.SetMeasurementType(MeasurementType); err != nil {
+		return nil, fmt.Errorf("sim: measurement type: %w", err)
+	}
+	if err := component.SetMeasurementValue(s.measurement); err != nil {
+		return nil, fmt.Errorf("sim: measurement: %w", err)
+	}
+	if err := component.SetSignerID(s.signerID); err != nil {
+		return nil, fmt.Errorf("sim: signer ID: %w", err)
+	}
+	if err := component.SetVersion(componentVersion); err != nil {
+		return nil, fmt.Errorf("sim: version: %w", err)
+	}
+
+	claims, err := psatoken.NewClaims(ProfileName)
+	if err != nil {
+		return nil, fmt.Errorf("sim: profile: %w", err)
+	}
+	for _, set := range []func() error{
+		func() error { return claims.SetClientID(clientID) },
+		func() error { return claims.SetSecurityLifeCycle(psatoken.SecurityLifecycleSecuredMin) },
+		func() error { return claims.SetImplID(ImplementationID()) },
+		func() error { return claims.SetInstID(s.instanceID) },
+		func() error { return claims.SetBootSeed(s.bootSeed) },
+		func() error { return claims.SetSoftwareComponents([]psatoken.ISwComponent{component}) },
+		func() error { return claims.SetNonce(nonce) },
+	} {
+		if err := set(); err != nil {
+			return nil, fmt.Errorf("sim: token claims: %w", err)
+		}
+	}
+
 	signer, err := cose.NewSigner(cose.AlgorithmES256, s.attestationKey)
 	if err != nil {
 		return nil, fmt.Errorf("sim: COSE signer: %w", err)
 	}
-	headers := cose.Headers{
-		Protected: cose.ProtectedHeader{
-			cose.HeaderLabelAlgorithm:   cose.AlgorithmES256,
-			cose.HeaderLabelContentType: MediaTypeEAT,
-		},
-		Unprotected: cose.UnprotectedHeader{
-			cose.HeaderLabelKeyID: kid,
-		},
+	evidence := psatoken.Evidence{}
+	if err := evidence.SetClaims(claims); err != nil {
+		return nil, fmt.Errorf("sim: token claims: %w", err)
 	}
-	token, err := cose.Sign1(rand.Reader, signer, headers, claims, nil)
+	token, err := evidence.ValidateAndSign(signer)
 	if err != nil {
 		return nil, fmt.Errorf("sim: COSE_Sign1: %w", err)
 	}
 	return token, nil
-}
-
-func validateFreshnessHandle(h []byte) error {
-	if len(h) == 0 {
-		return nil
-	}
-	n := len(h)
-	if n < eat.MinNonceSize || n > eat.MaxNonceSize {
-		return fmt.Errorf("%w: got %d", platform.ErrInvalidFreshnessHandle, n)
-	}
-	return nil
 }

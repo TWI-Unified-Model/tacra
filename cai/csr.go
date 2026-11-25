@@ -5,23 +5,24 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"fmt"
-	"net/url"
 
 	"github.com/TWI-Unified-Model/tacra/platform"
 )
 
-func createCSR(csk *platform.KeyPair, target string) ([]byte, error) {
+// createCSR builds the certification request of an Enrollment. The request
+// carries the public CSK and the proof of its possession. The Credential
+// Authority assigns the names of the certificate, so the request names nothing
+// but the Credential Hint, as its common name, when the Workload gave one.
+func createCSR(csk *platform.KeyPair, credentialHint string) ([]byte, error) {
 	signer, err := csk.Signer()
 	if err != nil {
 		return nil, fmt.Errorf("cai: CSR: %w", err)
 	}
-	tmpl := &x509.CertificateRequest{
-		Subject: pkix.Name{CommonName: truncateCN(target)},
+	template := &x509.CertificateRequest{}
+	if credentialHint != "" {
+		template.Subject = pkix.Name{CommonName: truncateCN(credentialHint)}
 	}
-	if u, err := url.Parse(target); err == nil && u.Scheme != "" && u.Host != "" {
-		tmpl.URIs = []*url.URL{u}
-	}
-	der, err := x509.CreateCertificateRequest(rand.Reader, tmpl, signer)
+	der, err := x509.CreateCertificateRequest(rand.Reader, template, signer)
 	if err != nil {
 		return nil, fmt.Errorf("cai: CSR: %w", err)
 	}
