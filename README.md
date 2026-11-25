@@ -38,6 +38,7 @@ export DEPLOY_CONFIG_DIR="$PWD/deploy/config/local"
 .
 ├── cai                         # Credential Acquisition Interface (CAI) implementation
 │   └── cmd/sidecar/            # CAI Sidecar implementation
+├── casserver/                  # The CAS Server Plug-in: what a CAS Server does with a request, as one library
 ├── client/                     # PoC Client
 ├── constants/                  # Constants of TACRA that every implementation imports
 ├── container/                  # The hpke-base container that carries a released credential
