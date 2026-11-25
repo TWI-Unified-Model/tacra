@@ -35,7 +35,7 @@ const earProfile = "tag:github.com,2023:veraison/ear"
 
 // veraisonFamilies is the platform family of each EAR submodule a Verifier of
 // this kind annotates.
-var veraisonFamilies = map[string]string{"SEVSNP": familySEVSNP, "TDX": familyTDX}
+var veraisonFamilies = map[string]string{"SEVSNP": familySEVSNP, "TDX": familyTDX, "PSA_IOT": familyPSA}
 
 func (veraisonKind) Name() string { return "veraison" }
 
@@ -66,13 +66,14 @@ func (veraisonKind) New(name string, c *VerifierConfig, tc *tls.Config, window r
 		return nil, fmt.Errorf("ear_key_path: %w", err)
 	}
 	return &veraisonVerifier{
-		name:     name,
-		provider: c.Provider,
-		url:      strings.TrimRight(c.URL, "/"),
-		client:   &http.Client{Timeout: 60 * time.Second, Transport: &http.Transport{TLSClientConfig: tc}},
-		key:      key,
-		submods:  c.Submods,
-		window:   window,
+		name:       name,
+		provider:   c.Provider,
+		mediaTypes: c.EvidenceMediaTypes,
+		url:        strings.TrimRight(c.URL, "/"),
+		client:     &http.Client{Timeout: 60 * time.Second, Transport: &http.Transport{TLSClientConfig: tc}},
+		key:        key,
+		submods:    c.Submods,
+		window:     window,
 	}, nil
 }
 
@@ -80,18 +81,20 @@ func (veraisonKind) New(name string, c *VerifierConfig, tc *tls.Config, window r
 // TLS with the client certificate of the Server, and verifies its Attestation
 // Results with the key provisioned for it.
 type veraisonVerifier struct {
-	name     string
-	provider string
-	url      string
-	client   *http.Client
-	key      *ecdsa.PublicKey // the key its Attestation Results are signed with
-	submods  []string         // the EAR submodules it speaks for
-	window   resultsWindow
+	name       string
+	provider   string
+	mediaTypes []string // the media types of the Evidence it appraises outside a TSM report
+	url        string
+	client     *http.Client
+	key        *ecdsa.PublicKey // the key its Attestation Results are signed with
+	submods    []string         // the EAR submodules it speaks for
+	window     resultsWindow
 }
 
-func (v *veraisonVerifier) Name() string     { return v.name }
-func (v *veraisonVerifier) Kind() string     { return veraisonKind{}.Name() }
-func (v *veraisonVerifier) Provider() string { return v.provider }
+func (v *veraisonVerifier) Name() string         { return v.name }
+func (v *veraisonVerifier) Kind() string         { return veraisonKind{}.Name() }
+func (v *veraisonVerifier) Provider() string     { return v.provider }
+func (v *veraisonVerifier) MediaTypes() []string { return v.mediaTypes }
 
 // Appraise runs one challenge-response session with the Verifier and returns
 // its Attestation Results, not yet verified: a session opened with the nonce,
@@ -199,6 +202,11 @@ func (v *veraisonVerifier) Verify(jws string, expectedNonce []byte) (*attestatio
 			_ = json.Unmarshal(sub.Evidence, &res.TDX)
 			if m, err := hex.DecodeString(res.TDX["mrtd"]); err == nil && len(m) == 48 {
 				res.Measurement = m
+			}
+		case familyPSA:
+			res.PSA, res.PSAErr = parsePSAClaims(sub.Evidence)
+			if res.PSA != nil {
+				res.Measurement = res.PSA.measurement
 			}
 		}
 		return res, nil

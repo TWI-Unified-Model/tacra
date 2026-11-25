@@ -79,7 +79,7 @@ func TestConfigValidate(t *testing.T) {
 			c.Target["spiffe://example.org"].CredentialTypes = []constants.CredentialType{"password"}
 		}, err: `Credential Type "password" is not defined by TACRA`},
 		{name: "Verifier without key", mutate: func(c *Config) { c.Verifier["veraison"].EARKeyPath = "" }, err: "ear_key_path is required"},
-		{name: "Verifier without provider", mutate: func(c *Config) { c.Verifier["veraison"].Provider = "" }, err: "provider is required"},
+		{name: "Verifier without provider", mutate: func(c *Config) { c.Verifier["veraison"].Provider = "" }, err: "provider or evidence_media_types is required"},
 		{name: "Verifier of an unknown kind", mutate: func(c *Config) { c.Verifier["veraison"].VerifierKind = "attestify" }, err: `kind "attestify" is not one of veraison`},
 		{name: "Verifier with a submodule of no family", mutate: func(c *Config) { c.Verifier["veraison"].Submods = []string{"CCA"} }, err: `submods: "CCA" is not an EAR submodule`},
 		{name: "vault of an unknown kind", mutate: func(c *Config) {

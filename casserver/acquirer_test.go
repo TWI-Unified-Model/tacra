@@ -285,7 +285,7 @@ func TestEnroll(t *testing.T) {
 		e := enrollment(handle)
 		e.Evidence = testEvidence(t, "tdx_guest")
 		_, err := x.a.Enroll(ctx, e)
-		requireStatus(t, err, codes.PermissionDenied, "the policy for the Target specifies no Verifier for Evidence of this provider")
+		requireStatus(t, err, codes.PermissionDenied, "the policy for the Target specifies no Verifier for this Evidence")
 	})
 	t.Run("a retrieve Target refuses enrollment", func(t *testing.T) {
 		e := enrollment([]byte("0123456789abcdef0123456789abcdef"))
@@ -376,7 +376,7 @@ func TestRetrieve(t *testing.T) {
 		r.Target, r.CredentialType, r.FreshnessElement = testPassportTarget, "api-key", res.Handle
 		r.Evidence = testEvidence(t, "tdx_guest")
 		_, err = x.a.Retrieve(ctx, r)
-		requireStatus(t, err, codes.PermissionDenied, "the policy for the Target specifies no Verifier for Evidence of this provider")
+		requireStatus(t, err, codes.PermissionDenied, "the policy for the Target specifies no Verifier for this Evidence")
 	})
 	t.Run("an enroll Target refuses retrieval", func(t *testing.T) {
 		r := retrieval()

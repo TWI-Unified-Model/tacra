@@ -31,33 +31,33 @@ var supportedCSKAlgorithms = []string{"ecdsa-p256-sha256"}
 type Config struct {
 	// Target holds the policy for each Target this Server serves, keyed by the
 	// Target name: the octet string the Workload names in its calls.
-	Target map[string]*TargetConfig `hcl:"target"`
+	Target map[string]*TargetConfig `hcl:"target" json:"target,omitempty"`
 
 	// Verifier, by name, is a RATS Verifier this Server sends Evidence to
 	// and whose Attestation Results it accepts. The policy for a Target names the
 	// Verifiers it accepts.
-	Verifier map[string]*VerifierConfig `hcl:"verifier"`
+	Verifier map[string]*VerifierConfig `hcl:"verifier" json:"verifier,omitempty"`
 
 	// AcceptableEvidence is the list of Evidence formats this Server
 	// forwards, each named by its media type, for example
 	// application/vnd.veraison.tsm-report+cbor.
-	AcceptableEvidence []string `hcl:"acceptable_evidence"`
+	AcceptableEvidence []string `hcl:"acceptable_evidence" json:"acceptable_evidence,omitempty"`
 
 	// EARMaxAge is how old Attestation Results may be: a duration with its unit,
 	// as Go writes it, for example 2m or 90s; the default is 2m.
-	EARMaxAge string `hcl:"ear_max_age"`
+	EARMaxAge string `hcl:"ear_max_age" json:"ear_max_age,omitempty"`
 
 	// EARSkew is how far in the future Attestation Results may be dated: a
 	// duration with its unit, for example 5s; the default is 5s.
-	EARSkew string `hcl:"ear_skew"`
+	EARSkew string `hcl:"ear_skew" json:"ear_skew,omitempty"`
 
 	// ClientCertPath and ClientKeyPath hold the certificate and key this
 	// Server presents to the Verifiers and the Secret Vault over mutual TLS.
-	ClientCertPath string `hcl:"client_cert_path"`
-	ClientKeyPath  string `hcl:"client_key_path"`
+	ClientCertPath string `hcl:"client_cert_path" json:"client_cert_path,omitempty"`
+	ClientKeyPath  string `hcl:"client_key_path" json:"client_key_path,omitempty"`
 
 	// SecretVault is the Secret Vault behind the Targets in retrieve mode.
-	SecretVault *SecretVaultConfig `hcl:"secret_vault"`
+	SecretVault *SecretVaultConfig `hcl:"secret_vault" json:"secret_vault,omitempty"`
 
 	// PlatformRulePath is the file holding the platform rule applied to
 	// affirming Attestation Results of every Target: the machine, the product
@@ -66,56 +66,56 @@ type Config struct {
 	// SEV-SNP report: the launch settings of the guest, among them whether
 	// debugging and migration are allowed (AMD 56860, Table 12). Without a rule,
 	// only the debug and migration bits of the guest policy are refused.
-	PlatformRulePath string `hcl:"platform_rule_path"`
+	PlatformRulePath string `hcl:"platform_rule_path" json:"platform_rule_path,omitempty"`
 
 	// SEVSNPProductsPath is the file holding the product data of AMD the
 	// platform module for SEV-SNP reads reports with: the product lines, the
 	// CPUID family and extended model that report each, and the byte of each
 	// component in TCB_VERSION. Without it, the Server uses the copy it ships.
 	// The file is JSON, in the format of that copy.
-	SEVSNPProductsPath string `hcl:"sevsnp_products_path"`
+	SEVSNPProductsPath string `hcl:"sevsnp_products_path" json:"sevsnp_products_path,omitempty"`
 }
 
 // TargetConfig is the policy for one Target.
 type TargetConfig struct {
 	// Mode is enroll or retrieve.
-	Mode constants.CredentialAcquisitionMode `hcl:"mode"`
+	Mode constants.CredentialAcquisitionMode `hcl:"mode" json:"mode,omitempty"`
 
 	// CredentialTypes are the Credential Types served for the Target.
 	// Enrollment serves x509 and wic.
-	CredentialTypes []constants.CredentialType `hcl:"credential_types"`
+	CredentialTypes []constants.CredentialType `hcl:"credential_types" json:"credential_types,omitempty"`
 
 	// FreshnessKind is the Freshness Kind of the exchanges of the Target. This
 	// Server issues present-nonce Handles; a Target in retrieve mode uses
 	// the kind its Secret Vault answers.
-	FreshnessKind constants.FreshnessKind `hcl:"freshness_kind"`
+	FreshnessKind constants.FreshnessKind `hcl:"freshness_kind" json:"freshness_kind,omitempty"`
 
 	// ExpiresIn is the lifetime of a Freshness Handle: a duration with its unit,
 	// for example 5m or 300s; the default is 5m, and TACRA recommends at least
 	// 1m.
-	ExpiresIn string `hcl:"expires_in"`
+	ExpiresIn string `hcl:"expires_in" json:"expires_in,omitempty"`
 
 	// Verifiers names the Verifiers whose Attestation Results the policy
 	// accepts for this Target, among those configured. In retrieve mode, the
 	// Verifiers the Server asks when the RATS model is passport.
-	Verifiers []string `hcl:"verifiers"`
+	Verifiers []string `hcl:"verifiers" json:"verifiers,omitempty"`
 
 	// RATSModel is, for a Target in retrieve mode, passport or
 	// background-check (the default): who asks the Verifier, this Server or
 	// the Secret Vault.
-	RATSModel constants.RATSModel `hcl:"rats_model"`
+	RATSModel constants.RATSModel `hcl:"rats_model" json:"rats_model,omitempty"`
 
 	// AcceptableCSK lists the CSK algorithms the Credential Authority
 	// accepts for enrollment (default ecdsa-p256-sha256).
-	AcceptableCSK []string `hcl:"acceptable_csk"`
+	AcceptableCSK []string `hcl:"acceptable_csk" json:"acceptable_csk,omitempty"`
 
 	// Measurements lists the launch measurements admitted, in hex. A
 	// measurement not listed is refused unless AllowAnyMeasurement is set.
-	Measurements []string `hcl:"measurements"`
+	Measurements []string `hcl:"measurements" json:"measurements,omitempty"`
 
 	// AllowAnyMeasurement admits any affirming Attestation Results whatever
 	// the launch measurement. For bring-up only.
-	AllowAnyMeasurement bool `hcl:"allow_any_measurement"`
+	AllowAnyMeasurement bool `hcl:"allow_any_measurement" json:"allow_any_measurement,omitempty"`
 }
 
 // VerifierConfig is one RATS Verifier.
@@ -123,29 +123,35 @@ type VerifierConfig struct {
 	// VerifierKind is the kind of Verifier: how the Server sends it Evidence
 	// and reads its Attestation Results. The Veraison kind, veraison, is the
 	// default and the one kind for now.
-	VerifierKind string `hcl:"kind"`
+	VerifierKind string `hcl:"kind" json:"kind,omitempty"`
 
 	// URL is the base URL of the API of the Verifier: for the Veraison kind,
 	// its challenge-response API.
-	URL string `hcl:"url"`
+	URL string `hcl:"url" json:"url,omitempty"`
 
 	// CAPath is the file holding the certificate of the CA that signed the TLS
 	// certificate of the Verifier: the Server trusts that CA, so the Verifier
 	// rotates its own certificate under it without a change here.
-	CAPath string `hcl:"ca_path"`
+	CAPath string `hcl:"ca_path" json:"ca_path,omitempty"`
 
 	// EARKeyPath, for the Veraison kind, is the file holding the public key the
 	// Verifier signs its Attestation Results with: an EC P-256 public JWK, or
 	// a PEM public key. It is provisioned, never fetched.
-	EARKeyPath string `hcl:"ear_key_path"`
+	EARKeyPath string `hcl:"ear_key_path" json:"ear_key_path,omitempty"`
 
 	// Provider is the TSM report provider of the Evidence this Verifier
 	// appraises: sev_guest or tdx_guest.
-	Provider string `hcl:"provider"`
+	Provider string `hcl:"provider" json:"provider,omitempty"`
+	// EvidenceMediaTypes lists the media types of the Evidence this Verifier
+	// appraises when the Evidence is not a TSM report, for example
+	// application/psa-attestation-token. The Server sends Evidence of a media
+	// type listed here to this Verifier, and Evidence in a TSM report to the
+	// Verifier for its provider.
+	EvidenceMediaTypes []string `hcl:"evidence_media_types" json:"evidence_media_types,omitempty"`
 
 	// Submods, for the Veraison kind, names the EAR submodules the Verifier speaks
 	// for, each of a platform family: SEVSNP, TDX.
-	Submods []string `hcl:"submods"`
+	Submods []string `hcl:"submods" json:"submods,omitempty"`
 }
 
 // SecretVaultConfig is the Secret Vault of the Targets in retrieve mode.
@@ -153,21 +159,21 @@ type SecretVaultConfig struct {
 	// SecretVaultKind is the kind of Secret Vault: how the Server forwards the
 	// initiate and the retrieve parts of the flow to it. json, the TACRA calls
 	// as JSON over HTTPS, is the default and the one kind for now.
-	SecretVaultKind string `hcl:"kind"`
+	SecretVaultKind string `hcl:"kind" json:"kind,omitempty"`
 
 	// URL is the base URL of the API of the Secret Vault.
-	URL string `hcl:"url"`
+	URL string `hcl:"url" json:"url,omitempty"`
 
 	// CAPath is the file holding the certificate of the CA that signed the TLS
 	// certificate of the Secret Vault: the Server trusts that CA, so the Secret
 	// Vault rotates its own certificate under it without a change here.
-	CAPath string `hcl:"ca_path"`
+	CAPath string `hcl:"ca_path" json:"ca_path,omitempty"`
 
 	// ClientCertPath and ClientKeyPath, when set, are the certificate and key
 	// this Server presents to the Secret Vault instead of the ones it presents to
 	// the verifiers.
-	ClientCertPath string `hcl:"client_cert_path"`
-	ClientKeyPath  string `hcl:"client_key_path"`
+	ClientCertPath string `hcl:"client_cert_path" json:"client_cert_path,omitempty"`
+	ClientKeyPath  string `hcl:"client_key_path" json:"client_key_path,omitempty"`
 }
 
 // Policy is the parsed policy of one Target.
@@ -201,8 +207,8 @@ func (c *Config) Validate() (map[string]*Policy, error) {
 		if !ok {
 			return nil, fmt.Errorf("credential_acquisition: Verifier %q: kind %q is not one of %s", name, v.VerifierKind, verifierKindNames())
 		}
-		if v.Provider == "" {
-			return nil, fmt.Errorf("credential_acquisition: Verifier %q: provider is required", name)
+		if v.Provider == "" && len(v.EvidenceMediaTypes) == 0 {
+			return nil, fmt.Errorf("credential_acquisition: Verifier %q: provider or evidence_media_types is required", name)
 		}
 		if err := kind.Validate(v); err != nil {
 			return nil, fmt.Errorf("credential_acquisition: Verifier %q: %w", name, err)

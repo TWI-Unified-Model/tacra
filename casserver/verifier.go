@@ -15,7 +15,7 @@ import (
 
 // Refusals of the appraisal.
 var (
-	ErrNoVerifier          = errors.New("the policy for the Target specifies no Verifier for Evidence of this provider")
+	ErrNoVerifier          = errors.New("the policy for the Target specifies no Verifier for this Evidence")
 	ErrVerifierUnavailable = errors.New("the Verifier is unavailable")
 	ErrNoResults           = errors.New("the Verifier produced no Attestation Results")
 )
@@ -46,6 +46,9 @@ type verifierClient interface {
 	// Provider is the TSM report provider of the Evidence the Verifier
 	// appraises.
 	Provider() string
+	// MediaTypes lists the media types of the Evidence the Verifier appraises
+	// when the Evidence is not a TSM report.
+	MediaTypes() []string
 	// Appraise sends the Evidence, with the binding value as the nonce, and
 	// returns the Attestation Results as the Verifier issued them, not yet
 	// verified.
@@ -112,10 +115,19 @@ func newVerifiers(c *Config, window resultsWindow) (map[string]verifierClient, e
 }
 
 // route picks, among the Verifiers specified by the policy for the Target, the
-// one for the TSM report provider of the Evidence. The policy chooses the
-// Verifier; the Evidence only picks among those, and there is no default for
-// the rest. The Verifiers are tried in the order of their names.
-func route(verifiers map[string]verifierClient, evidence []byte, accept []string) (verifierClient, error) {
+// one for the Evidence: the Verifier that lists the media type of the Evidence,
+// or, for Evidence in a TSM report, the Verifier for the provider of the
+// report. The policy chooses the Verifier; the Evidence only picks among those,
+// and there is no default for the rest. The Verifiers are tried in the order of
+// their names.
+func route(verifiers map[string]verifierClient, evidence []byte, mediaType string, accept []string) (verifierClient, error) {
+	names := slices.Sorted(maps.Keys(verifiers))
+	for _, name := range names {
+		v := verifiers[name]
+		if slices.Contains(accept, name) && mediaType != "" && slices.Contains(v.MediaTypes(), mediaType) {
+			return v, nil
+		}
+	}
 	var t struct {
 		Provider string `cbor:"provider"`
 	}
@@ -123,11 +135,11 @@ func route(verifiers map[string]verifierClient, evidence []byte, accept []string
 	if cbor.Unmarshal(evidence, &t) == nil {
 		provider = strings.TrimSpace(t.Provider)
 	}
-	for _, name := range slices.Sorted(maps.Keys(verifiers)) {
+	for _, name := range names {
 		v := verifiers[name]
 		if slices.Contains(accept, name) && v.Provider() != "" && v.Provider() == provider {
 			return v, nil
 		}
 	}
-	return nil, fmt.Errorf("%w: provider %q, Verifiers %v", ErrNoVerifier, provider, accept)
+	return nil, fmt.Errorf("%w: media type %q, provider %q, Verifiers %v", ErrNoVerifier, mediaType, provider, accept)
 }

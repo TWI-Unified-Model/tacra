@@ -315,7 +315,7 @@ func (a *Acquirer) Retrieve(ctx context.Context, in Retrieval) ([]byte, error) {
 		// The Server asks the Verifier that the policy names and forwards the
 		// Attestation Results; the Secret Vault verifies them under the keys it holds.
 		bv := BindingValue(in.FreshnessElement, in.Target, in.CEKPub)
-		v, err := route(a.verifiers, in.Evidence, p.Verifiers)
+		v, err := route(a.verifiers, in.Evidence, profile, p.Verifiers)
 		if err != nil {
 			return nil, status.Errorf(codes.PermissionDenied, "%v", err)
 		}
@@ -442,7 +442,7 @@ func parseCSR(der []byte, acceptable []string) (*x509.CertificateRequest, error)
 // provider, has that Verifier verify its Attestation Results against the
 // binding value, and applies the platform rule.
 func (a *Acquirer) appraise(ctx context.Context, p *Policy, evidence []byte, profile string, bindingValue []byte) (*attestationResults, error) {
-	v, err := route(a.verifiers, evidence, p.Verifiers)
+	v, err := route(a.verifiers, evidence, profile, p.Verifiers)
 	if err != nil {
 		return nil, status.Errorf(codes.PermissionDenied, "%v", err)
 	}

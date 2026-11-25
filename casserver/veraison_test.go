@@ -99,17 +99,17 @@ func TestRoute(t *testing.T) {
 	evidence := testEvidence(t, "sev_guest")
 
 	t.Run("the Verifier the policy names for the provider of the Evidence", func(t *testing.T) {
-		v, err := route(verifiers, evidence, []string{"veraison", "tdx"})
+		v, err := route(verifiers, evidence, "", []string{"veraison", "tdx"})
 		require.NoError(t, err)
 		require.Equal(t, "veraison", v.Name())
 		require.Equal(t, "veraison", v.Kind())
 	})
 	t.Run("a Verifier the policy does not name receives nothing", func(t *testing.T) {
-		_, err := route(verifiers, evidence, []string{"tdx"})
+		_, err := route(verifiers, evidence, "", []string{"tdx"})
 		require.ErrorIs(t, err, ErrNoVerifier)
 	})
 	t.Run("Evidence of an unknown provider has no Verifier", func(t *testing.T) {
-		_, err := route(verifiers, testEvidence(t, "other"), []string{"veraison"})
+		_, err := route(verifiers, testEvidence(t, "other"), "", []string{"veraison"})
 		require.ErrorIs(t, err, ErrNoVerifier)
 	})
 }
@@ -249,7 +249,7 @@ func TestVeraisonKindValidate(t *testing.T) {
 		{name: "no url", mutate: func(c *VerifierConfig) { c.URL = "" }, err: "url is required"},
 		{name: "no key", mutate: func(c *VerifierConfig) { c.EARKeyPath = "" }, err: "ear_key_path is required"},
 		{name: "no submods", mutate: func(c *VerifierConfig) { c.Submods = nil }, err: "submods is required"},
-		{name: "a submodule of no family", mutate: func(c *VerifierConfig) { c.Submods = []string{"CCA"} }, err: `"CCA" is not an EAR submodule of a platform family this Server knows (SEVSNP, TDX)`},
+		{name: "a submodule of no family", mutate: func(c *VerifierConfig) { c.Submods = []string{"CCA"} }, err: `"CCA" is not an EAR submodule of a platform family this Server knows (PSA_IOT, SEVSNP, TDX)`},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			c := *ok

@@ -25,6 +25,7 @@ var ErrPlatform = errors.New("refused by the platform rule")
 const (
 	familySEVSNP = "sevsnp"
 	familyTDX    = "tdx"
+	familyPSA    = "psa"
 )
 
 // PlatformRule is the rule of the Server on the platform: the machine the
@@ -67,7 +68,7 @@ func platformModules(c *Config) ([]platformModule, error) {
 	if err != nil {
 		return nil, err
 	}
-	return []platformModule{&snpModule{products: products}, tdxModule{}}, nil
+	return []platformModule{&snpModule{products: products}, tdxModule{}, psaModule{}}, nil
 }
 
 // loadPlatformRule reads the rule file and hands each entry to its module.
