@@ -1,14 +1,18 @@
-// Package credentialacquisition is the Credential Acquisition System Server of
-// draft-novak-rats-tacra (TACRA) inside SPIRE Server, behind the
-// CredentialAcquisition Server API. The Client is the Agent (pkg/agent); the
-// Attester is the Workload. For a Workload the Agent attested, this Server
-// issues the Freshness Handle, sends the Evidence to a RATS Verifier, and
-// verifies the Attestation Results and the binding of the Attester-held key to
-// the Evidence. In Enrollment, SPIRE Server is the Identity Provider as well:
-// its CA mints the X509-SVID, so the Credential Authority of TACRA and this
-// Server are one process. In Retrieval, the Identity Provider is the Secret
-// Vault, and this Server is the conduit that returns the credential the Secret
-// Vault released, sealed to the key of the Workload.
+// Package casserver is the CAS Server Plug-in: the Credential Acquisition
+// System Server of draft-novak-rats-tacra (TACRA) as a library that a CAS
+// Server hosts. SPIRE Server hosts it behind its CredentialAcquisition Server
+// API, where the Client is the Agent, and the EST Server hosts it behind the
+// attest resources of EST. The Attester is the Workload. For a request, this
+// Server issues the Freshness Handle, sends the Evidence to a RATS Verifier,
+// and verifies the Attestation Results and the binding of the Attester-held
+// key to the Evidence. In Enrollment, a host with a CA of its own is the
+// Identity Provider as well: SPIRE Server mints the X509-SVID from the result
+// of Enroll. A host without one configures a Credential Authority, and this
+// Server has it issue the certificate. In Retrieval, the Identity Provider is
+// the Secret Vault: this Server is the conduit that returns the credential the
+// Secret Vault released, sealed to the key of the Workload, or it reads a
+// Secret Vault that only holds the credential and seals the credential itself.
+// README.md beside this file describes the configuration.
 package casserver
 
 import (
@@ -196,15 +200,16 @@ type VerifierConfig struct {
 	EvidenceMediaTypes []string `hcl:"evidence_media_types" json:"evidence_media_types,omitempty"`
 
 	// Submods, for the Veraison kind, names the EAR submodules the Verifier speaks
-	// for, each of a platform family: SEVSNP, TDX.
+	// for, each of a platform family: SEVSNP, TDX, PSA_IOT.
 	Submods []string `hcl:"submods" json:"submods,omitempty"`
 }
 
 // SecretVaultConfig is the Secret Vault of the Targets in retrieve mode.
 type SecretVaultConfig struct {
 	// SecretVaultKind is the kind of Secret Vault: how the Server forwards the
-	// initiate and the retrieve parts of the flow to it. json, the TACRA calls
-	// as JSON over HTTPS, is the default and the one kind for now.
+	// initiate and the retrieve parts of the flow to it, or reads it. json, the
+	// TACRA calls as JSON over HTTPS, is the default; hashicorp is a HashiCorp
+	// Vault that this Server reads itself.
 	SecretVaultKind string `hcl:"kind" json:"kind,omitempty"`
 
 	// URL is the base URL of the API of the Secret Vault.

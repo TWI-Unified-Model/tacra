@@ -21,7 +21,7 @@ import (
 )
 
 // Acquirer is the Credential Acquisition System Server: the three calls of
-// TACRA for the Workloads the Agents attested. The refusals it returns are
+// TACRA as the host of the plug-in forwards them. The refusals it returns are
 // gRPC statuses that name the reason, as TACRA enumerates them: an invalid
 // or unsupported Target, an unsupported Credential Type, a rejected
 // Credential Hint, a Remote Attestation failure, a permission failure, or
@@ -101,8 +101,11 @@ func newAcquirer(log logrus.FieldLogger, policies map[string]*Policy, evidence [
 	}
 }
 
-// Initiation is Initiate-Credential-Acquisition as the Agent forwards it,
-// with the registration entry of the Workload it attested and its own ID.
+// Initiation is Initiate-Credential-Acquisition as the host forwards it.
+// EntryID and AgentID name the Workload and the CAS Client as the host knows
+// them: SPIRE Server passes the registration entry of the Workload and the ID
+// of the Agent that attested it, and a host that does not tell its callers
+// apart leaves both empty.
 type Initiation struct {
 	EntryID        string
 	AgentID        string
@@ -214,7 +217,7 @@ func (a *Acquirer) Initiate(ctx context.Context, in Initiation) (*InitiationResu
 	}
 }
 
-// Enrollment is Enroll-Credential as the Agent forwards it.
+// Enrollment is Enroll-Credential as the host forwards it.
 type Enrollment struct {
 	EntryID          string
 	AgentID          string
@@ -249,7 +252,7 @@ type EnrollmentResult struct {
 
 // Enroll checks the binding parameters, the Evidence format, the CSR, the
 // Handle of the exchange and the Attestation Results, and returns the CSR for
-// which the Credential Authority mints the X509-SVID of the Attester.
+// which the Credential Authority mints the certificate of the Attester.
 func (a *Acquirer) Enroll(ctx context.Context, in Enrollment) (*EnrollmentResult, error) {
 	p, err := a.policy(in.Target, constants.CredentialAcquisitionModeEnroll)
 	if err != nil {
@@ -293,7 +296,7 @@ func (a *Acquirer) Enroll(ctx context.Context, in Enrollment) (*EnrollmentResult
 	}, nil
 }
 
-// Retrieval is Retrieve-Credential as the Agent forwards it.
+// Retrieval is Retrieve-Credential as the host forwards it.
 type Retrieval struct {
 	EntryID          string
 	AgentID          string
@@ -480,8 +483,8 @@ func parseCSR(der []byte, acceptable []string) (*x509.CertificateRequest, error)
 }
 
 // appraise sends the Evidence to the Verifier that the policy names for its
-// provider, has that Verifier verify its Attestation Results against the
-// binding value, and applies the platform rule.
+// media type or its provider, has that Verifier verify its Attestation
+// Results against the binding value, and applies the platform rule.
 func (a *Acquirer) appraise(ctx context.Context, p *Policy, evidence []byte, profile string, bindingValue []byte) (*attestationResults, error) {
 	v, err := route(a.verifiers, evidence, profile, p.Verifiers)
 	if err != nil {

@@ -33,7 +33,7 @@ const (
 // "Affirming" says the Evidence matched the reference values of the Verifier;
 // it does not say the platform is one this Server accepts. The rule is read
 // from a JSON file (platform_rule_path) with one entry per platform family,
-// keyed by the name of the module for the family: sevsnp, tdx. The module
+// keyed by the name of the module for the family: sevsnp, tdx, psa. The module
 // parses, validates and applies the entry.
 type PlatformRule struct {
 	byFamily map[string]familyRule
@@ -62,7 +62,7 @@ type familyRule interface {
 }
 
 // platformModules builds the modules the configuration describes: SEV-SNP
-// with its product data, and TDX.
+// with its product data, TDX and PSA.
 func platformModules(c *Config) ([]platformModule, error) {
 	products, err := loadSNPProducts(c.SEVSNPProductsPath)
 	if err != nil {
