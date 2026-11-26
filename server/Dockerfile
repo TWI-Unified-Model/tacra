@@ -5,9 +5,9 @@
 FROM golang:1.26-alpine AS builder
 
 WORKDIR /src/server
-ENV GOWORK=off
-COPY server/go.mod server/go.sum ./
-RUN go mod download
+# go.sum is not kept in this repository: with -mod=mod the go command verifies
+# every module against the checksum database and writes the sums itself.
+ENV GOWORK=off GOFLAGS=-mod=mod
 COPY server/ ./
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o /server .
 

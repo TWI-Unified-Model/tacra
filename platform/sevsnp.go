@@ -223,34 +223,11 @@ func (p *SEVSNP) AttestationPublicKey() *ecdsa.PublicKey {
 	return p.vcek
 }
 
-// FreshnessElement returns the value bound as the freshness element for req:
-// the Handle for the present kinds, the local epoch (which the CAI passes as
-// the Handle) for absent-epoch, eight octets of Unix time for absent-timestamp
-// (the Handle of the request when it carries them, the clock when it does not), and nothing for
-// absent-none.
+// FreshnessElement returns the value bound as the freshness element for req,
+// with the clock of the back-end for absent-timestamp (FreshnessElement of
+// the package).
 func (p *tsmConfig) FreshnessElement(req EvidenceRequest) ([]byte, error) {
-	switch req.FreshnessKind {
-	case FreshnessKindPresentNonce, FreshnessKindPresentEpoch, FreshnessKindAbsentEpoch:
-		if n := len(req.FreshnessHandle); n < minNonceSize || n > maxNonceSize {
-			return nil, fmt.Errorf("%w: %d octets", ErrInvalidFreshnessHandle, n)
-		}
-		return append([]byte(nil), req.FreshnessHandle...), nil
-	case FreshnessKindAbsentTimestamp:
-		if len(req.FreshnessHandle) == TimestampElementSize {
-			return append([]byte(nil), req.FreshnessHandle...), nil
-		}
-		if len(req.FreshnessHandle) != 0 {
-			return nil, fmt.Errorf("%w: absent-timestamp needs %d octets", ErrFreshnessElement, TimestampElementSize)
-		}
-		return TimestampElement(p.clock().Unix()), nil
-	case FreshnessKindAbsentNone:
-		if len(req.FreshnessHandle) != 0 {
-			return nil, fmt.Errorf("%w: absent-none needs none", ErrFreshnessElement)
-		}
-		return nil, nil
-	default:
-		return nil, fmt.Errorf("%w: kind %d", ErrFreshnessElement, req.FreshnessKind)
-	}
+	return FreshnessElement(req, p.clock())
 }
 
 // Subject returns the binding subject: the DER CSR for Enrollment, CEKpub for

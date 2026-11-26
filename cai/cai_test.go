@@ -3,22 +3,28 @@ package cai
 import (
 	"bytes"
 	"context"
-	"crypto"
-	"crypto/ecdh"
-	"crypto/ecdsa"
-	"crypto/elliptic"
-	"crypto/rand"
-	"crypto/rsa"
+	"crypto/sha256"
 	"crypto/x509"
+	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"testing"
 
-	caapiv1 "github.com/TWI-Unified-Model/tacra/gen/go/caapi/v1"
-	"github.com/TWI-Unified-Model/tacra/platform"
-	"github.com/TWI-Unified-Model/tacra/platform/sim"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+
+	"github.com/TWI-Unified-Model/tacra/container"
+	caapiv1 "github.com/TWI-Unified-Model/tacra/gen/go/caapi/v1"
+	"github.com/TWI-Unified-Model/tacra/platform"
+	"github.com/TWI-Unified-Model/tacra/platform/sim"
+)
+
+const testTarget = "https://server.example"
+
+var (
+	testHandle      = bytes.Repeat([]byte{0x0c}, 32)
+	testMeasurement = sha256.Sum256([]byte("a measured program"))
 )
 
 type fakeCAAPI struct {
@@ -50,7 +56,7 @@ func (f *fakeCAAPI) RetrieveCredential(ctx context.Context, in *caapiv1.Retrieve
 
 func newTestCAI(t *testing.T, fake *fakeCAAPI) (*Client, *sim.Simulated) {
 	t.Helper()
-	p, err := sim.NewSimulated()
+	p, err := sim.NewSimulated(sim.WithMeasurement(testMeasurement[:]))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -61,492 +67,349 @@ func newTestCAI(t *testing.T, fake *fakeCAAPI) (*Client, *sim.Simulated) {
 	return c, p
 }
 
-func TestAcquireCredentialRetrieveECDH(t *testing.T) {
-	secret := []byte("pre-shared-api-key")
-	handle := bytes.Repeat([]byte{0x0a}, 32)
-
-	fake := &fakeCAAPI{
-		init: func(_ context.Context, in *caapiv1.InitiateCredentialAcquistionRequest) (*caapiv1.InitiateCredentialAcquisitionResponse, error) {
-			if in.GetTarget() != "https://api.example" || in.GetCredentialType() != caapiv1.CredentialType_CREDENTIAL_TYPE_API_KEY {
-				t.Fatalf("init args: %+v", in)
-			}
-			return &caapiv1.InitiateCredentialAcquisitionResponse{
-				Mode:                caapiv1.CredentialAcquisitionMode_ACQUISITION_RETRIEVE,
-				FreshnessKind:       caapiv1.FreshnessKind_FRESHNESS_KIND_PRESENT_NONCE,
-				FreshnessHandle:     handle,
-				EncryptionAlgorithm: new(EncryptionAlgorithmECDHP256),
-			}, nil
-		},
-		retrieve: func(_ context.Context, in *caapiv1.RetrieveCredentialRequest) (*caapiv1.RetrieveCredentialResponse, error) {
-			if in.GetCredentialHint() != "hint-retrieve" {
-				t.Fatalf("hint %q", in.GetCredentialHint())
-			}
-			if in.GetEncryptionAlgorithm() != EncryptionAlgorithmECDHP256 {
-				t.Fatalf("encryption algorithm %s", in.GetEncryptionAlgorithm())
-			}
-			claims, err := sim.ParseEvidence(in.GetEvidence())
-			if err != nil {
-				t.Fatal(err)
-			}
-			if claims.BoundKeyUse != platform.BoundKeyUseEncrypt {
-				t.Fatalf("bound key use %d", claims.BoundKeyUse)
-			}
-			if !bytes.Equal(claims.Nonce.GetI(0), handle) {
-				t.Fatal("nonce mismatch")
-			}
-			pub, err := claims.Cnf.BoundPublicKey()
-			if err != nil {
-				t.Fatal(err)
-			}
-			wrapped, err := wrapCEK(pub, secret)
-			if err != nil {
-				t.Fatal(err)
-			}
-			return &caapiv1.RetrieveCredentialResponse{WrappedCredential: wrapped}, nil
-		},
-	}
-
-	c, _ := newTestCAI(t, fake)
-	cred, err := c.AcquireCredential(context.Background(), "https://api.example", CredentialTypeAPIKey, "hint-retrieve")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !bytes.Equal(cred.Document, secret) {
-		t.Fatalf("document %q", cred.Document)
-	}
-	if cred.PrivateKey != nil {
-		t.Fatal("retrieve must not return CSK")
+// initiation answers Initiate-Credential-Acquisition with the given mode and
+// the Freshness Kind present-nonce.
+func initiation(mode Mode, signing SigningAlgorithm, encryption EncryptionAlgorithm) func(context.Context, *caapiv1.InitiateCredentialAcquistionRequest) (*caapiv1.InitiateCredentialAcquisitionResponse, error) {
+	return func(context.Context, *caapiv1.InitiateCredentialAcquistionRequest) (*caapiv1.InitiateCredentialAcquisitionResponse, error) {
+		resp := &caapiv1.InitiateCredentialAcquisitionResponse{Mode: mode, FreshnessKind: FreshnessPresentNonce, FreshnessHandle: testHandle}
+		if signing != SigningAlgorithmUnspecified {
+			resp.SigningAlgorithm = new(signing)
+		}
+		if encryption != EncryptionAlgorithmUnspecified {
+			resp.EncryptionAlgorithm = new(encryption)
+		}
+		return resp, nil
 	}
 }
 
-func TestAcquireCredentialEnroll(t *testing.T) {
-	handle := bytes.Repeat([]byte{0x0b}, 16)
-	minted := []byte("dummy-x509-der")
-	var gotCSR []byte
-
-	fake := &fakeCAAPI{
-		init: func(_ context.Context, _ *caapiv1.InitiateCredentialAcquistionRequest) (*caapiv1.InitiateCredentialAcquisitionResponse, error) {
-			return &caapiv1.InitiateCredentialAcquisitionResponse{
-				Mode:             caapiv1.CredentialAcquisitionMode_ACQUISITION_ENROLL,
-				FreshnessKind:    caapiv1.FreshnessKind_FRESHNESS_KIND_PRESENT_NONCE,
-				FreshnessHandle:  handle,
-				SigningAlgorithm: new(SigningAlgorithmECDSAP256),
-			}, nil
-		},
-		enroll: func(_ context.Context, in *caapiv1.EnrollCredentialRequest) (*caapiv1.EnrollCredentialResponse, error) {
-			if in.GetCredentialHint() != "hint-enroll" {
-				t.Fatalf("hint %q", in.GetCredentialHint())
-			}
-			if in.GetSigningAlgorithm() != SigningAlgorithmECDSAP256 {
-				t.Fatalf("signing algorithm %s", in.GetSigningAlgorithm())
-			}
-			if len(in.GetCsr()) == 0 || len(in.GetEvidence()) == 0 {
-				t.Fatal("missing csr or evidence")
-			}
-			gotCSR = append([]byte(nil), in.GetCsr()...)
-			csr, err := x509.ParseCertificateRequest(in.GetCsr())
-			if err != nil {
-				t.Fatal(err)
-			}
-			if csr.Subject.CommonName != "https://ca.example" {
-				t.Fatalf("CN %q", csr.Subject.CommonName)
-			}
-			claims, err := sim.ParseEvidence(in.GetEvidence())
-			if err != nil {
-				t.Fatal(err)
-			}
-			if !bytes.Equal(claims.CSR, in.GetCsr()) {
-				t.Fatal("evidence CSR != request CSR")
-			}
-			if claims.BoundKeyUse != platform.BoundKeyUseSign {
-				t.Fatalf("bound key use %d", claims.BoundKeyUse)
-			}
-			pub, err := claims.Cnf.BoundPublicKey()
-			if err != nil {
-				t.Fatal(err)
-			}
-			assertSamePublic(t, csr.PublicKey, pub)
-			return &caapiv1.EnrollCredentialResponse{PlaintextCredential: minted}, nil
-		},
-	}
-
-	c, _ := newTestCAI(t, fake)
-	cred, err := c.AcquireCredential(context.Background(), "https://ca.example", CredentialTypeX509, "hint-enroll")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !bytes.Equal(cred.Document, minted) {
-		t.Fatal("minted credential mismatch")
-	}
-	if cred.PrivateKey == nil {
-		t.Fatal("enroll must return CSK")
-	}
-	priv, ok := cred.PrivateKey.(*ecdsa.PrivateKey)
-	if !ok {
-		t.Fatalf("CSK %T, want *ecdsa.PrivateKey", cred.PrivateKey)
-	}
-	if priv.Curve != elliptic.P256() {
-		t.Fatal("CSK must be P-256")
-	}
-	csr, err := x509.ParseCertificateRequest(gotCSR)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := csr.CheckSignature(); err != nil {
-		t.Fatal(err)
-	}
-}
-
-func TestAcquireCredentialEnrollRSA(t *testing.T) {
-	handle := bytes.Repeat([]byte{0x0b}, 16)
-	minted := []byte("dummy-x509-der")
-
-	fake := &fakeCAAPI{
-		init: func(_ context.Context, _ *caapiv1.InitiateCredentialAcquistionRequest) (*caapiv1.InitiateCredentialAcquisitionResponse, error) {
-			return &caapiv1.InitiateCredentialAcquisitionResponse{
-				Mode:             caapiv1.CredentialAcquisitionMode_ACQUISITION_ENROLL,
-				FreshnessKind:    caapiv1.FreshnessKind_FRESHNESS_KIND_PRESENT_NONCE,
-				FreshnessHandle:  handle,
-				SigningAlgorithm: new(SigningAlgorithmRSA2048),
-			}, nil
-		},
-		enroll: func(_ context.Context, in *caapiv1.EnrollCredentialRequest) (*caapiv1.EnrollCredentialResponse, error) {
-			if in.GetSigningAlgorithm() != SigningAlgorithmRSA2048 {
-				t.Fatalf("signing algorithm %s", in.GetSigningAlgorithm())
-			}
-			csr, err := x509.ParseCertificateRequest(in.GetCsr())
-			if err != nil {
-				t.Fatal(err)
-			}
-			if _, ok := csr.PublicKey.(*rsa.PublicKey); !ok {
-				t.Fatalf("CSR key %T, want *rsa.PublicKey", csr.PublicKey)
-			}
-			claims, err := sim.ParseEvidence(in.GetEvidence())
-			if err != nil {
-				t.Fatal(err)
-			}
-			pub, err := claims.Cnf.BoundPublicKey()
-			if err != nil {
-				t.Fatal(err)
-			}
-			assertSamePublic(t, csr.PublicKey, pub)
-			return &caapiv1.EnrollCredentialResponse{PlaintextCredential: minted}, nil
-		},
-	}
-
-	c, _ := newTestCAI(t, fake)
-	cred, err := c.AcquireCredential(context.Background(), "https://ca.example", CredentialTypeX509, "")
-	if err != nil {
-		t.Fatal(err)
-	}
-	priv, ok := cred.PrivateKey.(*rsa.PrivateKey)
-	if !ok {
-		t.Fatalf("CSK %T, want *rsa.PrivateKey", cred.PrivateKey)
-	}
-	if priv.N.BitLen() != 2048 {
-		t.Fatalf("RSA bits %d", priv.N.BitLen())
-	}
-}
-
-func TestAcquireCredentialSigningAlgorithm(t *testing.T) {
-	handle := bytes.Repeat([]byte{0x0a}, 32)
-	c, _ := newTestCAI(t, &fakeCAAPI{
-		init: func(context.Context, *caapiv1.InitiateCredentialAcquistionRequest) (*caapiv1.InitiateCredentialAcquisitionResponse, error) {
-			return &caapiv1.InitiateCredentialAcquisitionResponse{
-				Mode:            caapiv1.CredentialAcquisitionMode_ACQUISITION_ENROLL,
-				FreshnessKind:   caapiv1.FreshnessKind_FRESHNESS_KIND_PRESENT_NONCE,
-				FreshnessHandle: handle,
-			}, nil
-		},
-	})
-	if _, err := c.AcquireCredential(context.Background(), "https://ca.example", CredentialTypeX509, ""); !errors.Is(err, ErrMissingSigningAlgorithm) {
-		t.Fatalf("enroll without algorithm: %v", err)
-	}
-
-	c, _ = newTestCAI(t, &fakeCAAPI{
-		init: func(context.Context, *caapiv1.InitiateCredentialAcquistionRequest) (*caapiv1.InitiateCredentialAcquisitionResponse, error) {
-			return &caapiv1.InitiateCredentialAcquisitionResponse{
-				Mode:             caapiv1.CredentialAcquisitionMode_ACQUISITION_RETRIEVE,
-				FreshnessKind:    caapiv1.FreshnessKind_FRESHNESS_KIND_PRESENT_NONCE,
-				FreshnessHandle:  handle,
-				SigningAlgorithm: new(SigningAlgorithmECDSAP256),
-			}, nil
-		},
-	})
-	if _, err := c.AcquireCredential(context.Background(), "https://api.example", CredentialTypeAPIKey, ""); !errors.Is(err, ErrUnexpectedSigningAlgorithm) {
-		t.Fatalf("retrieve with algorithm: %v", err)
-	}
-}
-
-func TestAcquireCredentialRetrieveRSA(t *testing.T) {
-	secret := []byte("pre-shared-api-key")
-	handle := bytes.Repeat([]byte{0x0a}, 32)
-
-	fake := &fakeCAAPI{
-		init: func(context.Context, *caapiv1.InitiateCredentialAcquistionRequest) (*caapiv1.InitiateCredentialAcquisitionResponse, error) {
-			return &caapiv1.InitiateCredentialAcquisitionResponse{
-				Mode:                caapiv1.CredentialAcquisitionMode_ACQUISITION_RETRIEVE,
-				FreshnessKind:       caapiv1.FreshnessKind_FRESHNESS_KIND_PRESENT_NONCE,
-				FreshnessHandle:     handle,
-				EncryptionAlgorithm: new(EncryptionAlgorithmRSA2048),
-			}, nil
-		},
-		retrieve: func(_ context.Context, in *caapiv1.RetrieveCredentialRequest) (*caapiv1.RetrieveCredentialResponse, error) {
-			if in.GetEncryptionAlgorithm() != EncryptionAlgorithmRSA2048 {
-				t.Fatalf("encryption algorithm %s", in.GetEncryptionAlgorithm())
-			}
-			claims, err := sim.ParseEvidence(in.GetEvidence())
-			if err != nil {
-				t.Fatal(err)
-			}
-			pub, err := claims.Cnf.BoundPublicKey()
-			if err != nil {
-				t.Fatal(err)
-			}
-			if _, ok := pub.(*rsa.PublicKey); !ok {
-				t.Fatalf("CEK %T, want *rsa.PublicKey", pub)
-			}
-			wrapped, err := wrapCEK(pub, secret)
-			if err != nil {
-				t.Fatal(err)
-			}
-			return &caapiv1.RetrieveCredentialResponse{WrappedCredential: wrapped}, nil
-		},
-	}
-
-	c, _ := newTestCAI(t, fake)
-	cred, err := c.AcquireCredential(context.Background(), "https://api.example", CredentialTypeAPIKey, "")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !bytes.Equal(cred.Document, secret) {
-		t.Fatalf("document %q", cred.Document)
-	}
-}
-
-func TestAcquireCredentialEncryptionAlgorithm(t *testing.T) {
-	handle := bytes.Repeat([]byte{0x0a}, 32)
-	c, _ := newTestCAI(t, &fakeCAAPI{
-		init: func(context.Context, *caapiv1.InitiateCredentialAcquistionRequest) (*caapiv1.InitiateCredentialAcquisitionResponse, error) {
-			return &caapiv1.InitiateCredentialAcquisitionResponse{
-				Mode:            caapiv1.CredentialAcquisitionMode_ACQUISITION_RETRIEVE,
-				FreshnessKind:   caapiv1.FreshnessKind_FRESHNESS_KIND_PRESENT_NONCE,
-				FreshnessHandle: handle,
-			}, nil
-		},
-	})
-	if _, err := c.AcquireCredential(context.Background(), "https://api.example", CredentialTypeAPIKey, ""); !errors.Is(err, ErrMissingEncryptionAlgorithm) {
-		t.Fatalf("retrieve without algorithm: %v", err)
-	}
-
-	c, _ = newTestCAI(t, &fakeCAAPI{
-		init: func(context.Context, *caapiv1.InitiateCredentialAcquistionRequest) (*caapiv1.InitiateCredentialAcquisitionResponse, error) {
-			return &caapiv1.InitiateCredentialAcquisitionResponse{
-				Mode:                caapiv1.CredentialAcquisitionMode_ACQUISITION_ENROLL,
-				FreshnessKind:       caapiv1.FreshnessKind_FRESHNESS_KIND_PRESENT_NONCE,
-				FreshnessHandle:     handle,
-				SigningAlgorithm:    new(SigningAlgorithmECDSAP256),
-				EncryptionAlgorithm: new(EncryptionAlgorithmECDHP256),
-			}, nil
-		},
-	})
-	if _, err := c.AcquireCredential(context.Background(), "https://ca.example", CredentialTypeX509, ""); !errors.Is(err, ErrUnexpectedEncryptionAlgorithm) {
-		t.Fatalf("enroll with encryption algorithm: %v", err)
-	}
-}
-
-func assertSamePublic(t *testing.T, a, b crypto.PublicKey) {
+// boundNonce verifies the Evidence under the Attestation Key of the plug-in
+// and returns the nonce of the token, which is the binding value.
+func boundNonce(t *testing.T, p *sim.Simulated, evidence []byte) []byte {
 	t.Helper()
-	ad, err := x509.MarshalPKIXPublicKey(a)
+	claims, err := sim.VerifyEvidence(evidence, p.AttestationPublicKey())
 	if err != nil {
 		t.Fatal(err)
 	}
-	bd, err := x509.MarshalPKIXPublicKey(b)
+	nonce, err := claims.GetNonce()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !bytes.Equal(ad, bd) {
-		t.Fatal("public keys differ")
-	}
+	return nonce
 }
 
-func TestAcquireCredentialValidation(t *testing.T) {
-	c, _ := newTestCAI(t, &fakeCAAPI{})
-	if _, err := c.AcquireCredential(context.Background(), "", CredentialTypeJWT, ""); !errors.Is(err, ErrInvalidTarget) {
-		t.Fatalf("empty target: %v", err)
+// seal is the Secret Vault of the tests: it seals one item to CEKpub of the
+// request, under the associated data that the request names.
+func seal(t *testing.T, in *caapiv1.RetrieveCredentialRequest, credential []byte, change func(*container.AAD, *container.Content)) []byte {
+	t.Helper()
+	notExportable := false
+	aad := container.AAD{GroupID: "group", Target: container.B64(in.GetTarget()), Handle: in.GetFreshnessElement(), CredentialHint: in.GetCredentialHint()}
+	content := container.Content{
+		CredentialItems: []container.Item{{
+			Type:       "jwt",
+			Value:      base64.RawURLEncoding.EncodeToString(credential),
+			Purpose:    []string{"authenticate"},
+			Algorithm:  "ES256",
+			Exportable: &notExportable,
+		}},
+		Metadata: map[string]any{"validity_seconds": 3600},
 	}
-	if _, err := c.AcquireCredential(context.Background(), "t", CredentialTypeUnspecified, ""); !errors.Is(err, ErrInvalidCredentialType) {
-		t.Fatalf("unspecified type: %v", err)
+	if change != nil {
+		change(&aad, &content)
 	}
-	if _, err := New(nil, &fakeCAAPI{}); !errors.Is(err, ErrNilPlugin) {
-		t.Fatalf("nil plugin: %v", err)
+	sealed, err := container.Seal(in.GetCekPub(), aad, content)
+	if err != nil {
+		t.Fatal(err)
 	}
-	p, _ := sim.NewSimulated()
-	if _, err := New(p, nil); !errors.Is(err, ErrNilCAAPI) {
-		t.Fatalf("nil caapi: %v", err)
+	raw, err := json.Marshal(sealed)
+	if err != nil {
+		t.Fatal(err)
 	}
+	return raw
 }
 
-func TestAcquireCredentialCASError(t *testing.T) {
-	fake := &fakeCAAPI{
-		init: func(context.Context, *caapiv1.InitiateCredentialAcquistionRequest) (*caapiv1.InitiateCredentialAcquisitionResponse, error) {
-			return nil, status.Error(codes.InvalidArgument, "Invalid Target")
-		},
-	}
-	c, _ := newTestCAI(t, fake)
-	_, err := c.AcquireCredential(context.Background(), "bad", CredentialTypeJWT, "")
-	var ce *Error
-	if !errors.As(err, &ce) {
-		t.Fatalf("want *cai.Error, got %T %v", err, err)
-	}
-	if ce.GRPCStatus().Code() != codes.InvalidArgument {
-		t.Fatalf("code %s", ce.GRPCStatus().Code())
-	}
-}
-
-func TestAcquireCredentialFreshness(t *testing.T) {
-	secret := []byte("pre-shared-api-key")
-	handle := bytes.Repeat([]byte{0x0a}, 32)
-
-	tests := []struct {
-		name    string
-		kind    FreshnessKind
-		handle  []byte
-		wantErr error
-		nonce   string // "handle", "local", or "" for omitted
-	}{
-		{name: "present-nonce", kind: FreshnessPresentNonce, handle: handle, nonce: "handle"},
-		{name: "present-epoch", kind: FreshnessPresentEpoch, handle: handle, nonce: "handle"},
-		{name: "absent-none", kind: FreshnessAbsentNone},
-		{name: "absent-timestamp", kind: FreshnessAbsentTimestamp},
-		{name: "absent-epoch", kind: FreshnessAbsentEpoch, nonce: "local"},
-		{name: "unspecified", kind: FreshnessUnspecified, wantErr: ErrUnsupportedFreshnessKind},
-		{name: "absent-none with handle", kind: FreshnessAbsentNone, handle: handle, wantErr: ErrUnexpectedFreshnessHandle},
-		{name: "absent-timestamp with handle", kind: FreshnessAbsentTimestamp, handle: handle, wantErr: ErrUnexpectedFreshnessHandle},
-		{name: "absent-epoch with handle", kind: FreshnessAbsentEpoch, handle: handle, wantErr: ErrUnexpectedFreshnessHandle},
-		{name: "present-nonce missing handle", kind: FreshnessPresentNonce, wantErr: ErrInvalidFreshnessHandle},
-		{name: "present-nonce short handle", kind: FreshnessPresentNonce, handle: []byte("short"), wantErr: ErrInvalidFreshnessHandle},
-		{name: "present-epoch missing handle", kind: FreshnessPresentEpoch, wantErr: ErrInvalidFreshnessHandle},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			p, err := sim.NewSimulated()
-			if err != nil {
-				t.Fatal(err)
-			}
-			fake := &fakeCAAPI{
-				init: func(context.Context, *caapiv1.InitiateCredentialAcquistionRequest) (*caapiv1.InitiateCredentialAcquisitionResponse, error) {
-					return &caapiv1.InitiateCredentialAcquisitionResponse{
-						Mode:                caapiv1.CredentialAcquisitionMode_ACQUISITION_RETRIEVE,
-						FreshnessKind:       tt.kind,
-						FreshnessHandle:     tt.handle,
-						EncryptionAlgorithm: new(EncryptionAlgorithmECDHP256),
-					}, nil
-				},
-				retrieve: func(_ context.Context, in *caapiv1.RetrieveCredentialRequest) (*caapiv1.RetrieveCredentialResponse, error) {
-					claims, err := sim.ParseEvidence(in.GetEvidence())
-					if err != nil {
-						t.Fatal(err)
-					}
-					switch tt.nonce {
-					case "":
-						if claims.Nonce != nil {
-							t.Fatal("eat_nonce must be omitted")
-						}
-						if tt.kind == FreshnessAbsentTimestamp && claims.IssuedAt == 0 {
-							t.Fatal("absent-timestamp requires iat")
-						}
-					case "handle":
-						if claims.Nonce == nil || !bytes.Equal(claims.Nonce.GetI(0), handle) {
-							t.Fatal("eat_nonce != freshness handle")
-						}
-					case "local":
-						if claims.Nonce == nil || !bytes.Equal(claims.Nonce.GetI(0), p.LocalEpoch()) {
-							t.Fatal("eat_nonce != local epoch")
-						}
-					}
-					pub, err := claims.Cnf.BoundPublicKey()
-					if err != nil {
-						t.Fatal(err)
-					}
-					wrapped, err := wrapCEK(pub, secret)
-					if err != nil {
-						t.Fatal(err)
-					}
-					return &caapiv1.RetrieveCredentialResponse{WrappedCredential: wrapped}, nil
-				},
-			}
-			c, err := New(p, fake)
-			if err != nil {
-				t.Fatal(err)
-			}
-			cred, err := c.AcquireCredential(context.Background(), "https://api.example", CredentialTypeAPIKey, "")
-			if tt.wantErr != nil {
-				if !errors.Is(err, tt.wantErr) {
-					t.Fatalf("got %v, want %v", err, tt.wantErr)
+func TestAcquireCredentialRetrieve(t *testing.T) {
+	for _, algorithm := range []EncryptionAlgorithm{EncryptionAlgorithmECDHP256, EncryptionAlgorithmMLKEM768P256} {
+		t.Run(algorithm.String(), func(t *testing.T) {
+			var p *sim.Simulated
+			fake := &fakeCAAPI{init: initiation(ModeRetrieve, SigningAlgorithmUnspecified, algorithm)}
+			fake.retrieve = func(_ context.Context, in *caapiv1.RetrieveCredentialRequest) (*caapiv1.RetrieveCredentialResponse, error) {
+				if in.GetTarget() != testTarget || in.GetCredentialType() != CredentialTypeJWT || in.GetCredentialHint() != "hint" {
+					t.Fatalf("request names %q, %v, %q", in.GetTarget(), in.GetCredentialType(), in.GetCredentialHint())
 				}
-				return
+				if in.GetFreshnessKind() != FreshnessPresentNonce || !bytes.Equal(in.GetFreshnessElement(), testHandle) {
+					t.Fatal("the request does not carry the Freshness Kind and the Handle as the freshness element")
+				}
+				if in.GetEvidenceProfile() != sim.MediaTypePSAToken || in.GetEncryptionAlgorithm() != algorithm {
+					t.Fatalf("Evidence media type %q, CEK algorithm %v", in.GetEvidenceProfile(), in.GetEncryptionAlgorithm())
+				}
+				expected := platform.BindingValue(testHandle, testTarget, in.GetCekPub())
+				if !bytes.Equal(boundNonce(t, p, in.GetEvidence()), expected[:]) {
+					t.Fatal("the Evidence does not bind the Handle, the Target and CEKpub of the request")
+				}
+				return &caapiv1.RetrieveCredentialResponse{WrappedCredential: seal(t, in, []byte("header.payload.signature"), nil)}, nil
 			}
+			var c *Client
+			c, p = newTestCAI(t, fake)
+
+			cred, err := c.AcquireCredential(context.Background(), testTarget, CredentialTypeJWT, "hint")
 			if err != nil {
 				t.Fatal(err)
 			}
-			if !bytes.Equal(cred.Document, secret) {
-				t.Fatalf("document %q", cred.Document)
+			if cred.Type != CredentialTypeJWT || string(cred.Document) != "header.payload.signature" || cred.PrivateKey != nil {
+				t.Fatalf("credential %+v", cred)
 			}
 		})
 	}
 }
 
-func TestWrapRoundTrip(t *testing.T) {
-	priv, err := ecdh.P256().GenerateKey(rand.Reader)
-	if err != nil {
-		t.Fatal(err)
-	}
-	plain := []byte("hello-secret")
-	wrapped, err := wrapCredential(priv.Public(), plain)
-	if err != nil {
-		t.Fatal(err)
-	}
-	got, err := UnwrapCredential(priv, wrapped)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !bytes.Equal(got, plain) {
-		t.Fatalf("got %q", got)
-	}
-	other, err := ecdh.P256().GenerateKey(rand.Reader)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := UnwrapCredential(other, wrapped); err == nil {
-		t.Fatal("wrong CEK must fail")
-	}
-
-	rsaPriv, err := rsa.GenerateKey(rand.Reader, 2048)
-	if err != nil {
-		t.Fatal(err)
-	}
-	wrapped, err = wrapCredential(&rsaPriv.PublicKey, plain)
-	if err != nil {
-		t.Fatal(err)
-	}
-	got, err = UnwrapCredential(rsaPriv, wrapped)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !bytes.Equal(got, plain) {
-		t.Fatalf("RSA got %q", got)
-	}
-	otherRSA, err := rsa.GenerateKey(rand.Reader, 2048)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := UnwrapCredential(otherRSA, wrapped); err == nil {
-		t.Fatal("wrong RSA CEK must fail")
+func TestAcquireCredentialRetrieveRefusals(t *testing.T) {
+	exportable := true
+	for _, tt := range []struct {
+		name      string
+		algorithm EncryptionAlgorithm
+		answer    func(*testing.T, *caapiv1.RetrieveCredentialRequest) []byte
+		expected  error
+	}{
+		{
+			name: "a container for another Target", algorithm: EncryptionAlgorithmECDHP256, expected: ErrUnwrap,
+			answer: func(t *testing.T, in *caapiv1.RetrieveCredentialRequest) []byte {
+				return seal(t, in, []byte("secret"), func(aad *container.AAD, _ *container.Content) { aad.Target = container.B64("https://other.example") })
+			},
+		},
+		{
+			name: "a container for another freshness element", algorithm: EncryptionAlgorithmECDHP256, expected: ErrUnwrap,
+			answer: func(t *testing.T, in *caapiv1.RetrieveCredentialRequest) []byte {
+				return seal(t, in, []byte("secret"), func(aad *container.AAD, _ *container.Content) { aad.Handle = bytes.Repeat([]byte{0x01}, 32) })
+			},
+		},
+		{
+			name: "an item that may leave the TEE", algorithm: EncryptionAlgorithmECDHP256, expected: ErrUnwrap,
+			answer: func(t *testing.T, in *caapiv1.RetrieveCredentialRequest) []byte {
+				return seal(t, in, []byte("secret"), func(_ *container.AAD, content *container.Content) {
+					content.CredentialItems[0].Exportable = &exportable
+				})
+			},
+		},
+		{
+			name: "a validity longer than the CAI accepts", algorithm: EncryptionAlgorithmECDHP256, expected: ErrUnwrap,
+			answer: func(t *testing.T, in *caapiv1.RetrieveCredentialRequest) []byte {
+				return seal(t, in, []byte("secret"), func(_ *container.AAD, content *container.Content) {
+					content.Metadata["validity_seconds"] = MaxValiditySeconds + 1
+				})
+			},
+		},
+		{
+			name: "no item", algorithm: EncryptionAlgorithmECDHP256, expected: ErrEmptyCredential,
+			answer: func(t *testing.T, in *caapiv1.RetrieveCredentialRequest) []byte {
+				return seal(t, in, nil, func(_ *container.AAD, content *container.Content) { content.CredentialItems = nil })
+			},
+		},
+		{
+			name: "octets that are no container", algorithm: EncryptionAlgorithmECDHP256, expected: ErrUnwrap,
+			answer: func(*testing.T, *caapiv1.RetrieveCredentialRequest) []byte { return []byte("not a container") },
+		},
+		{
+			name: "no container", algorithm: EncryptionAlgorithmECDHP256, expected: ErrEmptyCredential,
+			answer: func(*testing.T, *caapiv1.RetrieveCredentialRequest) []byte { return nil },
+		},
+		{
+			name: "an RSA CEK, which opens no hpke-base container", algorithm: EncryptionAlgorithmRSA2048, expected: ErrUnwrap,
+			answer: func(*testing.T, *caapiv1.RetrieveCredentialRequest) []byte {
+				return []byte(`{"container":"hpke-base"}`)
+			},
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			fake := &fakeCAAPI{init: initiation(ModeRetrieve, SigningAlgorithmUnspecified, tt.algorithm)}
+			fake.retrieve = func(_ context.Context, in *caapiv1.RetrieveCredentialRequest) (*caapiv1.RetrieveCredentialResponse, error) {
+				return &caapiv1.RetrieveCredentialResponse{WrappedCredential: tt.answer(t, in)}, nil
+			}
+			c, _ := newTestCAI(t, fake)
+			if _, err := c.AcquireCredential(context.Background(), testTarget, CredentialTypeJWT, ""); !errors.Is(err, tt.expected) {
+				t.Fatalf("got %v, expected %v", err, tt.expected)
+			}
+		})
 	}
 }
 
-func TestClientImplements(t *testing.T) {
-	var _ caapiv1.CredentialAcquisitionServiceClient = (*fakeCAAPI)(nil)
+func TestAcquireCredentialEnroll(t *testing.T) {
+	for _, tt := range []struct {
+		name string
+		hint string
+	}{
+		{name: "with a Credential Hint", hint: "payments"},
+		{name: "without a Credential Hint"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			var p *sim.Simulated
+			var requested *x509.CertificateRequest
+			fake := &fakeCAAPI{init: initiation(ModeEnroll, SigningAlgorithmECDSAP256, EncryptionAlgorithmUnspecified)}
+			fake.enroll = func(_ context.Context, in *caapiv1.EnrollCredentialRequest) (*caapiv1.EnrollCredentialResponse, error) {
+				csr, err := x509.ParseCertificateRequest(in.GetCsr())
+				if err != nil {
+					t.Fatal(err)
+				}
+				if err := csr.CheckSignature(); err != nil {
+					t.Fatalf("the CSR does not prove possession of its key: %v", err)
+				}
+				requested = csr
+				if in.GetFreshnessKind() != FreshnessPresentNonce || !bytes.Equal(in.GetFreshnessElement(), testHandle) || in.GetEvidenceProfile() != sim.MediaTypePSAToken {
+					t.Fatal("the request does not carry the Freshness Kind, the freshness element and the media type of the Evidence")
+				}
+				if in.GetSigningAlgorithm() != SigningAlgorithmECDSAP256 || in.GetCredentialHint() != tt.hint {
+					t.Fatalf("CSK algorithm %v, Credential Hint %q", in.GetSigningAlgorithm(), in.GetCredentialHint())
+				}
+				expected := platform.BindingValue(testHandle, testTarget, in.GetCsr())
+				if !bytes.Equal(boundNonce(t, p, in.GetEvidence()), expected[:]) {
+					t.Fatal("the Evidence does not bind the Handle, the Target and the CSR of the request")
+				}
+				return &caapiv1.EnrollCredentialResponse{PlaintextCredential: []byte("a certificate")}, nil
+			}
+			var c *Client
+			c, p = newTestCAI(t, fake)
+
+			cred, err := c.AcquireCredential(context.Background(), testTarget, CredentialTypeX509, tt.hint)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if cred.Type != CredentialTypeX509 || string(cred.Document) != "a certificate" || cred.PrivateKey == nil {
+				t.Fatalf("credential %+v", cred)
+			}
+			// The CSR carries the key of the credential and names nothing but the Credential Hint.
+			requestedKey, err := x509.MarshalPKIXPublicKey(requested.PublicKey)
+			if err != nil {
+				t.Fatal(err)
+			}
+			returnedKey, err := x509.MarshalPKIXPublicKey(cred.PrivateKey.Public())
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !bytes.Equal(requestedKey, returnedKey) {
+				t.Fatal("the CSR does not carry the public key of the CSK that the CAI returned")
+			}
+			if requested.Subject.CommonName != tt.hint || len(requested.DNSNames)+len(requested.URIs)+len(requested.IPAddresses)+len(requested.EmailAddresses) != 0 {
+				t.Fatalf("the CSR names %q and %d alternative names", requested.Subject.CommonName, len(requested.DNSNames)+len(requested.URIs))
+			}
+		})
+	}
+}
+
+func TestAcquireCredentialModeAndAlgorithms(t *testing.T) {
+	for _, tt := range []struct {
+		name       string
+		mode       Mode
+		signing    SigningAlgorithm
+		encryption EncryptionAlgorithm
+		expected   error
+	}{
+		{name: "Retrieval with a CSK algorithm", mode: ModeRetrieve, signing: SigningAlgorithmECDSAP256, encryption: EncryptionAlgorithmECDHP256, expected: ErrUnexpectedSigningAlgorithm},
+		{name: "Retrieval without a CEK algorithm", mode: ModeRetrieve, expected: ErrMissingEncryptionAlgorithm},
+		{name: "Enrollment with a CEK algorithm", mode: ModeEnroll, signing: SigningAlgorithmECDSAP256, encryption: EncryptionAlgorithmECDHP256, expected: ErrUnexpectedEncryptionAlgorithm},
+		{name: "Enrollment without a CSK algorithm", mode: ModeEnroll, expected: ErrMissingSigningAlgorithm},
+		{name: "no mode", mode: ModeUnspecified, expected: ErrUnsupportedMode},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			c, _ := newTestCAI(t, &fakeCAAPI{init: initiation(tt.mode, tt.signing, tt.encryption)})
+			if _, err := c.AcquireCredential(context.Background(), testTarget, CredentialTypeX509, ""); !errors.Is(err, tt.expected) {
+				t.Fatalf("got %v, expected %v", err, tt.expected)
+			}
+		})
+	}
+}
+
+func TestAcquireCredentialValidation(t *testing.T) {
+	c, p := newTestCAI(t, &fakeCAAPI{})
+	if _, err := c.AcquireCredential(context.Background(), "", CredentialTypeX509, ""); !errors.Is(err, ErrInvalidTarget) {
+		t.Fatalf("got %v, expected ErrInvalidTarget", err)
+	}
+	if _, err := c.AcquireCredential(context.Background(), testTarget, CredentialTypeUnspecified, ""); !errors.Is(err, ErrInvalidCredentialType) {
+		t.Fatalf("got %v, expected ErrInvalidCredentialType", err)
+	}
+	var none *Client
+	if _, err := none.AcquireCredential(context.Background(), testTarget, CredentialTypeX509, ""); !errors.Is(err, ErrNilClient) {
+		t.Fatalf("got %v, expected ErrNilClient", err)
+	}
+	if _, err := New(nil, &fakeCAAPI{}); !errors.Is(err, ErrNilPlugin) {
+		t.Fatalf("got %v, expected ErrNilPlugin", err)
+	}
+	if _, err := New(p, nil); !errors.Is(err, ErrNilCAAPI) {
+		t.Fatalf("got %v, expected ErrNilCAAPI", err)
+	}
+}
+
+func TestAcquireCredentialCASError(t *testing.T) {
+	var hint string
+	fake := &fakeCAAPI{init: func(_ context.Context, in *caapiv1.InitiateCredentialAcquistionRequest) (*caapiv1.InitiateCredentialAcquisitionResponse, error) {
+		hint = in.GetCredentialHint()
+		return nil, status.Error(codes.PermissionDenied, "the Target is not served")
+	}}
+	c, _ := newTestCAI(t, fake)
+	_, err := c.AcquireCredential(context.Background(), testTarget, CredentialTypeX509, "payments")
+	var failure *Error
+	if !errors.As(err, &failure) || status.Code(err) != codes.PermissionDenied {
+		t.Fatalf("got %v, expected a CAAPI error with the code PermissionDenied", err)
+	}
+	if hint != "payments" {
+		t.Fatalf("Initiate-Credential-Acquisition carried the Credential Hint %q", hint)
+	}
+}
+
+func TestAcquireCredentialFreshness(t *testing.T) {
+	for _, tt := range []struct {
+		name     string
+		kind     FreshnessKind
+		handle   []byte
+		expected error
+		element  func(*sim.Simulated, *caapiv1.RetrieveCredentialRequest) bool
+	}{
+		{name: "present-nonce", kind: FreshnessPresentNonce, handle: testHandle, element: func(_ *sim.Simulated, in *caapiv1.RetrieveCredentialRequest) bool {
+			return bytes.Equal(in.GetFreshnessElement(), testHandle)
+		}},
+		{name: "present-epoch", kind: FreshnessPresentEpoch, handle: testHandle, element: func(_ *sim.Simulated, in *caapiv1.RetrieveCredentialRequest) bool {
+			return bytes.Equal(in.GetFreshnessElement(), testHandle)
+		}},
+		{name: "absent-epoch", kind: FreshnessAbsentEpoch, element: func(p *sim.Simulated, in *caapiv1.RetrieveCredentialRequest) bool {
+			return bytes.Equal(in.GetFreshnessElement(), p.LocalEpoch())
+		}},
+		{name: "absent-timestamp", kind: FreshnessAbsentTimestamp, element: func(_ *sim.Simulated, in *caapiv1.RetrieveCredentialRequest) bool {
+			return len(in.GetFreshnessElement()) == platform.TimestampElementSize
+		}},
+		{name: "absent-none", kind: FreshnessAbsentNone, element: func(_ *sim.Simulated, in *caapiv1.RetrieveCredentialRequest) bool {
+			return len(in.GetFreshnessElement()) == 0
+		}},
+		{name: "present-nonce without a Handle", kind: FreshnessPresentNonce, expected: ErrInvalidFreshnessHandle},
+		{name: "present-nonce with a Handle of 7 octets", kind: FreshnessPresentNonce, handle: make([]byte, 7), expected: ErrInvalidFreshnessHandle},
+		{name: "absent-none with a Handle", kind: FreshnessAbsentNone, handle: testHandle, expected: ErrUnexpectedFreshnessHandle},
+		{name: "absent-epoch with a Handle", kind: FreshnessAbsentEpoch, handle: testHandle, expected: ErrUnexpectedFreshnessHandle},
+		{name: "no Freshness Kind", kind: FreshnessUnspecified, expected: ErrUnsupportedFreshnessKind},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			var p *sim.Simulated
+			fake := &fakeCAAPI{init: func(context.Context, *caapiv1.InitiateCredentialAcquistionRequest) (*caapiv1.InitiateCredentialAcquisitionResponse, error) {
+				return &caapiv1.InitiateCredentialAcquisitionResponse{Mode: ModeRetrieve, FreshnessKind: tt.kind, FreshnessHandle: tt.handle, EncryptionAlgorithm: new(EncryptionAlgorithmECDHP256)}, nil
+			}}
+			fake.retrieve = func(_ context.Context, in *caapiv1.RetrieveCredentialRequest) (*caapiv1.RetrieveCredentialResponse, error) {
+				if in.GetFreshnessKind() != tt.kind || !tt.element(p, in) {
+					t.Fatalf("the request carries the Freshness Kind %v and a freshness element of %d octets", in.GetFreshnessKind(), len(in.GetFreshnessElement()))
+				}
+				expected := platform.BindingValue(in.GetFreshnessElement(), testTarget, in.GetCekPub())
+				if !bytes.Equal(boundNonce(t, p, in.GetEvidence()), expected[:]) {
+					t.Fatal("the Evidence does not bind the freshness element that the request carries")
+				}
+				return &caapiv1.RetrieveCredentialResponse{WrappedCredential: seal(t, in, []byte("secret"), nil)}, nil
+			}
+			var c *Client
+			c, p = newTestCAI(t, fake)
+			cred, err := c.AcquireCredential(context.Background(), testTarget, CredentialTypeAPIKey, "")
+			if tt.expected != nil {
+				if !errors.Is(err, tt.expected) {
+					t.Fatalf("got %v, expected %v", err, tt.expected)
+				}
+				return
+			}
+			if err != nil || string(cred.Document) != "secret" {
+				t.Fatalf("credential %+v, %v", cred, err)
+			}
+		})
+	}
 }

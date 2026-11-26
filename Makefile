@@ -10,9 +10,9 @@ CAI_BIN    := $(BIN_DIR)/cai
 PROTO_FILES := $(shell find $(PROTO_DIR) -name '*.proto')
 PROTO_SRCS  := $(patsubst $(PROTO_DIR)/%,%,$(PROTO_FILES))
 
-.PHONY: all proto install-tools clean help client server constants platform cai
+.PHONY: all proto install-tools clean help client server constants container platform cai casserver
 
-all: proto constants platform cai client server
+all: proto constants container platform cai casserver client server
 
 ## proto: Compiles all .proto files into Go code
 proto:
@@ -31,6 +31,11 @@ constants:
 	cd constants && go build ./...
 	@echo "Successfully built constants library"
 
+## container: Builds the hpke-base container that carries a released credential
+container:
+	cd container && go build ./...
+	@echo "Successfully built container library"
+
 ## platform: Builds the platform plug-in library
 platform:
 	cd platform && go build ./...
@@ -42,6 +47,11 @@ cai: proto
 	@mkdir -p $(BIN_DIR)
 	go build -o $(CAI_BIN) ./cai/cmd/sidecar
 	@echo "Successfully built cai library and sidecar to $(CAI_BIN)"
+
+## casserver: Builds the CAS Server Plug-in, the library that a CAS Server hosts
+casserver:
+	cd casserver && go build ./...
+	@echo "Successfully built casserver library"
 
 ## client: Compiles the HTTP client (talks to the CAI sidecar)
 client: proto

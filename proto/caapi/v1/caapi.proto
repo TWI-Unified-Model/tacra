@@ -48,6 +48,9 @@ enum EncryptionAlgorithm {
     ENCRYPTION_ALGORITHM_UNSPECIFIED = 0;
     ENCRYPTION_ALGORITHM_ECDH_P256 = 1;
     ENCRYPTION_ALGORITHM_RSA_2048 = 2;
+    // The hybrid KEM of the hpke-base container. CEKpub is the 1249-octet
+    // MLKEM768-P256 encapsulation key itself, not a SubjectPublicKeyInfo.
+    ENCRYPTION_ALGORITHM_MLKEM768_P256 = 3;
 }
 
 enum CredentialType {
@@ -70,6 +73,10 @@ message InitiateCredentialAcquistionRequest {
 
     // Which credential type does the workload with to use?
     CredentialType credential_type = 2;
+
+    // The Credential Hint, optional. With the Freshness Kind present-nonce the
+    // second call repeats a hint named here.
+    string credential_hint = 3;
 }
 
 message InitiateCredentialAcquisitionResponse {
@@ -107,6 +114,20 @@ message EnrollCredentialRequest {
 
     // CSK algorithm from Initiate-Credential-Acquisition.
     optional SigningAlgorithm signing_algorithm = 6;
+
+    // Freshness Kind from Initiate-Credential-Acquisition.
+    FreshnessKind freshness_kind = 7;
+
+    // The freshness element that the Evidence binds: the Freshness Handle
+    // (present-nonce, present-epoch), the local epoch marker (absent-epoch),
+    // or eight octets of the time of the Attester (absent-timestamp). Absent
+    // for absent-none. The Evidence carries only the binding value over it,
+    // so the CAS forwards the element itself.
+    optional bytes freshness_element = 8;
+
+    // Media type of the Evidence, for example
+    // application/vnd.veraison.tsm-report+cbor.
+    optional string evidence_profile = 9;
 }
 
 message EnrollCredentialResponse {
@@ -127,6 +148,21 @@ message RetrieveCredentialRequest {
 
     // CEK algorithm from Initiate-Credential-Acquisition.
     optional EncryptionAlgorithm encryption_algorithm = 5;
+
+    // Freshness Kind from Initiate-Credential-Acquisition.
+    FreshnessKind freshness_kind = 6;
+
+    // The freshness element that the Evidence binds, as for Enrollment.
+    optional bytes freshness_element = 7;
+
+    // Media type of the Evidence.
+    optional string evidence_profile = 8;
+
+    // CEKpub: the DER SubjectPublicKeyInfo of the key, or, for
+    // ENCRYPTION_ALGORITHM_MLKEM768_P256, the encapsulation key itself. The
+    // Evidence carries only the binding value over CEKpub, so the Secret
+    // Vault receives the key here.
+    bytes cek_pub = 9;
 }
 
 message RetrieveCredentialResponse {

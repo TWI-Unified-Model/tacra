@@ -46,9 +46,10 @@ const (
 	SigningAlgorithmECDSAP256   SigningAlgorithm = caapiv1.SigningAlgorithm_SIGNING_ALGORITHM_ECDSA_P256
 	SigningAlgorithmRSA2048     SigningAlgorithm = caapiv1.SigningAlgorithm_SIGNING_ALGORITHM_RSA_2048
 
-	EncryptionAlgorithmUnspecified EncryptionAlgorithm = caapiv1.EncryptionAlgorithm_ENCRYPTION_ALGORITHM_UNSPECIFIED
-	EncryptionAlgorithmECDHP256    EncryptionAlgorithm = caapiv1.EncryptionAlgorithm_ENCRYPTION_ALGORITHM_ECDH_P256
-	EncryptionAlgorithmRSA2048     EncryptionAlgorithm = caapiv1.EncryptionAlgorithm_ENCRYPTION_ALGORITHM_RSA_2048
+	EncryptionAlgorithmUnspecified  EncryptionAlgorithm = caapiv1.EncryptionAlgorithm_ENCRYPTION_ALGORITHM_UNSPECIFIED
+	EncryptionAlgorithmECDHP256     EncryptionAlgorithm = caapiv1.EncryptionAlgorithm_ENCRYPTION_ALGORITHM_ECDH_P256
+	EncryptionAlgorithmRSA2048      EncryptionAlgorithm = caapiv1.EncryptionAlgorithm_ENCRYPTION_ALGORITHM_RSA_2048
+	EncryptionAlgorithmMLKEM768P256 EncryptionAlgorithm = caapiv1.EncryptionAlgorithm_ENCRYPTION_ALGORITHM_MLKEM768_P256
 )
 
 // Credential is the document returned to the Attester.
@@ -125,6 +126,7 @@ func (c *Client) AcquireCredential(ctx context.Context, target string, credType 
 	initResp, err := c.caapi.InitiateRemoteAttestation(ctx, &caapiv1.InitiateCredentialAcquistionRequest{
 		Target:         target,
 		CredentialType: credType,
+		CredentialHint: credHint,
 	})
 	if err != nil {
 		return nil, rpcError("InitiateRemoteAttestation", err)
@@ -171,21 +173,31 @@ func (c *Client) retrieve(ctx context.Context, req AcquisitionRequest) (*Credent
 	if err != nil {
 		return nil, fmt.Errorf("cai: generate CEK: %w", err)
 	}
+	cekPub, err := platform.CEKPub(cek.Public())
+	if err != nil {
+		return nil, fmt.Errorf("cai: CEKpub: %w", err)
+	}
 	ev, err := c.plugin.GenerateEvidence(platform.EvidenceRequest{
 		FreshnessKind:   platform.FreshnessKind(req.Kind),
 		FreshnessHandle: req.Handle,
 		BoundKey:        cek.Public(),
 		BoundKeyUse:     platform.BoundKeyUseEncrypt,
+		Target:          req.Target,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("cai: generate evidence: %w", err)
 	}
+	element := freshnessElement(ev, req.Handle)
 	resp, err := c.caapi.RetrieveCredential(ctx, &caapiv1.RetrieveCredentialRequest{
 		Target:              req.Target,
 		CredentialType:      req.Type,
 		CredentialHint:      optionalHint(req.Hint),
 		Evidence:            ev.Token,
 		EncryptionAlgorithm: new(req.EncryptionAlgorithm),
+		FreshnessKind:       req.Kind,
+		FreshnessElement:    element,
+		EvidenceProfile:     optionalHint(ev.MediaType),
+		CekPub:              cekPub,
 	})
 	if err != nil {
 		return nil, rpcError("RetrieveCredential", err)
@@ -193,7 +205,7 @@ func (c *Client) retrieve(ctx context.Context, req AcquisitionRequest) (*Credent
 	if len(resp.GetWrappedCredential()) == 0 {
 		return nil, ErrEmptyCredential
 	}
-	doc, err := UnwrapCredential(cek.Private, resp.GetWrappedCredential())
+	doc, err := openContainer(resp.GetWrappedCredential(), cek.Private, cekPub, req, element)
 	if err != nil {
 		return nil, err
 	}
@@ -212,7 +224,7 @@ func (c *Client) enroll(ctx context.Context, req AcquisitionRequest) (*Credentia
 	if err != nil {
 		return nil, fmt.Errorf("cai: CSK: %w", err)
 	}
-	csr, err := createCSR(csk, req.Target)
+	csr, err := createCSR(csk, req.Hint)
 	if err != nil {
 		return nil, err
 	}
@@ -222,6 +234,7 @@ func (c *Client) enroll(ctx context.Context, req AcquisitionRequest) (*Credentia
 		BoundKey:        csk.Public(),
 		CSR:             csr,
 		BoundKeyUse:     platform.BoundKeyUseSign,
+		Target:          req.Target,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("cai: generate evidence: %w", err)
@@ -233,6 +246,9 @@ func (c *Client) enroll(ctx context.Context, req AcquisitionRequest) (*Credentia
 		Evidence:         ev.Token,
 		Csr:              csr,
 		SigningAlgorithm: new(req.SigningAlgorithm),
+		FreshnessKind:    req.Kind,
+		FreshnessElement: freshnessElement(ev, req.Handle),
+		EvidenceProfile:  optionalHint(ev.MediaType),
 	})
 	if err != nil {
 		return nil, rpcError("EnrollCredential", err)
@@ -254,10 +270,11 @@ func optionalHint(s string) *string {
 	return &s
 }
 
-// freshnessHandle applies draft-novak-rats-tacra Freshness Kind rules.
-// present-* kinds require a Handle that is embedded in Evidence.
-// absent-* kinds return no Handle: absent-none and absent-timestamp omit
-// eat_nonce (iat is the timestamp); absent-epoch uses a locally held epoch.
+// freshnessHandle applies the rules of draft-novak-rats-tacra for the Freshness
+// Kind. The present kinds require a Handle. The absent kinds carry none:
+// absent-none binds nothing, absent-timestamp binds the time of the Attester,
+// which the plug-in reads, and absent-epoch binds the epoch that the plug-in
+// holds.
 func (c *Client) freshnessHandle(resp *caapiv1.InitiateCredentialAcquisitionResponse) ([]byte, error) {
 	kind := resp.GetFreshnessKind()
 	handle := resp.GetFreshnessHandle()

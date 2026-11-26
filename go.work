@@ -2,8 +2,10 @@ go 1.26.5
 
 use (
 	./cai
+	./casserver
 	./client
 	./constants
+	./container
 	./est
 	./gen/go
 	./platform
