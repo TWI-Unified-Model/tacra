@@ -1,40 +1,39 @@
-%% Acquire-Credential API
+%% Acquire-Credential (CAI)
+%% The Attester's single CAI call. CAI drives CAAPI and the Platform Plug-In.
+%% Enrollment vs Retrieval is chosen by the CAS and is opaque to the Attester.
 sequenceDiagram
     participant A as Attester
     participant CAI as CAI Implementation
     participant PL as Platform Plug-In
     participant CAS as CAS via<br/>CAAPI
 
-    A->>CAI: Acquire-Credential<br/>(Target, Credential Type, Credenital Hint)
-    note over CAI, CAS: Credential Acquisition Initiation Flow
+    A->>CAI: Acquire-Credential<br/>(Target, Credential Type, Credential Hint)
+    note over CAI, CAS: Initiate-Credential-Acquisition Flow
     CAI->>CAS: Initiate-Credential-Acquisition<br/>(Target, Credential Type)
-    CAS->>CAS: Invoke the CAS Server
-    alt Invalid Credential Type or other Error Condition
-        CAS-->>A: Error: Invalid Credential Type,<br/>Invalid Target,<br/>Unavailable Server, etc.
+    alt Invalid Target, Unsupported Credential Type,<br/>or other error
+        CAS-->>CAI: Error
+        CAI-->>A: Error
     else Success
-        CAS-->>CAI: CAAPI Context:<br/>[Credential Acquisition Mode,<br/>Freshness Kind, Freshness Handle,<br/>Cipher Suites, etc.]
+        CAS-->>CAI: Mode, Freshness Kind,<br/>Freshness Handle (present-* only),<br/>Signing Algorithm (enroll) or<br/>Encryption Algorithm (retrieve)
+        alt Mode is Enroll
+            note over CAI, CAS: Enroll-Credential Flow
+            CAI->>PL: GenerateCSK(Signing Algorithm)
+            PL-->>CAI: CSKpub, CSKpri
+            CAI->>CAI: Generate CSR from CSKpri
+            CAI->>PL: Generate Evidence<br/>(Target, CSR, Freshness Kind,<br/>Freshness Handle if present-*)
+            PL-->>CAI: Evidence with TACRA Binding<br/>(freshness, Target, CSR)
+            CAI->>CAS: Enroll-Credential<br/>(Target, Credential Type, Credential Hint,<br/>Evidence, CSR, Signing Algorithm)
+            CAS-->>CAI: Plaintext enrolled credential
+            CAI-->>A: Credential and CSKpri
+        else Mode is Retrieve
+            note over CAI, CAS: Retrieve-Credential Flow
+            CAI->>PL: GenerateCEK(Encryption Algorithm)
+            PL-->>CAI: CEKpub, CEKpri
+            CAI->>PL: Generate Evidence<br/>(Target, CEKpub, Freshness Kind,<br/>Freshness Handle if present-*)
+            PL-->>CAI: Evidence with TACRA Binding<br/>(freshness, Target, CEKpub)
+            CAI->>CAS: Retrieve-Credential<br/>(Target, Credential Type, Credential Hint,<br/>Evidence, Encryption Algorithm)
+            CAS-->>CAI: Credential wrapped to CEKpub
+            CAI->>CAI: Unwrap with CEKpri
+            CAI-->>A: Credential
+        end
     end
-    alt Credential Acquisition Mode is Enroll
-        note over CAI, CAS: Credential Enrollment Flow
-        CAI->>PL: Generate Asymmetric Credential Signing Key CSK
-        PL-->>CAI: Generated CSKpub, CSKpri
-        CAI->>CAI: Generate CSR using CSKpri
-        note over CAI, PL: Evidence can contain CSR<br/>or vice versa: CSR can contain Evidence<br/>How this is decided is TBD
-        CAI->>PL: Generate Evidence<br/>(CSKpub, CSR, Freshness Handle, Credential Hint)
-        PL-->>CAI: Generated Evidence
-        CAI->>CAS: Enroll-Credential<br/>(Evidence incl., CSKpub, CSR, Credential Hint)
-        CAS->>CAS: Invoke the CAS Server's<br/>Enroll() function
-        CAS-->>CAI: Enrolled (newly minted) Credential
-    else Credential Acquisition Mode is Retrieve
-        note over CAI, CAS: Credential Retrieval Flow
-        CAI->>PL: Generate Asymmetric Credential Encryption Key CEK
-        PL-->>CAI: Generated CEKpub, CEKpri
-        CAI->>PL: Generate Evidence<br/>(CEKpub, Freshness Handle, Credential Hint)
-        PL-->>CAI: Generated Evidence
-        CAI->>CAS: Retrieve-Credential<br/>(Evidence incl. CEKpub, Credential Hint)
-        CAS->>CAS: Invoke the CAS Server's<br/>Retrieve() function
-        CAS-->>CAI: Retrieved (pre-existing) Credential<br/>encrypted to CEKpub
-        CAI-->>CAI: Unwrap the returned credential<br/>using CEKpri
-    end
-    CAI-->>A: Credential
-

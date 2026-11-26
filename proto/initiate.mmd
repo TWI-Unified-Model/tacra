@@ -1,39 +1,31 @@
-%% Initiating Credential Acquisition
-%% by requesting a freshness handle from the Verifier
-%% The "Workload" here may be the Attester's Credential Acquisition Interface
+%% Initiate-Credential-Acquisition (CAAPI)
+%% First CAAPI call of Acquire-Credential: obtain Mode, Freshness Kind,
+%% and a Freshness Handle when the kind is present-nonce or present-epoch.
+%% The CAS Server is a conduit; it MUST NOT generate present-* Handles.
 sequenceDiagram
-    participant W as Workload
-    participant CAA_C as CAAPI<br/>Client
+    participant CAI as CAI
     participant CAS_C as CAS<br/>Client
     participant CAS_S as CAS<br/>Server
     participant V as Verifier
 
     autonumber
 
-    note over W, CAA_C: CAAPI Local Call
-    activate W
-    note over CAA_C, CAS_C: CAAPI External Call
-    activate CAA_C
-    W->>CAS_C: Initiate Credential Acquisition<br/>(Target, Credential Type)
-    deactivate CAA_C
-    deactivate W
-    activate CAS_C
-    CAS_C->>CAS_C: Validate Target,<br/>Determine CAS Server<br>and Credential Type<br/>based on Target
-    alt Requested Credential Type Not Supported<br/>or Target is Invalid
-        CAS_C-->>W: Return error: "Unsupported Credential Types" or "Invalid Target"
-    else Requested Credential Type Is Supported<br/>and Target is Valid
-        note over CAS_C, CAS_S: Invoke CAS Server<br/>over CAS Protocol
-        CAS_C->>CAS_S: Request Freshness<br/>(Target)
-        deactivate CAS_C
-        activate CAS_S
-        CAS_S->>CAS_S: Determine Credential<br/>Acquisition Mode<br/>based on Target
-        note over CAS_S, V: Invoke Verifier
-        CAS_S->>V: Request Freshness Handle
-        deactivate CAS_S
-        activate V
-        V->>V: Compute Freshness Handle
-        V-->>CAS_S: Return Freshness Handle
-        deactivate V
-        CAS_S-->>CAS_C: Return Freshness Kind,<br/>Freshness Handle, and<br/>Credential Acquisition Mode
-        CAS_C-->>W: Return Freshness Kind, Freshness Handle,<br/>and Credential Acquisition Mode
+    note over CAI, CAS_C: CAAPI
+    CAI->>CAS_C: Initiate-Credential-Acquisition<br/>(Target, Credential Type)
+    CAS_C->>CAS_C: Validate Target and<br/>Credential Type
+    alt Invalid Target or Unsupported Credential Type
+        CAS_C-->>CAI: Error: Invalid Target or<br/>Unsupported Credential Type
+    else Target and Credential Type are supported
+        note over CAS_C, CAS_S: CAS Protocol
+        CAS_C->>CAS_S: Initiate-Credential-Acquisition<br/>(Target, Credential Type)
+        CAS_S->>CAS_S: Select Mode and Freshness Kind<br/>from policy for Target and Type
+        alt Freshness Kind is present-nonce or present-epoch
+            note over CAS_S, V: Handle is Verifier-originated<br/>or RATS Relying Party-originated
+            CAS_S->>V: Request Freshness Handle
+            V-->>CAS_S: Freshness Handle
+            CAS_S-->>CAS_C: Mode, Freshness Kind, Freshness Handle,<br/>Signing Algorithm (enroll) or<br/>Encryption Algorithm (retrieve)
+        else Freshness Kind is absent-*
+            CAS_S-->>CAS_C: Mode, Freshness Kind,<br/>Signing Algorithm (enroll) or<br/>Encryption Algorithm (retrieve)
+        end
+        CAS_C-->>CAI: Mode, Freshness Kind,<br/>Freshness Handle if present-*,<br/>Signing or Encryption Algorithm
     end

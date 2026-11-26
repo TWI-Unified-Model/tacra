@@ -1,43 +1,29 @@
-%% Retrieving existing proof-of-posvesvion or bearer token credentials
+%% Retrieve-Credential (CAAPI)
+%% Fetch a pre-existing proof-of-possession or bearer-token credential.
+%% The Secret Vault is the RATS Relying Party; it wraps the credential to CEKpub.
 sequenceDiagram
-    participant W as Workload
-    participant CAA_C as CAAPI<br/>Client
+    participant CAI as CAI
     participant CAS_C as CAS<br/>Client
     participant CAS_S as CAS<br/>Server
     participant V as Verifier
-    participant SV as VSecret<br/>Vault
+    participant SV as Secret<br/>Vault
 
     autonumber
 
-    note over W, CAA_C: CAAPI Local Call
-    activate W
-    note over CAA_C, CAS_C: CAAPI External Call
-    activate CAA_C
-    W->>CAS_C: Retrieve Credential<br/>(Target, Credential Type, Evidence incl.<br/> CEKpub, Freshness Handle,<br/>Credential Hint)
-    deactivate CAA_C
-    deactivate W
-    note over CAS_C, CAS_S: Invoke CAS Server<br/>over CAS Protocol
-    activate CAS_C
-    CAS_C->>CAS_S: Retrieve Credential<br/>(Target, Credential Type,<br/>Evidence)
-    deactivate CAS_C
-    note over CAS_S, V: Verifier Protocol
-    activate CAS_S
-    CAS_S->>V: Request Attestation<br/>(Evidence)
-    deactivate CAS_S
-    activate V
-    V->>V: Check Evidence<br/>incl. CEKpub binding,<br/>Freshness Handle
-    V->>V: Include CEKpub in<br/>Attestation Results
+    note over CAI, CAS_C: CAAPI
+    CAI->>CAS_C: Retrieve-Credential<br/>(Target, Credential Type, Credential Hint,<br/>Evidence, Encryption Algorithm)
+    note over CAS_C, CAS_S: CAS Protocol
+    CAS_C->>CAS_S: Retrieve-Credential<br/>(Target, Credential Type, Credential Hint,<br/>Evidence, Encryption Algorithm)
+    note over CAS_S, V: Passport model (Background Check<br/>is equivalent from the Attester's view)
+    CAS_S->>V: Appraise Evidence
+    V->>V: Check Evidence, report the<br/>TACRA Binding digest (freshness input)<br/>in Attestation Results
     V-->>CAS_S: Attestation Results
-    deactivate V
-    note over CAS_S, SV: Vault Invocation
-    activate CAS_S
-    CAS_S->>SV: Retrieve Credential<br/>(Attestation Results incl. CEKpub,<br/>Credential Hint)
-    deactivate CAS_S
-    activate SV
-    SV->>SV: Validate<br/>Attestation Results
-    SV->>SV: Map Attestation Results<br/>to Credential
-    SV->>SV: Wrap Credential's Secret<br/>in CEKpub
-    SV-->>CAS_S: Retrieved Credential<br/>plus Wrapped Secret
-    deactivate SV
-    CAS_S-->>CAS_C: Retrieved Credential<br/>plus Wrapped Secret
-    CAS_C-->>W: Retrieved Credential<br/>plus Wrapped Secret
+    note over CAS_S, SV: Secret Vault is the RATS RP
+    CAS_S->>SV: Retrieve<br/>(Attestation Results, Target, CEKpub,<br/>Credential Hint)
+    SV->>SV: Validate Attestation Results
+    SV->>SV: Recompute TACRA Binding over<br/>freshness, Target, and CEKpub
+    SV->>SV: Map Attestation Results to credential
+    SV->>SV: Wrap credential to CEKpub
+    SV-->>CAS_S: Wrapped credential
+    CAS_S-->>CAS_C: Wrapped credential
+    CAS_C-->>CAI: Wrapped credential
